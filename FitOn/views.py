@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from .forms import SignUpForm, LoginForm
 from .dynamodb import create_user, check_user_credentials
+from django.contrib.auth.hashers import make_password
 import uuid
 
 def login(request):
@@ -29,18 +30,24 @@ def signup(request):
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
+            # Delete this line later
+            print(form.cleaned_data)  
+            
             username = form.cleaned_data['username']
             email = form.cleaned_data['email']
             name = form.cleaned_data['name']
             date_of_birth = form.cleaned_data['date_of_birth']
             gender = form.cleaned_data['gender']
-            password = form.cleaned_data['password']  # You might want to hash this later
+            password = form.cleaned_data['password']
+            
+            # Hash the password before saving it
+            hashed_password = make_password(password)
             
             # Create a unique user ID
             user_id = str(uuid.uuid4())
             
             # Sync data with DynamoDB
-            if create_user(user_id, email, name, date_of_birth, gender, password):
+            if create_user(user_id, email, name, date_of_birth, gender, hashed_password):
                 request.session['username'] = username
                 return redirect('homepage')
             else:

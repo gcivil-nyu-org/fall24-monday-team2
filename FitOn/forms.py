@@ -19,7 +19,7 @@ class SignUpForm(forms.Form):
         ('O', 'Other'),
     ]
     gender = forms.ChoiceField(choices=GENDER_CHOICES, widget=forms.RadioSelect, label="Gender")
-
+    
     password = forms.CharField(widget=forms.PasswordInput(), label="Password")
     confirm_password = forms.CharField(widget=forms.PasswordInput(), label="Confirm Password")
 
@@ -29,6 +29,6 @@ class SignUpForm(forms.Form):
         confirm_password = cleaned_data.get("confirm_password")
 
         if password != confirm_password:
-            raise ValidationError("Passwords do not match.")
-
+            raise forms.ValidationError("Passwords do not match.")
+        
         return cleaned_data

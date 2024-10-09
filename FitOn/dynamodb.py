@@ -1,10 +1,10 @@
 import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
+from django.contrib.auth.hashers import check_password
 
 # Connect to DynamoDB
 dynamodb = boto3.resource('dynamodb')
 
-# Reference to the Users table (replace 'Users' with your actual table name)
 users_table = dynamodb.Table('Users')
 
 def check_user_credentials(username, password):
@@ -17,7 +17,7 @@ def check_user_credentials(username, password):
         )
         # Check if the user exists and the password matches
         user = response.get('Item')
-        if user and user['password'] == password:  # In production, use hashed passwords
+        if user and check_password(password, user['password']):  # In production, use hashed passwords
             return True
         else:
             return False
@@ -27,18 +27,34 @@ def check_user_credentials(username, password):
 
 def create_user(user_id, email, name, date_of_birth, gender, password):
     try:
+        print(f"Attempting to create user: {user_id}, {email}, {name}, {date_of_birth}, {gender}")
         users_table.put_item(
             Item={
-                'user_id': user_id,
+                'user_id': user_id,  # Partition key
                 'email': email,
                 'name': name,
                 'date_of_birth': str(date_of_birth),
                 'gender': gender,
-                'password': password,  # Consider hashing the password for security
+                'password': password,  # Hashed password
             }
         )
+        
+        # Test to check if inserted user was inserted
+        response = users_table.get_item(
+            Key={
+                'user_id': user_id
+            }
+        )
+        if 'Item' in response:
+            print("User found in DynamoDB:", response['Item'])
+        else:
+            print("User not found in DynamoDB after insertion.")
+
+        print("User created successfully.")
         return True
-    except (NoCredentialsError, PartialCredentialsError):
-        print("Credentials not available or incomplete.")
+    except Exception as e:
+        print(f"Error creating user in DynamoDB: {e}")
         return False
+
+
 
