@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect
 from .forms import SignUpForm, LoginForm
-from .dynamodb import create_user, check_user_credentials
-from django.contrib.auth.hashers import make_password
+from .dynamodb import create_user, get_user_by_username
+from django.contrib.auth.hashers import make_password, check_password
 import uuid
 
 def login(request):
@@ -13,14 +13,23 @@ def login(request):
             username = form.cleaned_data['username']
             password = form.cleaned_data['password']
             
-            # Check if credentials are correct
-            if check_user_credentials(username, password):
-                # Credentials are valid, store the username in the session
-                request.session['username'] = username
-                return redirect('homepage')  # Redirect to homepage upon successful login
+            # Query DynamoDB for the user by username
+            user = get_user_by_username(username)
+            
+            if user:
+                # Get the hashed password from DynamoDB
+                stored_password = user['password']
+                
+                # Verify the password using Django's check_password
+                if check_password(password, stored_password):
+                    # Set the session and redirect to the homepage
+                    request.session['username'] = username
+                    return redirect('homepage')
+                else:
+                    error_message = 'Invalid password. Please try again.'
             else:
-                # Invalid credentials
-                error_message = 'Invalid username or password.'
+                error_message = 'User does not exist.'
+
     else:
         form = LoginForm()
 

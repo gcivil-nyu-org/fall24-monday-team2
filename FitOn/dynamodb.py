@@ -7,23 +7,24 @@ dynamodb = boto3.resource('dynamodb')
 
 users_table = dynamodb.Table('Users')
 
-def check_user_credentials(username, password):
+def get_user_by_username(username):
     try:
-        # Query the DynamoDB Users table to find the user with the given username
-        response = users_table.get_item(
-            Key={
-                'user_id': username
-            }
+        # Perform a scan operation to find the user by the 'name' field
+        response = users_table.scan(
+            FilterExpression="#n = :username",
+            ExpressionAttributeNames={"#n": "name"},  # Handle reserved keyword 'name'
+            ExpressionAttributeValues={":username": username}  # Corrected to pass the raw string value
         )
-        # Check if the user exists and the password matches
-        user = response.get('Item')
-        if user and check_password(password, user['password']):  # In production, use hashed passwords
-            return True
+        print(response)
+        # Check if we found any users
+        users = response.get('Items', [])
+        if users:
+            return users[0]  # Return the first user (assuming username is unique)
         else:
-            return False
+            return None  # No user found
     except Exception as e:
-        print(f"Error checking user credentials: {e}")
-        return False
+        print(f"Error querying DynamoDB for username '{username}': {e}")
+        return None
 
 def create_user(user_id, email, name, date_of_birth, gender, password):
     try:

@@ -63,16 +63,11 @@
             background-color: #45a049;
         }
 
-        .signup-link {
-            text-align: center;
-            margin-top: 15px;
-        }
-
         .error-message {
             color: red;
-            margin-bottom: 15px;
             text-align: center;
         }
+
     </style>
 </head>
 <body>
@@ -80,25 +75,12 @@
         <h2>Login</h2>
         <form method="POST">
             {% csrf_token %}
-            <div class="form-group">
-                {{ form.username.label_tag }} {{ form.username }}
-            </div>
-            <div class="form-group">
-                {{ form.password.label_tag }} {{ form.password }}
-            </div>
+            {{ form.as_p }}
             <button type="submit">Login</button>
         </form>
-        
         {% if error_message %}
             <p class="error-message">{{ error_message }}</p>
         {% endif %}
-        
-        <div class="signup-link">
-            <p>Don't have an account?</p>
-            <a href="{% url 'signup' %}">
-                <button>Sign Up</button>
-            </a>
-        </div>
     </div>
 </body>
 </html>
