@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign Up</title>
+    <title>Login</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -15,7 +15,7 @@
             margin: 0;
         }
 
-        .signup-container {
+        .login-container {
             background-color: white;
             border-radius: 8px;
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -41,20 +41,12 @@
             color: #555;
         }
 
-        input, select {
+        input {
             padding: 10px;
             margin-bottom: 15px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 16px;
-        }
-
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        .gender-options {
-            margin-bottom: 15px;
         }
 
         button {
@@ -71,41 +63,42 @@
             background-color: #45a049;
         }
 
+        .signup-link {
+            text-align: center;
+            margin-top: 15px;
+        }
+
         .error-message {
             color: red;
             margin-bottom: 15px;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <div class="signup-container">
-        <h2>Sign Up</h2>
+    <div class="login-container">
+        <h2>Login</h2>
         <form method="POST">
             {% csrf_token %}
             <div class="form-group">
                 {{ form.username.label_tag }} {{ form.username }}
             </div>
             <div class="form-group">
-                {{ form.email.label_tag }} {{ form.email }}
-            </div>
-            <div class="form-group">
-                {{ form.name.label_tag }} {{ form.name }}
-            </div>
-            <div class="form-group">
-                {{ form.date_of_birth.label_tag }} {{ form.date_of_birth }}
-            </div>
-            <div class="gender-options">
-                {{ form.gender.label_tag }}<br>
-                {{ form.gender }}
-            </div>
-            <div class="form-group">
                 {{ form.password.label_tag }} {{ form.password }}
             </div>
-            <div class="form-group">
-                {{ form.confirm_password.label_tag }} {{ form.confirm_password }}
-            </div>
-            <button type="submit">Sign Up</button>
+            <button type="submit">Login</button>
         </form>
+        
+        {% if error_message %}
+            <p class="error-message">{{ error_message }}</p>
+        {% endif %}
+        
+        <div class="signup-link">
+            <p>Don't have an account?</p>
+            <a href="{% url 'signup' %}">
+                <button>Sign Up</button>
+            </a>
+        </div>
     </div>
 </body>
 </html>
