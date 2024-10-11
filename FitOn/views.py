@@ -40,7 +40,6 @@ def signup(request):
         form = SignUpForm(request.POST)
         if form.is_valid():
             # Delete this line later
-            print(form.cleaned_data)  
             
             username = form.cleaned_data['username']
             email = form.cleaned_data['email']
@@ -56,7 +55,7 @@ def signup(request):
             user_id = str(uuid.uuid4())
             
             # Sync data with DynamoDB
-            if create_user(user_id, email, name, date_of_birth, gender, hashed_password):
+            if create_user(user_id, username, email, name, date_of_birth, gender, hashed_password):
                 request.session['username'] = username
                 return redirect('homepage')
             else:

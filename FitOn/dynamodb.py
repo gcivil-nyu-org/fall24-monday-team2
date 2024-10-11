@@ -12,7 +12,7 @@ def get_user_by_username(username):
         # Perform a scan operation to find the user by the 'name' field
         response = users_table.scan(
             FilterExpression="#n = :username",
-            ExpressionAttributeNames={"#n": "name"},  # Handle reserved keyword 'name'
+            ExpressionAttributeNames={"#n": "username"},  # Handle reserved keyword 'name'
             ExpressionAttributeValues={":username": username}  # Corrected to pass the raw string value
         )
         print(response)
@@ -26,12 +26,13 @@ def get_user_by_username(username):
         print(f"Error querying DynamoDB for username '{username}': {e}")
         return None
 
-def create_user(user_id, email, name, date_of_birth, gender, password):
+def create_user(user_id, username, email, name, date_of_birth, gender, password):
     try:
-        print(f"Attempting to create user: {user_id}, {email}, {name}, {date_of_birth}, {gender}")
+        print(f"Attempting to create user: {user_id}, {username}, {email}, {name}, {date_of_birth}, {gender}")
         users_table.put_item(
             Item={
                 'user_id': user_id,  # Partition key
+                'username': username,
                 'email': email,
                 'name': name,
                 'date_of_birth': str(date_of_birth),
