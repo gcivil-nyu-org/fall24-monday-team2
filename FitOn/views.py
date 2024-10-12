@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from .forms import SignUpForm, LoginForm
-from .dynamodb import create_user, get_user_by_username
+from .dynamodb import create_user, get_user_by_username, get_user_by_email
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 
@@ -39,8 +39,6 @@ def signup(request):
     if request.method == 'POST':
         form = SignUpForm(request.POST)
         if form.is_valid():
-            # Delete this line later
-            
             username = form.cleaned_data['username']
             email = form.cleaned_data['email']
             name = form.cleaned_data['name']
@@ -63,7 +61,9 @@ def signup(request):
     else:
         form = SignUpForm()
 
-    return render(request, 'signup.html', {'form': form})
+    days = list(range(1, 32)) 
+    years = list(range(1900, 2025))  
+    return render(request, 'signup.html', {'form': form, 'days': days, 'years': years})
 
 
 def homepage(request):
