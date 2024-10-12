@@ -40,7 +40,7 @@
 
         .form-group {
             width: 100%;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             text-align: left;
         }
 
@@ -68,8 +68,9 @@
         /* New CSS for Date of Birth fields */
         .form-group.dob-group {
             display: flex;
-            gap: 10px; /* Add space between the dropdowns */
-            width: 100%; /* Ensure it uses the full width available */
+            gap: 10px; /* Space between the dropdowns */
+            width: 100%;
+            flex-direction: column; /* Ensure DOB dropdowns are below the label */
         }
 
         .form-group.dob-group select {
@@ -201,6 +202,11 @@
             const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             return re.test(email);
         }
+
+        function validPassword(password) {
+            if (password == "") { return false; }
+            return true;
+        }
     
         // Function to check if passwords match
         function passwordsMatch() {
@@ -211,6 +217,7 @@
         function checkFormValidity() {
             const isEmailValid = validateEmail(emailField.value);
             const doPasswordsMatch = passwordsMatch();
+            const isPasswordValid = validPassword(passwordField.value)
     
             // Email validation
             if (isEmailValid) {
@@ -218,16 +225,19 @@
             } else {
                 emailError.textContent = "Please enter a valid email address."; // Show email error
             }
-    
+
             // Password match validation
             if (doPasswordsMatch) {
                 passwordError.textContent = ""; // Clear password error if passwords match
             } else {
-                passwordError.textContent = "Passwords do not match."; // Show password error
+                if (isPasswordValid) {
+                    passwordError.textContent = "Passwords do not match."; // Show password error
+                }
+                else {passwordError.textContent = "Please enter a valid password"; }
             }
     
             // Enable the signup button only if both email is valid and passwords match
-            signupButton.disabled = !(isEmailValid && doPasswordsMatch);
+            signupButton.disabled = !(isEmailValid && doPasswordsMatch && isPasswordValid);
         }
     
         // Add event listeners to check both email syntax and password matching
