@@ -65,16 +65,25 @@
             border-color: #007bff;
         }
 
-        .dob-gender-container {
+        /* New CSS for Date of Birth fields */
+        .form-group.dob-group {
             display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            width: 100%;
-            margin-bottom: 20px;
+            gap: 10px; /* Add space between the dropdowns */
+            width: 100%; /* Ensure it uses the full width available */
         }
 
-        .dob-gender-container select {
-            width: 100%;
+        .form-group.dob-group select {
+            flex: 1; /* Ensures each dropdown shares equal width */
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        .form-group.dob-group select:focus {
+            outline: none;
+            border-color: #007bff;
         }
 
         button {
@@ -147,10 +156,12 @@
             <div class="form-group">
                 {{ form.name.label_tag }} {{ form.name }}
             </div>
+            <!-- Date of Birth Section with Flexbox -->
             <div class="form-group">
-                <label for="date_of_birth"></label>
-                <div class="form-group">
-                    {{ form.date_of_birth.label_tag }} {{ form.date_of_birth }}
+                <label for="date_of_birth">Date of Birth</label>
+                <div class="form-group dob-group">
+                    <!-- Month, Day, Year dropdowns will be rendered here -->
+                    {{ form.date_of_birth }}
                 </div>
             </div>
             <div class="form-group">

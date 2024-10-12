@@ -12,13 +12,17 @@ class SignUpForm(forms.Form):
     email = forms.EmailField(label="Email")
     name = forms.CharField(max_length=100, label="Full Name")
     date_of_birth = forms.DateField(widget=forms.SelectDateWidget(years=range(1900, datetime.date.today().year+1)), label="Date of Birth")
-    
+
     GENDER_CHOICES = [
+        ('', 'Choose gender'),
         ('M', 'Male'),
         ('F', 'Female'),
         ('O', 'Other'),
+        ('PNTS', 'Prefer not to say'),
     ]
-    gender = forms.ChoiceField(choices=GENDER_CHOICES, widget=forms.RadioSelect, label="Gender")
+    
+    # Change the widget from RadioSelect to Select for the dropdown
+    gender = forms.ChoiceField(choices=GENDER_CHOICES, widget=forms.Select, label="Gender")
     
     password = forms.CharField(widget=forms.PasswordInput(), label="Password")
     confirm_password = forms.CharField(widget=forms.PasswordInput(), label="Confirm Password")
@@ -32,3 +36,4 @@ class SignUpForm(forms.Form):
             raise forms.ValidationError("Passwords do not match.")
         
         return cleaned_data
+
