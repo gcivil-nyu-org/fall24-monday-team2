@@ -106,6 +106,7 @@
             <input type="password" id="password" name="password" placeholder="Password">
             <button type="submit">Login</button>
         </form>
+        <a href="{% url 'password_reset_request' %}">Forgot Password?</a>
         <p class="signup-link">Don't have an account? <a href="{% url 'signup' %}">Sign up here.</a></p>
     </div>
 </body>

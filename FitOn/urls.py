@@ -16,11 +16,17 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from .views import signup, homepage, login
+from django.contrib.auth import views as auth_views
+from .views import signup, homepage, login, password_reset_complete, password_reset_confirm, password_reset_request, password_reset_done
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('signup/', signup, name='signup'),
     path('home/', homepage, name='homepage'),
-    path('login/', login, name='login')
+    path('login/', login, name='login'),
+    path('reset-password/', password_reset_request, name='password_reset_request'),
+    path('reset-password/<str:user_id>/<str:token>/', password_reset_confirm, name='password_reset_confirm'),
+    path('reset-password/done/', password_reset_done, name='password_reset_done'),
+    path('reset-password/complete/', password_reset_complete, name='password_reset_complete')
 ]
+
