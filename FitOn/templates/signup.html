@@ -158,6 +158,7 @@
             </div>
             <div class="form-group">
                 {{ form.email.label_tag }} {{ form.email }}
+                <div id="emailError" class="error-message"></div> <!-- Error message for email -->
                 {{ form.email.errors }}
             </div>
             <div class="form-group">
@@ -188,20 +189,52 @@
     <script>
         const passwordField = document.getElementById('id_password');
         const confirmPasswordField = document.getElementById('id_confirm_password');
+        const emailField = document.getElementById('id_email');
         const signupButton = document.getElementById('signupButton');
-
-        // Function to check if passwords match
-        function checkPasswordsMatch() {
-            if (passwordField.value === confirmPasswordField.value && passwordField.value !== "") {
-                signupButton.disabled = false;
-            } else {
-                signupButton.disabled = true;
-            }
+        const emailError = document.getElementById('emailError');
+        const passwordError = document.createElement('div'); // Create a div for password error
+        passwordError.className = 'error-message';
+        confirmPasswordField.parentNode.appendChild(passwordError); // Append error message under confirm password
+    
+        // Function to check if the email is valid
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
         }
-
-        // Add event listeners to both password fields to check passwords on input
-        passwordField.addEventListener('input', checkPasswordsMatch);
-        confirmPasswordField.addEventListener('input', checkPasswordsMatch);
+    
+        // Function to check if passwords match
+        function passwordsMatch() {
+            return passwordField.value === confirmPasswordField.value && passwordField.value !== "";
+        }
+    
+        // Function to check form validity and enable/disable the signup button
+        function checkFormValidity() {
+            const isEmailValid = validateEmail(emailField.value);
+            const doPasswordsMatch = passwordsMatch();
+    
+            // Email validation
+            if (isEmailValid) {
+                emailError.textContent = ""; // Clear email error if valid
+            } else {
+                emailError.textContent = "Please enter a valid email address."; // Show email error
+            }
+    
+            // Password match validation
+            if (doPasswordsMatch) {
+                passwordError.textContent = ""; // Clear password error if passwords match
+            } else {
+                passwordError.textContent = "Passwords do not match."; // Show password error
+            }
+    
+            // Enable the signup button only if both email is valid and passwords match
+            signupButton.disabled = !(isEmailValid && doPasswordsMatch);
+        }
+    
+        // Add event listeners to check both email syntax and password matching
+        emailField.addEventListener('input', checkFormValidity);
+        passwordField.addEventListener('input', checkFormValidity);
+        confirmPasswordField.addEventListener('input', checkFormValidity);
     </script>
+    
 </body>
 </html>
