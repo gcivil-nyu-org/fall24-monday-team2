@@ -93,6 +93,13 @@
             text-decoration: underline;
         }
 
+        /* Add styling for error messages */
+        .error-message {
+            color: red;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
     </style>
 </head>
 <body>
@@ -104,6 +111,12 @@
             <input type="text" id="username" name="username" placeholder="Username">
             <label for="password">Password*</label>
             <input type="password" id="password" name="password" placeholder="Password">
+            
+            <!-- Display error message here if it exists -->
+            {% if error_message %}
+                <div class="error-message">{{ error_message }}</div>
+            {% endif %}
+            
             <button type="submit">Login</button>
         </form>
         <p class="signup-link">Don't have an account? <a href="{% url 'signup' %}">Sign up here.</a></p>

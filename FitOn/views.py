@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from .forms import SignUpForm, LoginForm
-from .dynamodb import create_user, get_user_by_username, get_user_by_email
+from .dynamodb import create_user, get_user_by_username
 from django.contrib.auth.hashers import make_password, check_password
 import uuid
 
