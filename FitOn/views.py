@@ -72,7 +72,9 @@ def signup(request):
     else:
         form = SignUpForm()
 
-    return render(request, 'signup.html', {'form': form})
+    days = list(range(1, 32)) 
+    years = list(range(1900, 2025))  
+    return render(request, 'signup.html', {'form': form, 'days': days, 'years': years})
 
 def homepage(request):
     username = request.session.get('username', 'Guest')
