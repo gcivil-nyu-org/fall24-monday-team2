@@ -1,7 +1,8 @@
 from django.shortcuts import render, redirect
 from .forms import SignUpForm, LoginForm
-from .dynamodb import create_user, get_user_by_username
+from .dynamodb import create_user, get_user_by_username, delete_user_by_username
 from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth import logout
 import uuid
 
 def login(request):
@@ -70,3 +71,18 @@ def homepage(request):
     # Retrieve the username from the session (if it exists)
     username = request.session.get('username', 'Guest')  # Default to 'Guest' if no username is found
     return render(request, 'home.html', {'username': username})
+
+
+def deactivate_account(request):
+    if request.method == 'POST':
+        username = request.session.get('username')
+        if username:
+            # Delete the user from DynamoDB
+            if delete_user_by_username(username):
+                # Log the user out and clear the session
+                logout(request)
+                return redirect('homepage')
+            else:
+                return render(request, 'deactivate.html', {'error_message': 'Error deleting the account.'})
+    else:
+        return render(request, 'deactivate.html')  # Render a confirmation page

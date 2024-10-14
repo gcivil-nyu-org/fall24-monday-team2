@@ -1,0 +1,9 @@
+<h2>Are you sure you want to deactivate your account?</h2>
+<form method="POST">
+    {% csrf_token %}
+    <button type="submit">Yes, deactivate my account</button>
+</form>
+
+{% if error_message %}
+    <p style="color: red;">{{ error_message }}</p>
+{% endif %}
