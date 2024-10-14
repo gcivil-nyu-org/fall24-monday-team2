@@ -81,9 +81,6 @@ def signup(request):
     return render(request, 'signup.html', {'form': form})  # Ensure form is passed for both GET and POST
 
 
-import ssl
-from django.core.mail import get_connection
-
 def password_reset_request(request):
     countdown = None
 
