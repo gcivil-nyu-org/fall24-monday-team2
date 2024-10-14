@@ -4,7 +4,7 @@ from .dynamodb import create_user, get_user_by_username, get_user_by_email, get_
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
-from django.core.mail import send_mail
+from django.core.mail import send_mail, get_connection
 from django.template.loader import render_to_string
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
@@ -15,8 +15,7 @@ from django.utils.html import strip_tags
 from django.utils import timezone
 from datetime import timedelta
 from .models import PasswordResetRequest
-
-import uuid
+import uuid, ssl
 
 def homepage(request):
     username = request.session.get('username', 'Guest')
@@ -82,6 +81,9 @@ def signup(request):
     return render(request, 'signup.html', {'form': form})  # Ensure form is passed for both GET and POST
 
 
+import ssl
+from django.core.mail import get_connection
+
 def password_reset_request(request):
     countdown = None
 
@@ -121,15 +123,21 @@ def password_reset_request(request):
                     'reset_url': reset_url
                 }
                 html_message = render_to_string('password_reset_email.html', email_context)
-                send_mail(subject, '', 'fiton.notifications@gmail.com', [email], html_message=html_message)
+
+                # Create an unverified SSL context
+                unverified_ssl_context = ssl._create_unverified_context()
+
+                # Send the email with the unverified context
+                connection = get_connection(ssl_context=unverified_ssl_context)
+                send_mail(subject, '', 'fiton.notifications@gmail.com', [email], html_message=html_message, connection=connection)
 
                 return redirect('password_reset_done')
             else:
                 error_message = 'The email you entered is not registered with an account.'
     else:
         form = PasswordResetForm()
-
     return render(request, 'password_reset_request.html', {'form': form, 'countdown': countdown})
+
 
 
 def password_reset_confirm(request, user_id, token):
