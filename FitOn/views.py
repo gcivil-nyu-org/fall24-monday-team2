@@ -74,15 +74,22 @@ def homepage(request):
 
 
 def deactivate_account(request):
+    # This simply shows the confirmation page
+    return render(request, 'deactivate.html')
+
+def confirm_deactivation(request):
     if request.method == 'POST':
         username = request.session.get('username')
         if username:
             # Delete the user from DynamoDB
             if delete_user_by_username(username):
-                # Log the user out and clear the session
+                # Log the user out and set a flag in session to show the success modal
                 logout(request)
-                return redirect('homepage')
+                request.session['deactivation_success'] = True  # Set this flag
+                return redirect('deactivate_account')  # Redirect back to the deactivate page to show success modal
             else:
                 return render(request, 'deactivate.html', {'error_message': 'Error deleting the account.'})
+        else:
+            return redirect('login')
     else:
-        return render(request, 'deactivate.html')  # Render a confirmation page
+        return redirect('deactivate_account')
