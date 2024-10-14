@@ -40,7 +40,7 @@
 
         .form-group {
             width: 100%;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             text-align: left;
         }
 
@@ -65,16 +65,26 @@
             border-color: #007bff;
         }
 
-        .dob-gender-container {
+        /* New CSS for Date of Birth fields */
+        .form-group.dob-group {
             display: flex;
-            justify-content: space-between;
-            gap: 10px;
+            gap: 10px; /* Space between the dropdowns */
             width: 100%;
-            margin-bottom: 20px;
+            flex-direction: column; /* Ensure DOB dropdowns are below the label */
         }
 
-        .dob-gender-container select {
-            width: 100%;
+        .form-group.dob-group select {
+            flex: 1; /* Ensures each dropdown shares equal width */
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+
+        .form-group.dob-group select:focus {
+            outline: none;
+            border-color: #007bff;
         }
 
         button {
@@ -87,6 +97,11 @@
             cursor: pointer;
             font-size: 16px;
             transition: background-color 0.3s;
+        }
+
+        button:disabled {
+            background-color: #cccccc; /* Disabled button color */
+            cursor: not-allowed;
         }
 
         button:hover {
@@ -136,35 +151,100 @@
 <body>
     <div class="signup-container">
         <h2>Sign Up</h2>
-        <form method="POST">
+        <form method="POST" id="signupForm">
             {% csrf_token %}
             <div class="form-group">
                 {{ form.username.label_tag }} {{ form.username }}
+                {{ form.username.errors }}
             </div>
             <div class="form-group">
                 {{ form.email.label_tag }} {{ form.email }}
+                <div id="emailError" class="error-message"></div> <!-- Error message for email -->
+                {{ form.email.errors }}
             </div>
             <div class="form-group">
                 {{ form.name.label_tag }} {{ form.name }}
+                {{ form.name.errors }}
             </div>
-            <div class="form-group">
-                <label for="date_of_birth">Date of Birth</label>
-                <div class="form-group">
-                    {{ form.date_of_birth.label_tag }} {{ form.date_of_birth }}
-                </div>
+            <div class="form-group dob-group">
+                {{ form.date_of_birth.label_tag }} {{ form.date_of_birth }}
+                {{ form.date_of_birth.errors }}
             </div>
             <div class="form-group">
                 {{ form.gender.label_tag }} {{ form.gender }}
+                {{ form.gender.errors }}
             </div>
             <div class="form-group">
                 {{ form.password.label_tag }} {{ form.password }}
+                {{ form.password.errors }}
             </div>
             <div class="form-group">
                 {{ form.confirm_password.label_tag }} {{ form.confirm_password }}
+                {{ form.confirm_password.errors }}
             </div>
-            <button type="submit">Sign Up</button>
+            <button type="submit" id="signupButton" disabled>Sign Up</button>
         </form>
         <p class="already-account">Already have an account? <a href="{% url 'login' %}">Click here to login.</a></p>
     </div>
+
+    <script>
+        const passwordField = document.getElementById('id_password');
+        const confirmPasswordField = document.getElementById('id_confirm_password');
+        const emailField = document.getElementById('id_email');
+        const signupButton = document.getElementById('signupButton');
+        const emailError = document.getElementById('emailError');
+        const passwordError = document.createElement('div'); // Create a div for password error
+        passwordError.className = 'error-message';
+        confirmPasswordField.parentNode.appendChild(passwordError); // Append error message under confirm password
+    
+        // Function to check if the email is valid
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+
+        function validPassword(password) {
+            if (password == "") { return false; }
+            return true;
+        }
+    
+        // Function to check if passwords match
+        function passwordsMatch() {
+            return passwordField.value === confirmPasswordField.value && passwordField.value !== "";
+        }
+    
+        // Function to check form validity and enable/disable the signup button
+        function checkFormValidity() {
+            const isEmailValid = validateEmail(emailField.value);
+            const doPasswordsMatch = passwordsMatch();
+            const isPasswordValid = validPassword(passwordField.value)
+    
+            // Email validation
+            if (isEmailValid) {
+                emailError.textContent = ""; // Clear email error if valid
+            } else {
+                emailError.textContent = "Please enter a valid email address."; // Show email error
+            }
+
+            // Password match validation
+            if (doPasswordsMatch) {
+                passwordError.textContent = ""; // Clear password error if passwords match
+            } else {
+                if (isPasswordValid) {
+                    passwordError.textContent = "Passwords do not match."; // Show password error
+                }
+                else {passwordError.textContent = "Please enter a valid password"; }
+            }
+    
+            // Enable the signup button only if both email is valid and passwords match
+            signupButton.disabled = !(isEmailValid && doPasswordsMatch && isPasswordValid);
+        }
+    
+        // Add event listeners to check both email syntax and password matching
+        emailField.addEventListener('input', checkFormValidity);
+        passwordField.addEventListener('input', checkFormValidity);
+        confirmPasswordField.addEventListener('input', checkFormValidity);
+    </script>
+    
 </body>
 </html>
