@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deactivate Account</title>
+    <style>
+        /* Modal styles */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5); /* Black with opacity */
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 30%;
+            text-align: center;
+        }
+
+        /* Button styles */
+        .button {
+            padding: 10px 20px;
+            margin: 10px;
+            cursor: pointer;
+        }
+
+        .confirm {
+            background-color: red;
+            color: white;
+            border: none;
+        }
+
+        .cancel {
+            background-color: grey;
+            color: white;
+            border: none;
+        }
+
+        .ok-btn {
+            background-color: blue;
+            color: white;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Deactivate Your Account</h2>
+    <p>If you deactivate your account, all your data will be permanently deleted.</p>
+
+    <!-- Button to trigger the modal -->
+    <button id="deactivateBtn" class="button">Deactivate Account</button>
+
+    <!-- Confirmation Modal -->
+    <div id="myModal" class="modal">
+        <div class="modal-content">
+            <h3>Are you sure you want to deactivate your account?</h3>
+            <p>This action cannot be undone.</p>
+
+            <!-- Confirm and Cancel buttons inside the modal -->
+            <form method="POST" action="{% url 'confirm_deactivation' %}">
+                {% csrf_token %}
+                <button type="submit" class="button confirm">Yes, Deactivate</button>
+            </form>
+            <button id="cancelBtn" class="button cancel">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="successModal" class="modal">
+        <div class="modal-content">
+            <h3>Your account has been successfully deactivated.</h3>
+            <button id="okBtn" class="button ok-btn">OK</button>
+        </div>
+    </div>
+
+    <!-- Check if the deactivation was successful and display the success modal if true -->
+    <input type="hidden" id="deactivationSuccess" value="{{ deactivation_success }}">
+
+    <script>
+        // Get the modal elements
+        var modal = document.getElementById("myModal");
+        var successModal = document.getElementById("successModal");
+        var btn = document.getElementById("deactivateBtn");
+        var cancelBtn = document.getElementById("cancelBtn");
+        var okBtn = document.getElementById("okBtn");
+
+        // Show confirmation modal when the "Deactivate Account" button is clicked
+        btn.onclick = function() {
+            modal.style.display = "block";
+        }
+
+        // Close confirmation modal when "Cancel" is clicked
+        cancelBtn.onclick = function() {
+            modal.style.display = "none";
+        }
+
+        // If the user clicks anywhere outside the modal, close it
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+
+        // Check if the account was successfully deactivated and show success modal
+        var deactivationSuccess = document.getElementById("deactivationSuccess").value;
+        if (deactivationSuccess === "True") {
+            successModal.style.display = "block";
+        }
+
+        // When "OK" is clicked in the success modal, redirect to the homepage
+        okBtn.onclick = function() {
+            window.location.href = "{% url 'homepage' %}";
+        }
+    </script>
+
+</body>
+</html>

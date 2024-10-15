@@ -71,6 +71,35 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
         print(f"Error creating user in DynamoDB: {e}")
         return False
 
+def delete_user_by_username(username):
+    try:
+        # First, get the user by username
+        response = users_table.scan(
+            FilterExpression="#n = :username",
+            ExpressionAttributeNames={"#n": "username"},
+            ExpressionAttributeValues={":username": username}
+        )
+        
+        users = response.get('Items', [])
+        if not users:
+            print(f"No user found with username: {username}")
+            return False  # No user to delete
+        
+        # Assuming the 'user_id' is the partition key
+        user_id = users[0]['user_id']  # Get the user's 'user_id'
+
+        # Delete the user by user_id (or username if it's the primary key)
+        delete_response = users_table.delete_item(
+            Key={
+                'user_id': user_id  # Replace with your partition key
+            }
+        )
+        print(f"User '{username}' successfully deleted.")
+        return True
+
+    except Exception as e:
+        print(f"Error deleting user with username '{username}': {e}")
+        return False
 
 def get_user_by_email(email):
     try:

@@ -1,11 +1,12 @@
 from django.shortcuts import render, redirect
-from .dynamodb import create_user, get_user_by_username, get_user_by_email, get_user_by_uid, update_user_password, MockUser, update_reset_request_time, get_last_reset_request_time, get_user, update_user
+from .dynamodb import create_user, get_user_by_username, get_user_by_email, get_user_by_uid, update_user_password, MockUser, update_reset_request_time, get_last_reset_request_time, get_user, update_user, delete_user_by_username
 from .forms import SignUpForm, LoginForm, PasswordResetForm, SetNewPasswordForm, ProfileForm
 from .models import PasswordResetRequest
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth import logout
 from django.contrib import messages
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage
@@ -142,7 +143,6 @@ def password_reset_request(request):
     return render(request, 'password_reset_request.html', {'form': form, 'countdown': countdown})
 
 
-
 def password_reset_confirm(request, user_id, token):
     user = MockUser(get_user_by_uid(user_id))
 
@@ -265,3 +265,27 @@ def profile_view(request):
         })
 
     return render(request, 'profile.html', {'form': form, 'user': user})
+
+
+    def deactivate_account(request):
+        # This simply shows the confirmation page
+        return render(request, 'deactivate.html')
+
+    def confirm_deactivation(request):
+        if request.method == 'POST':
+            username = request.session.get('username')
+            
+            if username:
+                # Delete the user from DynamoDB
+                if delete_user_by_username(username):
+                    # Log the user out and redirect to the homepage
+                    logout(request)
+                    return redirect('homepage')  # Redirect to homepage after deactivation
+                else:
+                    return render(request, 'deactivate.html', {'error_message': 'Error deleting the account.'})
+            else:
+                # Redirect to login if there's no username in session
+                return redirect('login')
+        else:
+            # Redirect to the deactivate page if the request method is not POST
+            return redirect('deactivate_account')
