@@ -25,7 +25,9 @@
                 <!-- Profile Picture and Username -->
                 <div class="profile-picture">
                     <div class="profile-picture-container" id="profile-picture">
-                        <img src="{% if user.user_id %}{% static 'images/' %}{{ user.user_id }}_profile.jpg{% else %}{% static 'images/default-profile.png' %}{% endif %}" alt="Profile Picture">
+                        {% load static %}
+                        <img src="{% static 'images/' %}{{ user.user_id }}_profile.jpg" alt="Profile Picture" 
+                            onerror="this.onerror=null; this.src=`{% static 'images/default-profile.png' %}`">                        
                         <input type="file" id="file-input" style="display: none;">
                         <div class="edit-icon">
                             <i class="fa fa-pencil-alt"></i>
@@ -119,11 +121,40 @@
                         <button type="submit" class="submit-button">
                             Update Profile
                         </button>
-                        <button type="button" class="deactivate-button">
-                            Deactivate Account
-                        </button>
                     </div>
                 </form>
+            </div>
+
+
+            <div class="button-container">
+                <!-- Button to trigger the modal -->
+                <button id="deactivateBtn" class="deactivate-button" type="button">Deactivate Account</button>
+
+                <!-- Confirmation Modal -->
+                <div id="myModal" class="modal">
+                    <div class="modal-content">
+                        <h3>Are you sure you want to deactivate your account?</h3>
+                        <p>This action cannot be undone.</p>
+
+                        <!-- Confirm and Cancel buttons inside the modal -->
+                        <form method="POST" action="{% url 'confirm_deactivation' %}">
+                            {% csrf_token %}
+                            <button type="submit" class="button-confirm">Yes, Deactivate</button>
+                        </form>
+                        <button id="cancelBtn" class="button-cancel">Cancel</button>
+                    </div>
+                </div>
+
+                <!-- Success Modal -->
+                <div id="successModal" class="modal">
+                    <div class="modal-content">
+                        <h3>Your account has been successfully deactivated.</h3>
+                        <button id="okBtn" class="button-ok-btn">OK</button>
+                    </div>
+                </div>
+
+                <!-- Check if the deactivation was successful and display the success modal if true -->
+                <input type="hidden" id="deactivationSuccess" value="{{ deactivation_success }}">
             </div>
         </div>
 
@@ -167,8 +198,7 @@
                         return response.json();
                     }).then(data => {
                         if (data.success) {
-                            // Update the profile picture with the new one
-                            document.querySelector('.profile-picture-container img').src = data.new_image_url;
+                            location.reload();
                         } else {
                             alert('Failed to upload image.');
                         }
@@ -177,7 +207,43 @@
                     });
                 });
             });
+
+            // Get the modal elements
+            var modal = document.getElementById("myModal");
+            var successModal = document.getElementById("successModal");
+            var btn = document.getElementById("deactivateBtn");
+            var cancelBtn = document.getElementById("cancelBtn");
+            var okBtn = document.getElementById("okBtn");
+
+            // Show confirmation modal when the "Deactivate Account" button is clicked
+            btn.onclick = function() {
+                modal.style.display = "block";
+            }
+
+            // Close confirmation modal when "Cancel" is clicked
+            cancelBtn.onclick = function() {
+                modal.style.display = "none";
+            }
+
+            // If the user clicks anywhere outside the modal, close it
+            window.onclick = function(event) {
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
+
+            // Check if the account was successfully deactivated and show success modal
+            var deactivationSuccess = document.getElementById("deactivationSuccess").value;
+            if (deactivationSuccess === "True") {
+                successModal.style.display = "block";
+            }
+
+            // When "OK" is clicked in the success modal, redirect to the homepage
+            okBtn.onclick = function() {
+                window.location.href = "{% url 'homepage' %}";
+            }
         </script>
     </body>
 
 {% endblock %}
+

@@ -315,3 +315,41 @@ footer {
     background-color: #0056b3; /* Darker blue for active link */
     color: #FFFFFF; /* White */
 }
+
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5); /* Black with opacity */
+}
+
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 30%;
+    text-align: center;
+}
+
+.button-confirm {
+    background-color: red;
+    color: white;
+    border: none;
+}
+
+.button-cancel {
+    background-color: grey;
+    color: white;
+    border: none;
+}
+
+.button-ok-btn {
+    background-color: blue;
+    color: white;
+    border: none;
+}
