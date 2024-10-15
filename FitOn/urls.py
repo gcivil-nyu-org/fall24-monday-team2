@@ -14,27 +14,20 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from .views import signup, homepage, login, password_reset_complete, password_reset_confirm, password_reset_request, password_reset_done, profile_view, upload_profile_picture
+from .views import signup, homepage, login, password_reset_complete, password_reset_confirm, password_reset_request, password_reset_done, profile_view, upload_profile_picture, deactivate_account, confirm_deactivation
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import path
-<<<<<<< HEAD
-from .views import signup, homepage, login, deactivate_account, confirm_deactivation
-=======
->>>>>>> develop
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('signup/', signup, name='signup'),
     path('home/', homepage, name='homepage'),
     path('login/', login, name='login'),
-<<<<<<< HEAD
     path('deactivate/', deactivate_account, name='deactivate_account'),
-    path('deactivate/confirm/', confirm_deactivation, name='confirm_deactivation')
-]
-=======
+    path('deactivate/confirm/', confirm_deactivation, name='confirm_deactivation'),
     path('logout/', login, name='logout'),
     path('reset-password/', password_reset_request, name='password_reset_request'),
     path('reset-password/<str:user_id>/<str:token>/', password_reset_confirm, name='password_reset_confirm'),
@@ -45,4 +38,3 @@ urlpatterns = [
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     
 
->>>>>>> develop

@@ -267,25 +267,25 @@ def profile_view(request):
     return render(request, 'profile.html', {'form': form, 'user': user})
 
 
-    def deactivate_account(request):
-        # This simply shows the confirmation page
-        return render(request, 'deactivate.html')
+def deactivate_account(request):
+    # This simply shows the confirmation page
+    return render(request, 'deactivate.html')
 
-    def confirm_deactivation(request):
-        if request.method == 'POST':
-            username = request.session.get('username')
-            
-            if username:
-                # Delete the user from DynamoDB
-                if delete_user_by_username(username):
-                    # Log the user out and redirect to the homepage
-                    logout(request)
-                    return redirect('homepage')  # Redirect to homepage after deactivation
-                else:
-                    return render(request, 'deactivate.html', {'error_message': 'Error deleting the account.'})
+def confirm_deactivation(request):
+    if request.method == 'POST':
+        username = request.session.get('username')
+        
+        if username:
+            # Delete the user from DynamoDB
+            if delete_user_by_username(username):
+                # Log the user out and redirect to the homepage
+                logout(request)
+                return redirect('homepage')  # Redirect to homepage after deactivation
             else:
-                # Redirect to login if there's no username in session
-                return redirect('login')
+                return render(request, 'deactivate.html', {'error_message': 'Error deleting the account.'})
         else:
-            # Redirect to the deactivate page if the request method is not POST
-            return redirect('deactivate_account')
+            # Redirect to login if there's no username in session
+            return redirect('login')
+    else:
+        # Redirect to the deactivate page if the request method is not POST
+        return redirect('deactivate_account')
