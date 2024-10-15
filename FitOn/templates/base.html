@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}FitOn{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    {% if request.session.username %}
+        <nav class="navbar">
+            <div class="navbar-container">
+                <a href="{% url 'homepage' %}" class="navbar-logo">FitOn</a>
+                <ul class="navbar-links">
+                    <li><a href="{% url 'homepage' %}">Forums</a></li>
+                    <li><a href="{% url 'homepage' %}">Workouts</a></li>
+                    <li><a href="{% url 'homepage' %}">Metrics</a></li>
+                    <li><a href="{% url 'profile' %}">Profile</a></li>
+                    <li><a href="{% url 'logout' %}">Logout</a></li>
+                </ul>
+            </div>
+        </nav>
+    {% endif %}
+    
+    <div class="content">
+        {% block content %}
+        {% endblock %}
+    </div>
+
+    <footer>
+        <p>&copy; 2024 FitOn, All rights reserved</p>
+    </footer>
+</body>
+</html>
