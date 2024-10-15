@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>User Profile</title>
+        {% load static %}
+        <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+    </head>
+    <body>
+        <div class="profile-container">
+
+            <!-- Success/Error Messages -->
+            {% for message in messages %}
+                <div class="message {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+
+            <!-- Profile Header -->
+            <div class="profile-header">
+                <!-- Profile Picture and Username -->
+                <div class="profile-picture">
+                    <div class="profile-picture-container" id="profile-picture">
+                        <img src="{% if user.user_id %}{% static 'images/' %}{{ user.user_id }}_profile.jpg{% else %}{% static 'images/default-profile.png' %}{% endif %}" alt="Profile Picture">
+                        <input type="file" id="file-input" style="display: none;">
+                        <div class="edit-icon">
+                            <i class="fa fa-pencil-alt"></i>
+                        </div>
+                    </div>             
+
+                    {% if user %}
+                        <h1>{{ user.username }}</h1>
+                    {% else %}
+                        <h1>Guest</h1>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Form Section -->
+            <div class="form-container">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <!-- Name -->
+                    <div class="form-group">
+                        <label for="name">Name</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <span class="error">{{ form.name.errors }}</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Email -->
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        {{ form.email }}
+                    </div>
+                    
+                    <!-- Gender and Date of Birth -->
+                    <div class="form-group">
+                        <div class="gender-dob-container">
+                            <div class="gender-container">
+                                <label for="gender">Gender</label>
+                                {{ form.gender }}  <!-- Gender field -->
+                            </div>
+                            <div class="dob-container">
+                                <label for="date_of_birth">Date of Birth</label>
+                                {{ form.date_of_birth }}  <!-- Date of Birth field -->
+                            </div>
+                        </div>
+                        {% if form.gender.errors %}
+                            <span class="error">{{ form.gender.errors }}</span>
+                        {% endif %}
+                        {% if form.date_of_birth.errors %}
+                            <span class="error">{{ form.date_of_birth.errors }}</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Phone Number with Country Code -->
+                    <div class="form-group">
+                        <label for="phone_number">Phone Number</label>
+                        <div class="phone-number-container">
+                            <div class="country-code-container">
+                                {{ form.country_code }}  <!-- Country code field -->
+                            </div>
+                            <div class="phone-number-input-container">
+                                {{ form.phone_number }}  <!-- Phone number field -->
+                            </div>
+                        </div>
+                        {% if form.phone_number.errors %}
+                            <span class="error">{{ form.phone_number.errors }}</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Address -->
+                    <div class="form-group">
+                        <label for="address">Address</label>
+                        {{ form.address }}
+                        {% if form.address.errors %}
+                            <span class="error">{{ form.address.errors }}</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Bio -->
+                    <div class="form-group">
+                        <label for="bio">Bio</label>
+                        {{ form.bio }}
+                        {% if form.bio.errors %}
+                            <span class="error">{{ form.bio.errors }}</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" class="submit-button">Update Profile</button>
+                </form>
+            </div>
+        </div>
+
+        <script>
+            function getCSRFToken() {
+                let cookieValue = null;
+                if (document.cookie && document.cookie !== '') {
+                    const cookies = document.cookie.split(';');
+                    for (let i = 0; i < cookies.length; i++) {
+                        const cookie = cookies[i].trim();
+                        if (cookie.substring(0, 10) === 'csrftoken=') {
+                            cookieValue = decodeURIComponent(cookie.substring(10));
+                            break;
+                        }
+                    }
+                }
+                return cookieValue;
+            }
+
+            // Event listener to trigger file upload when profile picture is clicked
+            document.addEventListener('DOMContentLoaded', function () {
+                const profilePictureContainer = document.getElementById('profile-picture');
+                const fileInput = document.getElementById('file-input');
+
+                profilePictureContainer.addEventListener('click', function () {
+                    fileInput.click();  // Trigger file input dialog on click
+                });
+
+                fileInput.addEventListener('change', function () {
+                    const formData = new FormData();
+                    formData.append('profile_picture', fileInput.files[0]);
+
+                    // Make an AJAX request to upload the profile picture
+                    fetch('/upload_profile_picture/', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-CSRFToken': getCSRFToken()  // Pass CSRF token for security
+                        }
+                    }).then(response => {
+                        return response.json();
+                    }).then(data => {
+                        if (data.success) {
+                            // Update the profile picture with the new one
+                            document.querySelector('.profile-picture-container img').src = data.new_image_url;
+                        } else {
+                            alert('Failed to upload image.');
+                        }
+                    }).catch(error => {
+                        console.error('Error uploading image:', error);
+                    });
+                });
+            });
+        </script>
+    </body>
+
+{% endblock %}
