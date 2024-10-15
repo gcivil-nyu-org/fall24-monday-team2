@@ -8,11 +8,13 @@
         body {
             font-family: 'Arial', sans-serif;
             background-color: #f7f7f7;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            margin: 0;
+            overflow: hidden; /* Prevents the body from scrolling */
         }
 
         .signup-container {
@@ -23,6 +25,8 @@
             max-width: 400px;
             padding: 40px 30px;
             text-align: center;
+            overflow-y: auto; /* Allows scrolling inside the container */
+            max-height: 90vh; /* Ensures the form doesn't exceed screen height */
         }
 
         h2 {
@@ -65,26 +69,11 @@
             border-color: #007bff;
         }
 
-        /* New CSS for Date of Birth fields */
         .form-group.dob-group {
             display: flex;
-            gap: 10px; /* Space between the dropdowns */
+            gap: 10px;
             width: 100%;
-            flex-direction: column; /* Ensure DOB dropdowns are below the label */
-        }
-
-        .form-group.dob-group select {
-            flex: 1; /* Ensures each dropdown shares equal width */
-            padding: 12px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            font-size: 16px;
-            box-sizing: border-box;
-        }
-
-        .form-group.dob-group select:focus {
-            outline: none;
-            border-color: #007bff;
+            flex-direction: column;
         }
 
         button {
@@ -100,7 +89,7 @@
         }
 
         button:disabled {
-            background-color: #cccccc; /* Disabled button color */
+            background-color: #cccccc;
             cursor: not-allowed;
         }
 
@@ -130,6 +119,11 @@
         }
 
         @media (max-width: 480px) {
+            body {
+                padding: 10px; /* Adds padding for smaller devices */
+                overflow: auto; /* Allows scrolling on small screens */
+            }
+
             .signup-container {
                 padding: 30px 20px;
             }
@@ -159,7 +153,7 @@
             </div>
             <div class="form-group">
                 {{ form.email.label_tag }} {{ form.email }}
-                <div id="emailError" class="error-message"></div> <!-- Error message for email -->
+                <div id="emailError" class="error-message"></div>
                 {{ form.email.errors }}
             </div>
             <div class="form-group">
@@ -193,58 +187,46 @@
         const emailField = document.getElementById('id_email');
         const signupButton = document.getElementById('signupButton');
         const emailError = document.getElementById('emailError');
-        const passwordError = document.createElement('div'); // Create a div for password error
+        const passwordError = document.createElement('div');
         passwordError.className = 'error-message';
-        confirmPasswordField.parentNode.appendChild(passwordError); // Append error message under confirm password
-    
-        // Function to check if the email is valid
+        confirmPasswordField.parentNode.appendChild(passwordError);
+
         function validateEmail(email) {
             const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             return re.test(email);
         }
 
         function validPassword(password) {
-            if (password == "") { return false; }
-            return true;
+            return password !== "";
         }
-    
-        // Function to check if passwords match
+
         function passwordsMatch() {
             return passwordField.value === confirmPasswordField.value && passwordField.value !== "";
         }
-    
-        // Function to check form validity and enable/disable the signup button
+
         function checkFormValidity() {
             const isEmailValid = validateEmail(emailField.value);
             const doPasswordsMatch = passwordsMatch();
-            const isPasswordValid = validPassword(passwordField.value)
-    
-            // Email validation
+            const isPasswordValid = validPassword(passwordField.value);
+
             if (isEmailValid) {
-                emailError.textContent = ""; // Clear email error if valid
+                emailError.textContent = "";
             } else {
-                emailError.textContent = "Please enter a valid email address."; // Show email error
+                emailError.textContent = "Please enter a valid email address.";
             }
 
-            // Password match validation
             if (doPasswordsMatch) {
-                passwordError.textContent = ""; // Clear password error if passwords match
+                passwordError.textContent = "";
             } else {
-                if (isPasswordValid) {
-                    passwordError.textContent = "Passwords do not match."; // Show password error
-                }
-                else {passwordError.textContent = "Please enter a valid password"; }
+                passwordError.textContent = isPasswordValid ? "Passwords do not match." : "Please enter a valid password";
             }
-    
-            // Enable the signup button only if both email is valid and passwords match
+
             signupButton.disabled = !(isEmailValid && doPasswordsMatch && isPasswordValid);
         }
-    
-        // Add event listeners to check both email syntax and password matching
+
         emailField.addEventListener('input', checkFormValidity);
         passwordField.addEventListener('input', checkFormValidity);
         confirmPasswordField.addEventListener('input', checkFormValidity);
     </script>
-    
 </body>
 </html>

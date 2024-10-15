@@ -45,6 +45,25 @@ class SignUpForm(forms.Form):
             raise forms.ValidationError("Passwords do not match.")
         
         return cleaned_data
+    
+
+
+class PasswordResetForm(forms.Form):
+    email = forms.EmailField(label="Email", max_length=100)
+
+class SetNewPasswordForm(forms.Form):
+    new_password = forms.CharField(widget=forms.PasswordInput, label="New Password", max_length=100)
+    confirm_password = forms.CharField(widget=forms.PasswordInput, label="Confirm Password", max_length=100)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        new_password = cleaned_data.get("new_password")
+        confirm_password = cleaned_data.get("confirm_password")
+
+        if new_password != confirm_password:
+            raise forms.ValidationError("Passwords do not match.")
+
+        return cleaned_data
 
 class ProfileForm(forms.Form):
     name = forms.CharField(max_length=100, required=True)
@@ -77,6 +96,4 @@ class ProfileForm(forms.Form):
 
 
         return cleaned_data
-
-
 

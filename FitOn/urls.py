@@ -14,11 +14,12 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from django.contrib import admin
-from django.urls import path
-from .views import signup, homepage, login, profile_view, upload_profile_picture
+from .views import signup, homepage, login, password_reset_complete, password_reset_confirm, password_reset_request, password_reset_done, profile_view, upload_profile_picture
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib import admin
+from django.contrib.auth import views as auth_views
+from django.urls import path
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -26,6 +27,12 @@ urlpatterns = [
     path('home/', homepage, name='homepage'),
     path('login/', login, name='login'),
     path('logout/', login, name='logout'),
+    path('reset-password/', password_reset_request, name='password_reset_request'),
+    path('reset-password/<str:user_id>/<str:token>/', password_reset_confirm, name='password_reset_confirm'),
+    path('reset-password/done/', password_reset_done, name='password_reset_done'),
+    path('reset-password/complete/', password_reset_complete, name='password_reset_complete'),
     path('profile/', profile_view, name='profile'),
     path('upload_profile_picture/', upload_profile_picture, name='upload_profile_picture'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    
+
