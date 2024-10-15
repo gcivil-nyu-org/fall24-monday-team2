@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign Up</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden; /* Prevents the body from scrolling */
+        }
+
+        .signup-container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+            padding: 40px 30px;
+            text-align: center;
+            overflow-y: auto; /* Allows scrolling inside the container */
+            max-height: 90vh; /* Ensures the form doesn't exceed screen height */
+        }
+
+        h2 {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 25px;
+            font-weight: bold;
+        }
+
+        form {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .form-group {
+            width: 100%;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        label {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 5px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+            margin-top: 5px;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #007bff;
+        }
+
+        .form-group.dob-group {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+            flex-direction: column;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .already-account {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .already-account a {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .already-account a:hover {
+            text-decoration: underline;
+        }
+
+        .error-message {
+            color: red;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding: 10px; /* Adds padding for smaller devices */
+                overflow: auto; /* Allows scrolling on small screens */
+            }
+
+            .signup-container {
+                padding: 30px 20px;
+            }
+
+            h2 {
+                font-size: 24px;
+            }
+
+            input, select, button {
+                font-size: 14px;
+            }
+
+            .dob-gender-container {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="signup-container">
+        <h2>Sign Up</h2>
+        <form method="POST" id="signupForm">
+            {% csrf_token %}
+            <div class="form-group">
+                {{ form.username.label_tag }} {{ form.username }}
+                {{ form.username.errors }}
+            </div>
+            <div class="form-group">
+                {{ form.email.label_tag }} {{ form.email }}
+                <div id="emailError" class="error-message"></div>
+                {{ form.email.errors }}
+            </div>
+            <div class="form-group">
+                {{ form.name.label_tag }} {{ form.name }}
+                {{ form.name.errors }}
+            </div>
+            <div class="form-group dob-group">
+                {{ form.date_of_birth.label_tag }} {{ form.date_of_birth }}
+                {{ form.date_of_birth.errors }}
+            </div>
+            <div class="form-group">
+                {{ form.gender.label_tag }} {{ form.gender }}
+                {{ form.gender.errors }}
+            </div>
+            <div class="form-group">
+                {{ form.password.label_tag }} {{ form.password }}
+                {{ form.password.errors }}
+            </div>
+            <div class="form-group">
+                {{ form.confirm_password.label_tag }} {{ form.confirm_password }}
+                {{ form.confirm_password.errors }}
+            </div>
+            <button type="submit" id="signupButton" disabled>Sign Up</button>
+        </form>
+        <p class="already-account">Already have an account? <a href="{% url 'login' %}">Click here to login.</a></p>
+    </div>
+
+    <script>
+        const passwordField = document.getElementById('id_password');
+        const confirmPasswordField = document.getElementById('id_confirm_password');
+        const emailField = document.getElementById('id_email');
+        const signupButton = document.getElementById('signupButton');
+        const emailError = document.getElementById('emailError');
+        const passwordError = document.createElement('div');
+        passwordError.className = 'error-message';
+        confirmPasswordField.parentNode.appendChild(passwordError);
+
+        function validateEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+
+        function validPassword(password) {
+            return password !== "";
+        }
+
+        function passwordsMatch() {
+            return passwordField.value === confirmPasswordField.value && passwordField.value !== "";
+        }
+
+        function checkFormValidity() {
+            const isEmailValid = validateEmail(emailField.value);
+            const doPasswordsMatch = passwordsMatch();
+            const isPasswordValid = validPassword(passwordField.value);
+
+            if (isEmailValid) {
+                emailError.textContent = "";
+            } else {
+                emailError.textContent = "Please enter a valid email address.";
+            }
+
+            if (doPasswordsMatch) {
+                passwordError.textContent = "";
+            } else {
+                passwordError.textContent = isPasswordValid ? "Passwords do not match." : "Please enter a valid password";
+            }
+
+            signupButton.disabled = !(isEmailValid && doPasswordsMatch && isPasswordValid);
+        }
+
+        emailField.addEventListener('input', checkFormValidity);
+        passwordField.addEventListener('input', checkFormValidity);
+        confirmPasswordField.addEventListener('input', checkFormValidity);
+    </script>
+</body>
+</html>
