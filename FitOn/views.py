@@ -107,8 +107,8 @@ def password_reset_request(request):
                     
                     time_since_last_request = timezone.now() - last_request_dt
                     
-                    if time_since_last_request < timedelta(minutes=2):
-                        countdown = 120 - time_since_last_request.seconds
+                    if time_since_last_request < timedelta(minutes=0.5):
+                        countdown = 30 - time_since_last_request.seconds
                         return render(request, 'password_reset_request.html', {'form': form, 'countdown': countdown})
                     
                     # Update reset request time if time has passed
