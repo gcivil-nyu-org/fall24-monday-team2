@@ -1,6 +1,6 @@
 import boto3
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 from django.contrib.auth.hashers import check_password, make_password
 from django.utils import timezone
 
@@ -132,3 +132,51 @@ def update_reset_request_time(user_id):
     except Exception as e:
         print(f"Error updating reset request time for user_id '{user_id}': {e}")
     return None
+
+
+def get_user(user_id):
+    try:
+        response = users_table.get_item(
+            Key={
+                'user_id': user_id
+            }
+        )
+        return response.get('Item')
+    except ClientError as e:
+        print(e.response['Error']['Message'])
+        return None
+
+
+def update_user(user_id, update_data):
+    try:
+        # Create a mapping for reserved keywords
+        expression_attribute_names = {}
+        expression_attribute_values = {}
+        
+        # Build the update expression components
+        update_expression_parts = []
+        
+        for key, value in update_data.items():
+            placeholder_name = f"#{key}"
+            placeholder_value = f":{key}"
+            expression_attribute_names[placeholder_name] = key  # For reserved keywords
+            expression_attribute_values[placeholder_value] = value["Value"]
+            update_expression_parts.append(f"{placeholder_name} = {placeholder_value}")
+
+        # Join the update expression parts
+        update_expression = ", ".join(update_expression_parts)
+
+        response = users_table.update_item(
+            Key={
+                'user_id': user_id
+            },
+            UpdateExpression=f"SET {update_expression}",
+            ExpressionAttributeNames=expression_attribute_names,
+            ExpressionAttributeValues=expression_attribute_values,
+            ReturnValues='UPDATED_NEW'
+        )
+        return response
+    except ClientError as e:
+        print(e.response['Error']['Message'])
+        return None
+
