@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from .dynamodb import create_user, get_user_by_username, get_user_by_email, get_user_by_uid, update_user_password, MockUser, update_reset_request_time, get_last_reset_request_time, get_user, update_user, delete_user_by_username
+from .dynamodb import create_user, get_user_by_username, get_user_by_email, get_user_by_uid, update_user_password, MockUser, update_reset_request_time, get_last_reset_request_time, get_user, update_user, delete_user_by_username, fetch_all_threads, fetch_posts_for_thread, fetch_thread, create_post, create_thread
 from .forms import SignUpForm, LoginForm, PasswordResetForm, SetNewPasswordForm, ProfileForm
 from .models import PasswordResetRequest
 from datetime import timedelta
@@ -21,6 +21,7 @@ from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_encode
 import os
 import uuid, ssl
+from django.contrib.auth.decorators import login_required
 
 def homepage(request):
     username = request.session.get('username', 'Guest')
@@ -289,3 +290,26 @@ def confirm_deactivation(request):
     else:
         # Redirect to the deactivate page if the request method is not POST
         return redirect('deactivate_account')
+
+# -------------------------------
+# Forums Functions
+# -------------------------------
+
+def forum_view(request):
+    threads = fetch_all_threads()
+    return render(request, 'forums.html', {'threads': threads})
+
+# View to display a single thread with its posts
+def thread_detail_view(request, thread_id):
+    thread = fetch_thread(thread_id)
+    posts = fetch_posts_for_thread(thread_id)
+    return render(request, 'thread_detail.html', {'thread': thread, 'posts': posts})
+
+# View to create a new thread
+@login_required
+def new_thread_view(request):
+    if request.method == 'POST':
+        title = request.POST.get('title')
+        create_thread(title, request.user.id)
+        return redirect('forum')
+    return render(request, 'new_thread.html')

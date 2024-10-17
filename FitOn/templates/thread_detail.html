@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+
+<div class="thread-container">
+    <div class="thread-header">
+        <h2>{{ thread.Title }}</h2>
+        <p>Started by: {{ thread.UserID }} on {{ thread.CreatedAt|date:"M d, Y" }}</p>
+    </div>
+
+    <div class="thread-posts">
+        <h3>Replies</h3>
+        <ul>
+            {% for post in posts %}
+            <li>
+                <div class="post-header">
+                    <strong>{{ post.UserID }}</strong> - {{ post.CreatedAt|date:"M d, Y H:i" }}
+                </div>
+                <div class="post-content">
+                    {{ post.Content }}
+                </div>
+            </li>
+            {% empty %}
+            <li>No replies yet. Be the first to reply!</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div class="reply-form">
+        <h3>Post a Reply</h3>
+        <form method="post">
+            {% csrf_token %}
+            <textarea name="content" rows="5" placeholder="Write your reply here..." class="form-input"></textarea>
+            <button type="submit" class="submit-btn">Submit</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

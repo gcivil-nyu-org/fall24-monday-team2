@@ -1,0 +1,153 @@
+/* Navbar Styles */
+.navbar {
+    background-color: #333;
+    padding: 10px 20px;
+}
+
+.navbar-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.navbar-logo {
+    font-size: 24px;
+    font-weight: bold;
+    color: #fff;
+    text-decoration: none;
+}
+
+.navbar-links {
+    list-style: none;
+    display: flex;
+    gap: 20px;
+}
+
+.navbar-links li a {
+    color: #fff;
+    text-decoration: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.navbar-links li a:hover {
+    background-color: #575757;
+}
+
+/* Body Background */
+body {
+    background: linear-gradient(to bottom, #e0f7ff, #cfe0f9);
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+}
+
+/* Thread Page Styles */
+.thread-container {
+    max-width: 900px;
+    margin: 50px auto;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.thread-header {
+    background-color: #f4f4f4;
+    padding: 20px;
+    border-radius: 5px;
+    margin-bottom: 20px;
+}
+
+.thread-header h2 {
+    margin: 0 0 10px;
+    font-size: 28px;
+}
+
+.thread-header p {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+}
+
+.thread-posts {
+    margin-bottom: 30px;
+}
+
+.thread-posts h3 {
+    font-size: 20px;
+    margin-bottom: 10px;
+}
+
+.thread-posts ul {
+    list-style: none;
+    padding: 0;
+}
+
+.thread-posts li {
+    background-color: #f9f9f9;
+    border: 1px solid #ddd;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 5px;
+}
+
+.post-header {
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 5px;
+}
+
+.post-content {
+    font-size: 16px;
+    color: #333;
+    line-height: 1.5;
+}
+
+/* Reply Form */
+.reply-form {
+    background-color: #f4f4f4;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.reply-form h3 {
+    margin-top: 0;
+    font-size: 18px;
+}
+
+.reply-form textarea {
+    width: 100%;
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    resize: vertical;
+}
+
+.submit-btn {
+    background-color: #0056b3;
+    color: white;
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+.submit-btn:hover {
+    background-color: #003e8a;
+}
+
+/* Footer Styling */
+footer {
+    background-color: #333;
+    color: #fff;
+    padding: 10px 0;
+    text-align: center;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+}

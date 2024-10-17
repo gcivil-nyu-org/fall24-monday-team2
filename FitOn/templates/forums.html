@@ -1,0 +1,52 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FitOn Forum</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'css/forum.css' %}">
+</head>
+<nav class="navbar">
+    <div class="navbar-container">
+        <a href="{% url 'homepage' %}" class="navbar-logo">FitOn</a>
+        <ul class="navbar-links">
+            <li><a href="{% url 'forum' %}">Forums</a></li>
+            <li><a href="{% url 'homepage' %}">Workouts</a></li>
+            <li><a href="{% url 'homepage' %}">Metrics</a></li>
+            <li><a href="{% url 'profile' %}">Profile</a></li>
+            <li><a href="{% url 'logout' %}">Logout</a></li>
+        </ul>
+    </div>
+</nav>
+
+<div class="forum-container">
+    <div class="forum-header">
+        <h2>Forum Threads</h2>
+        <a href="{% url 'new_thread' %}" class="new-thread-btn">New Thread</a>
+    </div>
+    
+    <div class="forum-table">
+        <table>
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Replies</th>
+                    <th>Last Post</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for thread in threads %}
+                <tr>
+                    <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title }}</a></td>
+                    <td>{{ thread.UserID }}</td>
+                    <td>{{ thread.Posts|length }}</td>
+                    <td>{{ thread.CreatedAt|date:"M d, Y" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

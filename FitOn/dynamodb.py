@@ -3,12 +3,17 @@ from boto3.dynamodb.conditions import Key
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 from django.contrib.auth.hashers import check_password, make_password
 from django.utils import timezone
+from django.conf import settings
+import uuid
+from datetime import datetime
 
 
 # Connect to DynamoDB
 dynamodb = boto3.resource('dynamodb')
 
 users_table = dynamodb.Table('Users')
+threads_table = dynamodb.Table('ForumThreads')
+posts_table = dynamodb.Table('ForumPosts')
 
 password_reset_table = dynamodb.Table('PasswordResetRequests')
 
@@ -209,3 +214,51 @@ def update_user(user_id, update_data):
         print(e.response['Error']['Message'])
         return None
 
+# -------------------------------
+# Forums Functions
+# -------------------------------
+
+def create_thread(title, user_id):
+    thread_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+    
+    thread = {
+        'ThreadID': thread_id,
+        'Title': title,
+        'UserID': user_id,
+        'CreatedAt': created_at
+    }
+    
+    threads_table.put_item(Item=thread)
+    return thread
+
+def fetch_all_threads():
+    response = threads_table.scan()
+    return response.get('Items', [])
+
+def fetch_thread(thread_id):
+    response = threads_table.get_item(Key={'ThreadID': thread_id})
+    return response.get('Item', None)
+
+def create_post(thread_id, user_id, content):
+    post_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+    
+    post = {
+        'PostID': post_id,
+        'ThreadID': thread_id,
+        'UserID': user_id,
+        'Content': content,
+        'CreatedAt': created_at
+    }
+    
+    posts_table.put_item(Item=post)
+    return post
+
+def fetch_posts_for_thread(thread_id):
+    response = posts_table.scan(
+        FilterExpression="#tid = :thread_id",
+        ExpressionAttributeNames={"#tid": "ThreadID"},  # Handle 'ThreadID' as an attribute name
+        ExpressionAttributeValues={":thread_id": thread_id}  # Corrected to pass the thread ID
+    )
+    return response.get('Items', [])
