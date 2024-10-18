@@ -265,3 +265,39 @@ def fetch_posts_for_thread(thread_id):
         ExpressionAttributeValues={":thread_id": thread_id}  # Corrected to pass the thread ID
     )
     return response.get('Items', [])
+
+def create_reply(thread_id, user_id, content):
+    post_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+
+    reply = {
+        'ThreadID': thread_id,
+        'PostID': post_id,
+        'UserID': user_id,
+        'Content': content,
+        'CreatedAt': created_at
+    }
+
+    # Insert the reply into the DynamoDB table
+    posts_table.put_item(Item=reply)
+
+def get_replies(thread_id):
+    response = posts_table.scan(
+        FilterExpression="#tid = :thread_id",
+        ExpressionAttributeNames={"#tid": "ThreadID"},  # Handle 'ThreadID' as an attribute name
+        ExpressionAttributeValues={":thread_id": thread_id}  # Pass the thread ID value
+    )
+
+    return response.get('Items', [])
+
+def get_thread_details(thread_id):
+    response = posts_table.scan(
+        FilterExpression="#tid = :thread_id",
+        ExpressionAttributeNames={"#tid": "ThreadID"},
+        ExpressionAttributeValues={":thread_id": thread_id}
+    )
+    
+    items = response.get('Items', [])
+    if items:
+        return items[0]  # Assuming the thread details are in the first item
+    return None

@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect
-from .dynamodb import create_user, get_user_by_username, get_user_by_email, get_user_by_uid, update_user_password, MockUser, update_reset_request_time, get_last_reset_request_time, get_user, update_user, delete_user_by_username, fetch_all_threads, fetch_posts_for_thread, fetch_thread, create_post, create_thread
+from .dynamodb import create_user, get_user_by_username, get_user_by_email, get_user_by_uid, update_user_password, MockUser, update_reset_request_time, get_last_reset_request_time, get_user, update_user, delete_user_by_username, fetch_all_threads, fetch_posts_for_thread, fetch_thread, create_post, create_thread, create_reply, get_thread_details, get_replies
 from .forms import SignUpForm, LoginForm, PasswordResetForm, SetNewPasswordForm, ProfileForm
 from .models import PasswordResetRequest
 from datetime import timedelta
@@ -301,19 +301,27 @@ def forum_view(request):
 
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
-    print("thread_detail test")
-    thread = fetch_thread(thread_id)
-    posts = fetch_posts_for_thread(thread_id)
-    return render(request, 'thread_detail.html', {'thread': thread, 'posts': posts})
+    # Fetch thread details and replies from DynamoDB
+    thread = get_thread_details(thread_id)
+    posts = get_replies(thread_id)
 
-# View to create a new thread
-# @login_required
-# def new_thread_view(request):
-#     if request.method == 'POST':
-#         title = request.POST.get('title')
-#         create_thread(title, request.user.id)
-#         return redirect('forum')
-#     return render(request, 'new_thread.html')
+    if request.method == 'POST':
+        content = request.POST.get('content')
+        user_id = request.session.get('username')  # Assuming the user is logged in
+        
+        if content and user_id:
+            # Call the function to create a reply
+            create_reply(thread_id=thread_id, user_id=user_id, content=content)
+            return redirect('thread_detail', thread_id=thread_id)
+        else:
+            # Display an error message if the form is incomplete
+            return render(request, 'thread_detail.html', {
+                'thread': thread,
+                'posts': posts,
+                'error': 'Please provide content for your reply.'
+            })
+
+    return render(request, 'thread_detail.html', {'thread': thread, 'posts': posts})
 
 def new_thread_view(request):
     print("PrePost")
