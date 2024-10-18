@@ -36,8 +36,8 @@ urlpatterns = [
     path('profile/', profile_view, name='profile'),
     path('upload_profile_picture/', upload_profile_picture, name='upload_profile_picture'),
     path('forum/', forum_view, name='forum'),
-    path('forum/<str:thread_id>/', thread_detail_view, name='thread_detail'),
     path('forum/new/', new_thread_view, name='new_thread'),
+    path('forum/<str:thread_id>/', thread_detail_view, name='thread_detail'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     
 

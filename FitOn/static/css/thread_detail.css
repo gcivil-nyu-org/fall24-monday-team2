@@ -1,123 +1,135 @@
-/* Navbar Styles */
+/* General Page Styling */
+body {
+    background: #f0f2f5;
+}
+
 .navbar {
     background-color: #333;
     padding: 10px 20px;
 }
 
-.navbar-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
 .navbar-logo {
+    color: white;
+    font-weight: bold;
     font-size: 24px;
-    font-weight: bold;
-    color: #fff;
     text-decoration: none;
 }
 
-.navbar-links {
-    list-style: none;
-    display: flex;
-    gap: 20px;
-}
-
-.navbar-links li a {
-    color: #fff;
-    text-decoration: none;
-    padding: 8px 16px;
-    border-radius: 4px;
+.navbar-links a {
+    color: white;
     font-weight: bold;
 }
 
-.navbar-links li a:hover {
-    background-color: #575757;
-}
-
-/* Body Background */
-body {
-    background: linear-gradient(to bottom, #e0f7ff, #cfe0f9);
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-}
-
-/* Thread Page Styles */
+/* Thread Container */
 .thread-container {
     max-width: 900px;
-    margin: 50px auto;
+    margin: 30px auto;
     padding: 20px;
-    background-color: #fff;
+    background-color: white;
     border-radius: 8px;
     box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .thread-header {
-    background-color: #f4f4f4;
-    padding: 20px;
-    border-radius: 5px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 10px;
     margin-bottom: 20px;
 }
 
-.thread-header h2 {
-    margin: 0 0 10px;
-    font-size: 28px;
+.thread-header h1 {
+    margin: 0;
+    font-size: 26px;
 }
 
 .thread-header p {
-    margin: 0;
     color: #666;
-    font-size: 14px;
+    margin-top: 5px;
 }
 
-.thread-posts {
+.thread-content {
+    display: flex;
     margin-bottom: 30px;
 }
 
-.thread-posts h3 {
-    font-size: 20px;
+.user-info {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 120px;
+    text-align: center;
+}
+
+.user-avatar {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
     margin-bottom: 10px;
 }
 
-.thread-posts ul {
-    list-style: none;
-    padding: 0;
+.user-details p {
+    font-size: 12px;
+    color: #666;
+    margin: 5px 0;
 }
 
-.thread-posts li {
-    background-color: #f9f9f9;
-    border: 1px solid #ddd;
-    padding: 15px;
-    margin-bottom: 10px;
-    border-radius: 5px;
+.thread-text {
+    flex-grow: 1;
+    padding-left: 20px;
+    border-left: 1px solid #ddd;
 }
 
-.post-header {
-    font-size: 14px;
-    color: #555;
-    margin-bottom: 5px;
-}
-
-.post-content {
+.thread-text p {
     font-size: 16px;
     color: #333;
     line-height: 1.5;
 }
 
+/* Replies Section */
+.thread-replies h3 {
+    font-size: 20px;
+    margin-bottom: 20px;
+}
+
+.reply {
+    display: flex;
+    padding: 20px 0;
+    border-bottom: 1px solid #ddd;
+}
+
+.reply-content {
+    display: flex;
+    width: 100%;
+}
+
+.reply-text {
+    flex-grow: 1;
+    padding-left: 20px;
+    border-left: 1px solid #ddd;
+}
+
+.reply-text p {
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+.timestamp {
+    color: #666;
+    font-size: 12px;
+}
+
 /* Reply Form */
 .reply-form {
+    margin-top: 30px;
     background-color: #f4f4f4;
     padding: 20px;
     border-radius: 8px;
 }
 
 .reply-form h3 {
-    margin-top: 0;
-    font-size: 18px;
+    margin-bottom: 15px;
 }
 
-.reply-form textarea {
+.form-input {
     width: 100%;
     padding: 10px;
     font-size: 16px;
@@ -128,26 +140,14 @@ body {
 }
 
 .submit-btn {
-    background-color: #0056b3;
+    background-color: #007bff;
     color: white;
     padding: 10px 20px;
-    font-size: 16px;
     border: none;
     border-radius: 5px;
     cursor: pointer;
 }
 
 .submit-btn:hover {
-    background-color: #003e8a;
-}
-
-/* Footer Styling */
-footer {
-    background-color: #333;
-    color: #fff;
-    padding: 10px 0;
-    text-align: center;
-    position: fixed;
-    bottom: 0;
-    width: 100%;
+    background-color: #0056b3;
 }

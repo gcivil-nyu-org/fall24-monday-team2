@@ -2,32 +2,57 @@
 {% load static %}
 
 {% block content %}
-
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create New Thread</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'css/new_thread.css' %}">
+</head>
 <div class="thread-container">
     <div class="thread-header">
-        <h2>{{ thread.Title }}</h2>
-        <p>Started by: {{ thread.UserID }} on {{ thread.CreatedAt|date:"M d, Y" }}</p>
+        <h1>{{ thread.Title }}</h1>
+        <p>Started by: <strong>{{ thread.UserID }}</strong> on {{ thread.CreatedAt|date:"M d, Y H:i" }}</p>
     </div>
 
-    <div class="thread-posts">
+    <div class="thread-content">
+        <div class="user-info">
+            <img src="{% static 'images/default-avatar.png' %}" alt="User Avatar" class="user-avatar">
+            <div class="user-details">
+                <p>Joined: Jan 2021</p> <!-- Replace with actual data -->
+                <p>Posts: 123</p> <!-- Replace with actual data -->
+            </div>
+        </div>
+        <div class="thread-text">
+            <p>{{ thread.Content }}</p>
+        </div>
+    </div>
+
+    <div class="thread-replies">
         <h3>Replies</h3>
-        <ul>
-            {% for post in posts %}
-            <li>
-                <div class="post-header">
-                    <strong>{{ post.UserID }}</strong> - {{ post.CreatedAt|date:"M d, Y H:i" }}
+        {% for post in posts %}
+        <div class="reply">
+            <div class="reply-content">
+                <div class="user-info">
+                    <img src="{% static 'images/default-avatar.png' %}" alt="User Avatar" class="user-avatar">
+                    <div class="user-details">
+                        <strong>{{ post.UserID }}</strong>
+                        <p>Joined: Jan 2021</p> <!-- Replace with actual data -->
+                        <p>Posts: 123</p> <!-- Replace with actual data -->
+                    </div>
                 </div>
-                <div class="post-content">
-                    {{ post.Content }}
+                <div class="reply-text">
+                    <p>{{ post.Content }}</p>
+                    <p class="timestamp">{{ post.CreatedAt|date:"M d, Y H:i" }}</p>
                 </div>
-            </li>
-            {% empty %}
-            <li>No replies yet. Be the first to reply!</li>
-            {% endfor %}
-        </ul>
+            </div>
+        </div>
+        {% empty %}
+        <p>No replies yet. Be the first to reply!</p>
+        {% endfor %}
     </div>
 
-    <div class="reply-form">
+    <!-- Reply Form -->
+    <div id="reply-form" class="reply-form">
         <h3>Post a Reply</h3>
         <form method="post">
             {% csrf_token %}

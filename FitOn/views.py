@@ -301,15 +301,40 @@ def forum_view(request):
 
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
+    print("thread_detail test")
     thread = fetch_thread(thread_id)
     posts = fetch_posts_for_thread(thread_id)
     return render(request, 'thread_detail.html', {'thread': thread, 'posts': posts})
 
 # View to create a new thread
-@login_required
+# @login_required
+# def new_thread_view(request):
+#     if request.method == 'POST':
+#         title = request.POST.get('title')
+#         create_thread(title, request.user.id)
+#         return redirect('forum')
+#     return render(request, 'new_thread.html')
+
 def new_thread_view(request):
+    print("PrePost")
     if request.method == 'POST':
+        print("Post")
         title = request.POST.get('title')
-        create_thread(title, request.user.id)
-        return redirect('forum')
+        content = request.POST.get('content')
+        user_id = request.session.get('username')  # Assuming the user is logged in
+
+        # Debugging: Add print statements to confirm values
+        print(f"Title: {title}, Content: {content}, User: {user_id}")
+
+        if title and content and user_id:
+            # Call your DynamoDB function to create a new thread
+            create_thread(title=title, user_id=user_id, content=content)
+
+            # Redirect to the forums page after successfully creating the thread
+            return redirect('forum')
+        else:
+            # If something's missing, return the form with an error message
+            return render(request, 'new_thread.html', {'error': 'All fields are required.'})
+    
+    # If the request method is GET, simply show the form
     return render(request, 'new_thread.html')

@@ -218,7 +218,7 @@ def update_user(user_id, update_data):
 # Forums Functions
 # -------------------------------
 
-def create_thread(title, user_id):
+def create_thread(title, user_id, content):
     thread_id = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat()
     
@@ -226,8 +226,10 @@ def create_thread(title, user_id):
         'ThreadID': thread_id,
         'Title': title,
         'UserID': user_id,
+        'Content': content,
         'CreatedAt': created_at
     }
+    print(thread)
     
     threads_table.put_item(Item=thread)
     return thread
@@ -251,6 +253,7 @@ def create_post(thread_id, user_id, content):
         'Content': content,
         'CreatedAt': created_at
     }
+    print(post)
     
     posts_table.put_item(Item=post)
     return post
