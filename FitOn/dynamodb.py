@@ -235,8 +235,36 @@ def create_thread(title, user_id, content):
     return thread
 
 def fetch_all_threads():
-    response = threads_table.scan()
-    return response.get('Items', [])
+    threads = threads_table.scan().get('Items', [])
+
+    for thread in threads:
+        # Convert the thread's 'CreatedAt' string to a datetime object
+        thread_created_at_str = thread.get('CreatedAt')
+        if thread_created_at_str:
+            thread['CreatedAt'] = datetime.fromisoformat(thread_created_at_str)
+        
+        # Fetch all posts for this thread
+        replies = fetch_posts_for_thread(thread['ThreadID'])
+
+        # Add reply count
+        thread['ReplyCount'] = len(replies)
+
+        # Determine the latest post (if there are any replies)
+        if replies:
+            latest_post = max(replies, key=lambda x: x['CreatedAt'])
+
+            # Convert 'CreatedAt' string to a Python datetime object for the latest post
+            last_post_time_str = latest_post['CreatedAt']
+            last_post_time = datetime.fromisoformat(last_post_time_str)
+
+            thread['LastPostUser'] = latest_post['UserID']
+            thread['LastPostTime'] = last_post_time
+        else:
+            thread['LastPostUser'] = 'No replies yet'
+            thread['LastPostTime'] = None
+
+    return threads
+
 
 def fetch_thread(thread_id):
     response = threads_table.get_item(Key={'ThreadID': thread_id})

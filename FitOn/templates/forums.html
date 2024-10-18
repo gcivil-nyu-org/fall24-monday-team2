@@ -1,4 +1,7 @@
+{% extends 'base.html' %}
 {% load static %}
+
+{% block content %}
 
 <!DOCTYPE html>
 <html lang="en">
@@ -8,18 +11,6 @@
     <title>FitOn Forum</title>
     <link rel="stylesheet" type="text/css" href="{% static 'css/forum.css' %}">
 </head>
-<nav class="navbar">
-    <div class="navbar-container">
-        <a href="{% url 'homepage' %}" class="navbar-logo">FitOn</a>
-        <ul class="navbar-links">
-            <li><a href="{% url 'forum' %}">Forums</a></li>
-            <li><a href="{% url 'homepage' %}">Workouts</a></li>
-            <li><a href="{% url 'homepage' %}">Metrics</a></li>
-            <li><a href="{% url 'profile' %}">Profile</a></li>
-            <li><a href="{% url 'logout' %}">Logout</a></li>
-        </ul>
-    </div>
-</nav>
 
 <div class="forum-container">
     <div class="forum-header">
@@ -34,6 +25,7 @@
                     <th>Title</th>
                     <th>Author</th>
                     <th>Replies</th>
+                    <th>Thread Created</th>
                     <th>Last Post</th>
                 </tr>
             </thead>
@@ -42,11 +34,20 @@
                 <tr>
                     <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title }}</a></td>
                     <td>{{ thread.UserID }}</td>
-                    <td>{{ thread.Posts|length }}</td>
-                    <td>{{ thread.CreatedAt|date:"M d, Y" }}</td>
+                    <td>{{ thread.ReplyCount }}</td>
+                    <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td> 
+                    <td>
+                        {% if thread.LastPostTime %}
+                            User: {{ thread.LastPostUser }}<br>
+                            Last Comment: {{ thread.LastPostTime|date:"M d, Y H:i" }}
+                        {% else %}
+                            No replies yet
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+{% endblock %}
