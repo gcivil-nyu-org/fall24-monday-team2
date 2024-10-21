@@ -317,7 +317,6 @@ def get_replies(thread_id):
         ExpressionAttributeNames={"#tid": "ThreadID"},  # Handle 'ThreadID' as an attribute name
         ExpressionAttributeValues={":thread_id": thread_id}  # Pass the thread ID value
     )
-
     return response.get('Items', [])
 
 def get_thread_details(thread_id):
@@ -331,29 +330,20 @@ def get_thread_details(thread_id):
     if items:
         return items[0]  # Assuming the thread details are in the first item
     return None
-def delete_reply(thread_id, reply_id):
+
+def delete_post(post_id, thread_id):
     """
-    Deletes a reply from the thread in the Threads table.
+    Deletes a post from the DynamoDB posts table based on the post ID and thread ID.
     """
     try:
-        # Fetch the thread
-        thread = threads_table.get_item(Key={'ThreadID': thread_id}).get('Item')
-        if not thread:
-            raise Exception("Thread not found")
-
-        # Get the list of replies
-        replies = thread.get('Replies', [])
-        
-        # Filter out the reply with the given reply_id
-        updated_replies = [reply for reply in replies if reply.get('ReplyID') != reply_id]
-
-        # Update the thread with the new replies list
-        threads_table.update_item(
-            Key={'ThreadID': thread_id},
-            UpdateExpression="set Replies=:r",
-            ExpressionAttributeValues={
-                ':r': updated_replies
+        response = posts_table.delete_item(
+            Key={
+                'ThreadID': thread_id,  # Adjust this according to your table schema
+                'PostID': post_id
             }
         )
+        return True
     except Exception as e:
-        raise Exception(f"Error deleting reply: {str(e)}")
+        print("Error deleting post: {e}")
+        return False
+

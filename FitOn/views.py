@@ -22,7 +22,9 @@ from django.utils.http import urlsafe_base64_encode
 import os
 import uuid, ssl
 from django.contrib.auth.decorators import login_required
-from .dynamodb import create_thread, threads_table
+from .dynamodb import create_thread, threads_table, delete_post, posts_table
+import json
+from django.http import HttpResponse
 
 def homepage(request):
     username = request.session.get('username', 'Guest')
@@ -304,7 +306,7 @@ def forum_view(request):
 def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
     thread = threads_table.get_item(Key={'ThreadID': thread_id}).get('Item')
-    posts = get_replies(thread_id)  # Fetch replies related to the thread
+    posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
 
     if not thread:
         return JsonResponse({'status': 'error', 'message': 'Thread not found'}, status=404)
@@ -372,17 +374,29 @@ def new_thread_view(request):
     return render(request, 'new_thread.html')
 
 
-# View to handle delete reply
-def delete_reply_view(request):
+def delete_post_view(request):
+    
     if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
-        data = json.loads(request.body.decode('utf-8'))
-        reply_id = data.get('reply_id')
-        thread_id = data.get('thread_id')  # Get the thread ID
-
-        # Call the function to delete the reply from the thread
         try:
-            delete_reply(thread_id, reply_id)  # Call the function from dynamodb.py
-            return JsonResponse({'status': 'success'})
+            
+            data = json.loads(request.body.decode('utf-8'))
+            post_id = data.get('post_id')
+            thread_id = data.get('thread_id')  # Make sure you're getting thread_id too
+
+             # Log the post_id and thread_id for debugging
+            print("post_id: {post_id}, thread_id: {thread_id}")
+            print("Hello?")
+            
+            if not post_id or not thread_id:
+                return JsonResponse({'status': 'error', 'message': 'Post or Thread ID missing'}, status=400)
+
+            # Call the delete_post function to delete from DynamoDB
+            if delete_post(post_id, thread_id):
+                return JsonResponse({'status': 'success'})
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Failed to delete post'}, status=500)
+
         except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
     return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
+

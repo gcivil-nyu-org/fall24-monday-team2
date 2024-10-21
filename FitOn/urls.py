@@ -14,7 +14,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from .views import signup, homepage, login, password_reset_complete, password_reset_confirm, password_reset_request, password_reset_done, profile_view, upload_profile_picture, deactivate_account, confirm_deactivation, forum_view, thread_detail_view, new_thread_view, delete_reply_view
+from .views import signup, homepage, login, password_reset_complete, password_reset_confirm, password_reset_request, password_reset_done, profile_view, upload_profile_picture, deactivate_account, confirm_deactivation, forum_view, thread_detail_view, new_thread_view, delete_post_view
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -38,7 +38,7 @@ urlpatterns = [
     path('forum/', forum_view, name='forum'),
     path('forum/new/', new_thread_view, name='new_thread'),
     path('forum/<str:thread_id>/', thread_detail_view, name='thread_detail'),
-    path('delete_reply/', delete_reply_view, name='delete_reply'),
+    path('delete_post/', delete_post_view, name='delete_post'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     
 
