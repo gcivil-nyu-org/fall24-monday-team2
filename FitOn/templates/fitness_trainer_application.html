@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+
+{% block title %}Fitness Trainer Application{% endblock %}
+
+{% block content %}
+    <div class="profile-container">
+        <!-- Success/Error Messages -->
+        {% for message in messages %}
+            <div class="message {{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+
+        <!-- Application Header -->
+        <div class="profile-header">
+            <!-- Header Title -->
+            <div class="header-title">
+                <h1>Apply to Become a Fitness Trainer</h1>
+            </div>
+        </div>
+
+        <!-- Form Section -->
+        <div class="form-container">
+            <form method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+
+                <!-- Past Experience as a Fitness Trainer -->
+                <div class="form-group">
+                    <label for="past_experience_trainer">Past Experience as a Fitness Trainer</label>
+                    {{ form.past_experience_trainer }}
+                    {% if form.past_experience_trainer.errors %}
+                        <span class="error">{{ form.past_experience_trainer.errors }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Past Experience as a Dietician -->
+                <div class="form-group">
+                    <label for="past_experience_dietician">Past Experience as a Dietician</label>
+                    {{ form.past_experience_dietician }}
+                    {% if form.past_experience_dietician.errors %}
+                        <span class="error">{{ form.past_experience_dietician.errors }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Resume Upload -->
+                <div class="form-group">
+                    <label for="resume">Upload Resume (PDF only)</label>
+                    {{ form.resume }}
+                    {% if form.resume.errors %}
+                        <span class="error">{{ form.resume.errors }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Certifications Upload -->
+                <div class="form-group">
+                    <label for="certifications">Upload Certifications (PDF only)</label>
+                    {{ form.certifications }}
+                    {% if form.certifications.errors %}
+                        <span class="error">{{ form.certifications.errors }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Reference Name -->
+                <div class="form-group">
+                    <label for="reference_name">Reference Name</label>
+                    {{ form.reference_name }}
+                    {% if form.reference_name.errors %}
+                        <span class="error">{{ form.reference_name.errors }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Reference Contact -->
+                <div class="form-group">
+                    <label for="reference_contact">Reference Contact</label>
+                    {{ form.reference_contact }}
+                    {% if form.reference_contact.errors %}
+                        <span class="error">{{ form.reference_contact.errors }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Submit and Cancel Buttons -->
+                <div class="button-container">
+                    <button type="submit" class="submit-button">Submit Application</button>
+                    <button type="button" class="deactivate-button" onclick="redirectToProfile()">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Modal for Success or Error Handling -->
+        <div class="button-container">
+            <!-- Success Modal -->
+            <div id="successModal" class="modal">
+                <div class="modal-content">
+                    <h3>Your application has been successfully submitted.</h3>
+                    <button id="okBtn" class="button-ok-btn">OK</button>
+                </div>
+            </div>
+
+            <!-- Error Modal -->
+            <div id="errorModal" class="modal">
+                <div class="modal-content">
+                    <h3>There was an error submitting your application.</h3>
+                    <button id="okBtnError" class="button-ok-btn">OK</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hidden input to check if submission was successful -->
+        <input type="hidden" id="submissionSuccess" value="{{ submission_success }}">
+    </div>
+
+    <script>
+        // Get CSRF token function (reuse from profile page)
+        function getCSRFToken() {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, 10) === 'csrftoken=') {
+                        cookieValue = decodeURIComponent(cookie.substring(10));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function redirectToProfile() {
+            window.location.href = "{% url 'profile' %}";
+        }
+
+        // Handle form submission and display success or error modal
+        document.addEventListener('DOMContentLoaded', function () {
+            const successModal = document.getElementById('successModal');
+            const errorModal = document.getElementById('errorModal');
+            const okBtn = document.getElementById('okBtn');
+            const okBtnError = document.getElementById('okBtnError');
+            const submissionSuccess = document.getElementById('submissionSuccess').value;
+
+            if (submissionSuccess === "True") {
+                successModal.style.display = "block";
+            } else if (submissionSuccess === "False") {
+                errorModal.style.display = "block";
+            }
+
+            okBtn.onclick = function () {
+                window.location.href = "{% url 'homepage' %}";
+            };
+
+            okBtnError.onclick = function () {
+                errorModal.style.display = "none";
+            };
+
+            window.onclick = function (event) {
+                if (event.target == successModal || event.target == errorModal) {
+                    successModal.style.display = "none";
+                    errorModal.style.display = "none";
+                }
+            };
+        });
+    </script>
+
+{% endblock %}

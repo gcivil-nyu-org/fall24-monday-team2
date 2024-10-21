@@ -97,3 +97,43 @@ class ProfileForm(forms.Form):
 
         return cleaned_data
 
+# Validation function for PDF files
+def validate_file_extension(value):
+    if not value.name.endswith('.pdf'):
+        raise ValidationError("Only PDF files are allowed.")
+
+# Form for Fitness Trainer Application
+class FitnessTrainerApplicationForm(forms.Form):
+    past_experience_trainer = forms.CharField(
+        max_length=500,
+        required=True,
+        widget=forms.Textarea(attrs={'placeholder': 'Describe your past experience...'})
+    )
+    
+    past_experience_dietician = forms.CharField(
+        max_length=500,
+        required=False,
+        widget=forms.Textarea(attrs={'placeholder': 'Describe your past experience...'})
+    )
+    
+    resume = forms.FileField(
+        validators=[validate_file_extension], 
+        required=True
+    )
+    
+    certifications = forms.FileField(
+        validators=[validate_file_extension], 
+        required=False
+    )
+    
+    reference_name = forms.CharField(
+        max_length=100,
+        required=True
+    )
+    
+    reference_contact = forms.CharField(
+        max_length=100,
+        required=True
+    )
+
+

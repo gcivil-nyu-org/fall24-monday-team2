@@ -1,6 +1,28 @@
 from django.shortcuts import render, redirect
-from .dynamodb import create_user, get_user_by_username, get_user_by_email, get_user_by_uid, update_user_password, MockUser, update_reset_request_time, get_last_reset_request_time, get_user, update_user, delete_user_by_username
-from .forms import SignUpForm, LoginForm, PasswordResetForm, SetNewPasswordForm, ProfileForm
+from .dynamodb import (
+    add_fitness_trainer_application,
+    create_user,
+    delete_user_by_username,
+    get_fitness_trainer_applications,
+    get_last_reset_request_time,
+    get_user,
+    get_user_by_email,
+    get_user_by_uid,
+    get_user_by_username,
+    MockUser,
+    update_reset_request_time,
+    update_user,
+    update_user_password,
+    upload_profile_picture,
+)
+from .forms import (
+    FitnessTrainerApplicationForm,
+    LoginForm,
+    PasswordResetForm,
+    ProfileForm,
+    SetNewPasswordForm,
+    SignUpForm,
+)
 from .models import PasswordResetRequest
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
@@ -168,33 +190,20 @@ def password_reset_complete(request):
 def password_reset_done(request):
     return render(request, 'password_reset_done.html')
 
-def upload_profile_picture(request):
+def upload_profile_picture_view(request):
     user_id = request.session.get('user_id')  # Get the user ID from the session
 
     if request.method == 'POST' and request.FILES.get('profile_picture'):
         profile_picture = request.FILES['profile_picture']
-        
-        # Define the path where the image will be saved
-        image_dir = os.path.join(settings.BASE_DIR, 'FitOn/static/images')
-        print(image_dir, settings.BASE_DIR)
-        # Create the directory if it doesn't exist
-        os.makedirs(image_dir, exist_ok=True)
 
-        # Create a custom filename based on user_id
-        picture_name = f"{user_id}_profile.jpg"
-        image_path = os.path.join(image_dir, picture_name)
+        # Upload to S3 and get the URL
+        new_image_url = upload_profile_picture(user_id, profile_picture)
 
-        # Save the image to the specified path
-        with open(image_path, 'wb+') as destination:
-            for chunk in profile_picture.chunks():
-                destination.write(chunk)
+        if new_image_url:
+            return JsonResponse({'success': True, 'new_image_url': new_image_url})
+        else:
+            return JsonResponse({'success': False, 'message': 'Failed to upload image to S3'})
 
-        # Construct the new image URL
-        new_image_url = f"/static/images/{picture_name}"
-
-        # Respond with success
-        return JsonResponse({'success': True, 'new_image_url': new_image_url})
-    
     return JsonResponse({'success': False, 'message': 'No file uploaded'})
 
 def profile_view(request):
@@ -211,20 +220,15 @@ def profile_view(request):
         # Handle profile picture upload
         if 'profile_picture' in request.FILES:
             profile_picture = request.FILES['profile_picture']
-            picture_name = f"{user_id}_profile.jpg"  # Create custom file name
-            picture_path = os.path.join(settings.BASE_DIR, 'FitOn/static/images', picture_name)
+            image_url = upload_profile_picture(user_id, profile_picture)
 
-            # Save the profile picture
-            with open(picture_path, 'wb+') as destination:
-                for chunk in profile_picture.chunks():
-                    destination.write(chunk)
-
-            # Update the user's profile picture URL in DynamoDB
-            update_user(user_id, {'profile_picture': {"Value": f'/static/images/{picture_name}'}})
-
-            messages.success(request, "Profile picture updated successfully!")
-            return redirect('profile')
-
+            if image_url:
+                # Update the user's profile picture URL in DynamoDB
+                update_user(user_id, {'profile_picture': {"Value": image_url}})
+                messages.success(request, "Profile picture updated successfully!")
+                return redirect('profile')
+            else:
+                messages.error(request, "Failed to upload profile picture.")
 
         # Handling other profile updates
         form = ProfileForm(request.POST)
@@ -289,3 +293,52 @@ def confirm_deactivation(request):
     else:
         # Redirect to the deactivate page if the request method is not POST
         return redirect('deactivate_account')
+
+def fitness_trainer_application_view(request):
+    user_id = request.session.get('user_id')
+    if request.method == 'POST':
+        form = FitnessTrainerApplicationForm(request.POST, request.FILES)
+        if form.is_valid():
+            past_experience_trainer = form.cleaned_data.get('past_experience_trainer')
+            past_experience_dietician = form.cleaned_data.get('past_experience_dietician')
+            resume = request.FILES['resume']
+            certifications = request.FILES.get('certifications')
+            reference_name = form.cleaned_data.get('reference_name')
+            reference_contact = form.cleaned_data.get('reference_contact')
+
+            # Call the DynamoDB function, making sure all names match
+            add_fitness_trainer_application(
+                user_id=user_id,
+                past_experience_trainer=past_experience_trainer,
+                past_experience_dietician=past_experience_dietician,
+                resume=resume,
+                certifications=certifications,
+                reference_name=reference_name,
+                reference_contact=reference_contact
+            )
+
+            # Notify user and redirect
+            messages.success(request, "Your application has been submitted successfully!")
+            return redirect('profile')
+
+    else:
+        form = FitnessTrainerApplicationForm()
+
+    return render(request, 'fitness_trainer_application.html', {'form': form})
+
+
+def fitness_trainer_applications_list_view(request):
+    # Retrieve applications from DynamoDB
+    applications = get_fitness_trainer_applications()
+
+    # Render the list of applications
+    return render(request, 'fitness_trainer_applications_list.html', {'applications': applications})
+
+
+
+
+
+
+
+
+

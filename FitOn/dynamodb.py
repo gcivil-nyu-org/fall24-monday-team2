@@ -2,15 +2,20 @@ import boto3
 from boto3.dynamodb.conditions import Key
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 from django.contrib.auth.hashers import check_password, make_password
+from django.core.files.storage import default_storage
 from django.utils import timezone
+from django.conf import settings
 
 
 # Connect to DynamoDB
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', region_name=settings.AWS_S3_REGION_NAME)
+s3_client = boto3.client('s3', region_name=settings.AWS_S3_REGION_NAME)
 
 users_table = dynamodb.Table('Users')
 
 password_reset_table = dynamodb.Table('PasswordResetRequests')
+
+applications_table = dynamodb.Table('FitnessTrainerApplications')
 
 class MockUser:
     def __init__(self, user_data):
@@ -175,6 +180,29 @@ def get_user(user_id):
         print(e.response['Error']['Message'])
         return None
 
+def upload_profile_picture(user_id, profile_picture):
+    try:
+        # Create a custom filename based on user_id
+        picture_name = f"{user_id}_profile.jpg"
+        
+        # Upload to S3
+        s3_client.upload_fileobj(
+            profile_picture,
+            settings.AWS_STORAGE_BUCKET_NAME,
+            f"static/images/{picture_name}",
+            ExtraArgs={
+                'ContentType': profile_picture.content_type
+            }
+        )
+
+        # Construct the new image URL
+        image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/static/images/{picture_name}"
+        return image_url
+
+    except ClientError as e:
+        print(e.response['Error']['Message'])
+        return None
+
 
 def update_user(user_id, update_data):
     try:
@@ -208,4 +236,112 @@ def update_user(user_id, update_data):
     except ClientError as e:
         print(e.response['Error']['Message'])
         return None
+
+def add_fitness_trainer_application(user_id, past_experience_trainer, past_experience_dietician, resume, certifications, reference_name, reference_contact):
+    try:
+        # Define S3 paths
+        resume_key = f'media/resumes/{user_id}_{resume.name}'
+        certifications_key = None
+
+        # Upload resume to S3
+        s3_client.upload_fileobj(
+            resume,
+            settings.AWS_STORAGE_BUCKET_NAME,
+            resume_key,
+            ExtraArgs={
+                'ContentType': resume.content_type
+            }
+        )
+
+        # Check if certifications are provided and upload them
+        if certifications:
+            certifications_key = f'media/certifications/{user_id}_{certifications.name}'
+            s3_client.upload_fileobj(
+                certifications,
+                settings.AWS_STORAGE_BUCKET_NAME,
+                certifications_key,
+                ExtraArgs={
+                    'ContentType': certifications.content_type
+                }
+            )
+
+        # Insert data into the DynamoDB table
+        response = applications_table.put_item(
+            Item={
+                'user_id': user_id,
+                'past_experience_trainer': past_experience_trainer,
+                'past_experience_dietician': past_experience_dietician,
+                'resume': resume_key,  # Save S3 path to the uploaded resume
+                'certifications': certifications_key,  # Save S3 path to the uploaded certification
+                'reference_name': reference_name,
+                'reference_contact': reference_contact,
+            }
+        )
+
+        # Check response status
+        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+            print("Fitness trainer application submitted successfully.")
+            return True
+        else:
+            print(f"Failed to submit application: {response}")
+            return False
+
+    except (NoCredentialsError, PartialCredentialsError) as cred_err:
+        print(f"Credentials error: {cred_err}")
+        return False
+
+    except ClientError as client_err:
+        print(f"Client error: {client_err.response['Error']['Message']}")
+        return False
+
+    except Exception as e:
+        print(f"Unexpected error submitting application: {e}")
+        return False
+    
+
+def get_fitness_trainer_applications():
+    try:
+        # Scan DynamoDB table for all applications
+        response = applications_table.scan()
+        applications = response.get('Items', [])
+        
+        # Process the list of applications to generate S3 URLs
+        for application in applications:
+            # Generate S3 URLs for resume and certifications
+            s3_client = boto3.client('s3')
+            application['resume_url'] = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                    'Key': application['resume']
+                },
+                ExpiresIn=3600  # URL valid for 1 hour
+            )
+
+            # Check if certifications exist, and generate presigned URL
+            if application.get('certifications'):
+                application['certifications_url'] = s3_client.generate_presigned_url(
+                    'get_object',
+                    Params={
+                        'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                        'Key': application['certifications']
+                    },
+                    ExpiresIn=3600
+                )
+            else:
+                application['certifications_url'] = None
+            
+            
+            user = get_user(application['user_id'])
+            application['username'] = user['username'] if user else "Unknown"  
+
+        return applications
+
+    except ClientError as client_err:
+        print(f"Client error: {client_err.response['Error']['Message']}")
+        return []
+    except Exception as e:
+        print(f"Unexpected error retrieving applications: {e}")
+        return []
+
 

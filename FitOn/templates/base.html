@@ -6,33 +6,50 @@
     <title>{% block title %}FitOn{% endblock %}</title>
     {% load static %}
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 </head>
 <body>
-    {% if request.session.username %}
-        <nav class="navbar">
-            <div class="navbar-container">
-                <a href="{% url 'homepage' %}" class="navbar-logo">FitOn</a>
-                <ul class="navbar-links">
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="{% url 'homepage' %}" class="navbar-logo">FitOn</a>
+            <div class="hamburger" id="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <ul class="navbar-links">
+                {% if request.session.username %}
                     <li><a href="{% url 'homepage' %}">Forums</a></li>
                     <li><a href="{% url 'homepage' %}">Workouts</a></li>
                     <li><a href="{% url 'homepage' %}">Metrics</a></li>
                     <li><a href="{% url 'profile' %}">Profile</a></li>
                     <li><a href="{% url 'logout' %}">Logout</a></li>
-                </ul>
-            </div>
-        </nav>
-    {% else %}
-        <nav class="navbar">
-            <div class="navbar-container">
-                <a href="{% url 'homepage' %}" class="navbar-logo">FitOn</a>
-                <ul class="navbar-links">
+                {% else %}
                     <li><a href="{% url 'login' %}">Login</a></li>
                     <li><a href="{% url 'signup' %}">Sign Up</a></li>
-                </ul>
+                {% endif %}
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Modal for Mobile View -->
+    <div id="modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-buttons">
+                {% if request.session.username %}
+                    <button onclick="location.href=`{% url 'homepage' %}`">Forums</button>
+                    <button onclick="location.href=`{% url 'homepage' %}`">Workouts</button>
+                    <button onclick="location.href=`{% url 'homepage' %}`">Metrics</button>
+                    <button onclick="location.href=`{% url 'profile' %}`">Profile</button>
+                    <button onclick="location.href=`{% url 'logout' %}`">Logout</button>
+                {% else %}
+                    <button onclick="location.href=`{% url 'login' %}`">Login</button>
+                    <button onclick="location.href=`{% url 'signup' %}`">Sign Up</button>
+                {% endif %}
             </div>
-        </nav>
-    {% endif %}
-    
+        </div>
+    </div>
+
     <div class="content">
         {% block content %}
         {% endblock %}
@@ -41,5 +58,6 @@
     <footer>
         <p>&copy; 2024 FitOn, All rights reserved</p>
     </footer>
+    <script src="{% static 'js/navbar.js' %}"></script>
 </body>
 </html>
