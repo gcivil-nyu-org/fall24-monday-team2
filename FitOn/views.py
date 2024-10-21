@@ -309,27 +309,43 @@ def thread_detail_view(request, thread_id):
     if not thread:
         return JsonResponse({'status': 'error', 'message': 'Thread not found'}, status=404)
 
+    user_id = request.session.get('username')  # Assuming user is logged in
+
     if request.method == 'POST':
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-            # Handle AJAX request to like the thread
-            likes = thread.get('Likes', 0) + 1
+            # Get the list of users who have liked the thread
+            liked_by = thread.get('LikedBy', [])
+
+            if user_id in liked_by:
+                # If user has already liked the post, "unlike" (remove the like)
+                likes = max(0, thread.get('Likes', 0) - 1)  # Ensure likes never go below 0
+                liked_by.remove(user_id)  # Remove the user from the LikedBy list
+            else:
+                # If user hasn't liked the post, add a like
+                likes = thread.get('Likes', 0) + 1
+                liked_by.append(user_id)  # Add the current user to the LikedBy list
+
+            # Update the thread with the new like count and LikedBy list
             threads_table.update_item(
                 Key={'ThreadID': thread_id},
-                UpdateExpression="set Likes=:l",
-                ExpressionAttributeValues={':l': likes}
+                UpdateExpression="set Likes=:l, LikedBy=:lb",
+                ExpressionAttributeValues={
+                    ':l': likes,
+                    ':lb': liked_by
+                }
             )
-            return JsonResponse({'status': 'success', 'likes': likes})
+            return JsonResponse({'status': 'success', 'likes': likes, 'liked': user_id in liked_by})
 
         else:
             # Handle reply submission (non-AJAX form submission)
             content = request.POST.get('content')
-            user_id = request.session.get('username')  # Assuming the user is logged in
 
             if content and user_id:
                 create_reply(thread_id=thread_id, user_id=user_id, content=content)
                 return redirect('thread_detail', thread_id=thread_id)
 
-    return render(request, 'thread_detail.html', {'thread': thread, 'posts': posts})
+    return render(request, 'thread_detail.html', {'thread': thread, 'posts': posts, 'liked': user_id in thread.get('LikedBy', [])})
+
 
 def new_thread_view(request):
     print("PrePost")
