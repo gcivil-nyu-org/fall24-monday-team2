@@ -372,3 +372,17 @@ def new_thread_view(request):
     return render(request, 'new_thread.html')
 
 
+# View to handle delete reply
+def delete_reply_view(request):
+    if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        data = json.loads(request.body.decode('utf-8'))
+        reply_id = data.get('reply_id')
+        thread_id = data.get('thread_id')  # Get the thread ID
+
+        # Call the function to delete the reply from the thread
+        try:
+            delete_reply(thread_id, reply_id)  # Call the function from dynamodb.py
+            return JsonResponse({'status': 'success'})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)

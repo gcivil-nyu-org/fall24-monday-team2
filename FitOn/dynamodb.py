@@ -331,3 +331,29 @@ def get_thread_details(thread_id):
     if items:
         return items[0]  # Assuming the thread details are in the first item
     return None
+def delete_reply(thread_id, reply_id):
+    """
+    Deletes a reply from the thread in the Threads table.
+    """
+    try:
+        # Fetch the thread
+        thread = threads_table.get_item(Key={'ThreadID': thread_id}).get('Item')
+        if not thread:
+            raise Exception("Thread not found")
+
+        # Get the list of replies
+        replies = thread.get('Replies', [])
+        
+        # Filter out the reply with the given reply_id
+        updated_replies = [reply for reply in replies if reply.get('ReplyID') != reply_id]
+
+        # Update the thread with the new replies list
+        threads_table.update_item(
+            Key={'ThreadID': thread_id},
+            UpdateExpression="set Replies=:r",
+            ExpressionAttributeValues={
+                ':r': updated_replies
+            }
+        )
+    except Exception as e:
+        raise Exception(f"Error deleting reply: {str(e)}")

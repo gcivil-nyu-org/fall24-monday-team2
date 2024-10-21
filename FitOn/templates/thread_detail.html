@@ -16,9 +16,13 @@
     <div class="thread-replies">
         <h3>Replies</h3>
         {% for post in posts %}
-        <div class="reply">
+        <div class="reply" id="reply-{{ post.ReplyID }}">
             <p><strong>{{ post.UserID }}</strong>: {{ post.Content }}</p>
             <p>{{ post.CreatedAt|date:"M d, Y H:i" }}</p>
+            <!-- Show delete button only for the author of the reply -->
+            {% if post.UserID == request.session.username %}
+            <button class="delete-reply-btn" data-reply-id="{{ post.ReplyID }}" style="background-color: red; color: white; border: none; padding: 5px 10px; cursor: pointer;">Delete</button>
+            {% endif %}
         </div>
         {% empty %}
         <p>No replies yet. Be the first to reply!</p>
@@ -43,11 +47,12 @@
     </form>
 </div>
 
-<!-- JavaScript to handle Like button via AJAX -->
+<!-- JavaScript to handle Like, Delete, and Report buttons via AJAX -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const likeButton = document.getElementById('like-btn');
     const reportButton = document.getElementById('report-btn');
+    const deleteButtons = document.querySelectorAll('.delete-reply-btn');
 
     likeButton.addEventListener('click', function(event) {
         event.preventDefault(); // Prevent form submission when clicking like
@@ -66,15 +71,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                // Update the like count in the UI
                 let likeText = data.likes + ' Like' + (data.likes !== 1 ? 's' : '');
                 likeButton.textContent = `▲ ${likeText}`;
-                // Change button color based on like/unlike status
-                if (data.liked) {
-                    likeButton.style.backgroundColor = 'darkgreen';
-                } else {
-                    likeButton.style.backgroundColor = 'green';
-                }
+                likeButton.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
             } else {
                 alert('Error: ' + data.message);
             }
@@ -82,7 +81,33 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(error => console.error('Error:', error));
     });
 
-    // Placeholder action for Report button
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            const replyId = this.dataset.replyId;
+
+            // Send AJAX request to delete the reply
+            fetch('/delete_reply/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ 'reply_id': replyId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById(`reply-${replyId}`).remove();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    });
+
     reportButton.addEventListener('click', function(event) {
         event.preventDefault();
         alert('Report functionality coming soon!');
