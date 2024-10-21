@@ -12,14 +12,6 @@
         <p>{{ thread.Content }}</p>
     </div>
 
-    <!-- Like button section with green arrow up -->
-    <div class="like-section" style="margin-top: 20px;">
-        <span id="like-count">{{ thread.Likes }}</span> Likes
-        <button id="like-btn" data-thread-id="{{ thread.ThreadID }}" style="background-color: {% if liked %}darkgreen{% else %}green{% endif %}; color: white; border: none; padding: 5px 10px; cursor: pointer;">
-            ▲ {% if liked %} Unlike {% else %} Like {% endif %}
-        </button>
-    </div>
-
     <!-- Replies section -->
     <div class="thread-replies">
         <h3>Replies</h3>
@@ -33,11 +25,21 @@
         {% endfor %}
     </div>
 
-    <!-- Reply form -->
-    <form method="post">
+    <!-- Reply form with the Like and Report buttons next to it -->
+    <form method="post" style="display: flex; align-items: center;">
         {% csrf_token %}
-        <textarea name="content" rows="5" placeholder="Write your reply"></textarea>
-        <button type="submit">Post Reply</button>
+        <textarea name="content" rows="5" placeholder="Write your reply" style="flex-grow: 1;"></textarea>
+        <button type="submit" style="margin-left: 10px;">Post Reply</button>
+        
+        <!-- Like Button -->
+        <button id="like-btn" data-thread-id="{{ thread.ThreadID }}" style="background-color: {% if liked %}darkgreen{% else %}green{% endif %}; color: white; border: none; padding: 5px 10px; margin-left: 10px; cursor: pointer;">
+            ▲ {% if liked %} Unlike {% else %} Like {% endif %}
+        </button>
+
+        <!-- Report Button (Placeholder) -->
+        <button id="report-btn" style="background-color: red; color: white; border: none; padding: 5px 10px; margin-left: 10px; cursor: pointer;">
+            ⚑ Report
+        </button>
     </form>
 </div>
 
@@ -45,8 +47,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const likeButton = document.getElementById('like-btn');
+    const reportButton = document.getElementById('report-btn');
 
-    likeButton.addEventListener('click', function() {
+    likeButton.addEventListener('click', function(event) {
+        event.preventDefault(); // Prevent form submission when clicking like
+
         const threadId = this.dataset.threadId;
 
         // Send an AJAX request to the thread detail view to like/unlike the thread
@@ -74,6 +79,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         })
         .catch(error => console.error('Error:', error));
+    });
+
+    // Placeholder action for Report button
+    reportButton.addEventListener('click', function(event) {
+        event.preventDefault();
+        alert('Report functionality coming soon!');
     });
 });
 </script>
