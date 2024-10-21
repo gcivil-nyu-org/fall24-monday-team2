@@ -22,6 +22,7 @@ from django.utils.http import urlsafe_base64_encode
 import os
 import uuid, ssl
 from django.contrib.auth.decorators import login_required
+from .dynamodb import create_thread, threads_table
 
 def homepage(request):
     username = request.session.get('username', 'Guest')
@@ -301,25 +302,32 @@ def forum_view(request):
 
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
-    # Fetch thread details and replies from DynamoDB
-    thread = get_thread_details(thread_id)
-    posts = get_replies(thread_id)
+    # Fetch thread details from DynamoDB
+    thread = threads_table.get_item(Key={'ThreadID': thread_id}).get('Item')
+    posts = get_replies(thread_id)  # Fetch replies related to the thread
+
+    if not thread:
+        return JsonResponse({'status': 'error', 'message': 'Thread not found'}, status=404)
 
     if request.method == 'POST':
-        content = request.POST.get('content')
-        user_id = request.session.get('username')  # Assuming the user is logged in
-        
-        if content and user_id:
-            # Call the function to create a reply
-            create_reply(thread_id=thread_id, user_id=user_id, content=content)
-            return redirect('thread_detail', thread_id=thread_id)
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            # Handle AJAX request to like the thread
+            likes = thread.get('Likes', 0) + 1
+            threads_table.update_item(
+                Key={'ThreadID': thread_id},
+                UpdateExpression="set Likes=:l",
+                ExpressionAttributeValues={':l': likes}
+            )
+            return JsonResponse({'status': 'success', 'likes': likes})
+
         else:
-            # Display an error message if the form is incomplete
-            return render(request, 'thread_detail.html', {
-                'thread': thread,
-                'posts': posts,
-                'error': 'Please provide content for your reply.'
-            })
+            # Handle reply submission (non-AJAX form submission)
+            content = request.POST.get('content')
+            user_id = request.session.get('username')  # Assuming the user is logged in
+
+            if content and user_id:
+                create_reply(thread_id=thread_id, user_id=user_id, content=content)
+                return redirect('thread_detail', thread_id=thread_id)
 
     return render(request, 'thread_detail.html', {'thread': thread, 'posts': posts})
 
@@ -346,3 +354,5 @@ def new_thread_view(request):
     
     # If the request method is GET, simply show the form
     return render(request, 'new_thread.html')
+
+

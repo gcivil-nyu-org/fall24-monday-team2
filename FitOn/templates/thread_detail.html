@@ -2,68 +2,72 @@
 {% load static %}
 
 {% block content %}
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Create New Thread</title>
-    <link rel="stylesheet" type="text/css" href="{% static 'css/new_thread.css' %}">
-</head>
 <div class="thread-container">
     <div class="thread-header">
         <h1>{{ thread.Title }}</h1>
-        <p>Started by: <strong>{{ thread.UserID }}</strong> on {{ thread.CreatedAt|date:"M d, Y H:i" }}</p>
+        <p>Posted by {{ thread.UserID }} on {{ thread.CreatedAt|date:"M d, Y H:i" }}</p>
     </div>
 
     <div class="thread-content">
-        <div class="user-info">
-            <img src="{% static 'images/default-avatar.png' %}" alt="User Avatar" class="user-avatar">
-            <div class="user-details">
-                <p>Joined: Jan 2021</p> <!-- Replace with actual data -->
-                <p>Posts: 123</p> <!-- Replace with actual data -->
-            </div>
-        </div>
-        <div class="thread-text">
-            <p>{{ thread.Content }}</p>
-        </div>
+        <p>{{ thread.Content }}</p>
     </div>
 
+    <!-- Like button section with green arrow up -->
+    <div class="like-section" style="margin-top: 20px;">
+        <span id="like-count">{{ thread.Likes }}</span> Likes
+        <button id="like-btn" data-thread-id="{{ thread.ThreadID }}" style="background-color: green; color: white; border: none; padding: 5px 10px; cursor: pointer;">
+            ▲ Like
+        </button>
+    </div>
+
+    <!-- Replies section -->
     <div class="thread-replies">
         <h3>Replies</h3>
         {% for post in posts %}
         <div class="reply">
-            <div class="reply-content">
-                <div class="user-info">
-                    <img src="{% static 'images/default-avatar.png' %}" alt="User Avatar" class="user-avatar">
-                    <div class="user-details">
-                        <strong>{{ post.UserID }}</strong>
-                        <p>Joined: Jan 2021</p> <!-- Replace with actual data -->
-                        <p>Posts: 123</p> <!-- Replace with actual data -->
-                    </div>
-                </div>
-                <div class="reply-text">
-                    <p>{{ post.Content }}</p>
-                    <p class="timestamp">{{ post.CreatedAt|date:"M d, Y H:i" }}</p>
-                </div>
-            </div>
+            <p><strong>{{ post.UserID }}</strong>: {{ post.Content }}</p>
+            <p>{{ post.CreatedAt|date:"M d, Y H:i" }}</p>
         </div>
         {% empty %}
         <p>No replies yet. Be the first to reply!</p>
         {% endfor %}
     </div>
 
-    <!-- Display error message outside the for loop -->
-    {% if error %}
-        <p class="error-message">{{ error }}</p>
-    {% endif %}
-
-    <!-- Reply Form -->
-    <div id="reply-form" class="reply-form">
-        <h3>Post a Reply</h3>
-        <form method="post">
-            {% csrf_token %}
-            <textarea name="content" rows="5" placeholder="Write your reply here..." class="form-input"></textarea>
-            <button type="submit" class="submit-btn">Submit</button>
-        </form>
-    </div>
+    <!-- Reply form -->
+    <form method="post">
+        {% csrf_token %}
+        <textarea name="content" rows="5" placeholder="Write your reply"></textarea>
+        <button type="submit">Post Reply</button>
+    </form>
 </div>
+
+<!-- JavaScript to handle Like button via AJAX -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const likeButton = document.getElementById('like-btn');
+
+    likeButton.addEventListener('click', function() {
+        const threadId = this.dataset.threadId;
+
+        // Send an AJAX request to the thread detail view to like the thread
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json',
+                'x-requested-with': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                document.getElementById('like-count').textContent = data.likes;
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    });
+});
+</script>
 {% endblock %}

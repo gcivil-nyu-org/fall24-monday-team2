@@ -227,7 +227,8 @@ def create_thread(title, user_id, content):
         'Title': title,
         'UserID': user_id,
         'Content': content,
-        'CreatedAt': created_at
+        'CreatedAt': created_at,
+        'Likes': 0 
     }
     print(thread)
     

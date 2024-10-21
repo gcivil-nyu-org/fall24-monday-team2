@@ -27,15 +27,25 @@
                     <th>Replies</th>
                     <th>Thread Created</th>
                     <th>Last Post</th>
+                    <th>Likes</th>  <!-- Column for Likes -->
                 </tr>
             </thead>
             <tbody>
                 {% for thread in threads %}
                 <tr>
+                    <!-- Thread title with a link to the thread detail page -->
                     <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title }}</a></td>
+                    
+                    <!-- Thread author (UserID) -->
                     <td>{{ thread.UserID }}</td>
+                    
+                    <!-- Reply count -->
                     <td>{{ thread.ReplyCount }}</td>
-                    <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td> 
+                    
+                    <!-- Thread creation date -->
+                    <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td>
+                    
+                    <!-- Last post details -->
                     <td>
                         {% if thread.LastPostTime %}
                             User: {{ thread.LastPostUser }}<br>
@@ -44,10 +54,14 @@
                             No replies yet
                         {% endif %}
                     </td>
+
+                    <!-- Number of Likes for the thread -->
+                    <td>{{ thread.Likes }} Likes</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+
 {% endblock %}
