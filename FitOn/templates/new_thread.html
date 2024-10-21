@@ -1,0 +1,46 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create New Thread</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'css/new_thread.css' %}">
+</head>
+
+<nav class="navbar">
+    <div class="navbar-container">
+        <a href="{% url 'homepage' %}" class="navbar-logo">FitOn</a>
+        <ul class="navbar-links">
+            <li><a href="{% url 'forum' %}">Forums</a></li>
+            <li><a href="{% url 'homepage' %}">Workouts</a></li>
+            <li><a href="{% url 'homepage' %}">Metrics</a></li>
+            <li><a href="{% url 'profile' %}">Profile</a></li>
+            <li><a href="{% url 'logout' %}">Logout</a></li>
+        </ul>
+    </div>
+</nav>
+
+<div class="new-thread-container">
+    <h2>Create a New Thread</h2>
+
+    {% if error %}
+        <div class="error-message">
+            <p>{{ error }}</p>
+        </div>
+    {% endif %}
+    
+    <form method="POST">
+        {% csrf_token %}
+        <div class="form-group">
+            <label for="title">Thread Title</label>
+            <input type="text" id="title" name="title" class="form-input" placeholder="Enter your thread title">
+        </div>
+        <div class="form-group">
+            <label for="content">Thread Content</label>
+            <textarea id="content" name="content" class="form-input" rows="5" placeholder="Write your thread content..."></textarea>
+        </div>
+        <button type="submit" class="submit-btn">Create Thread</button>
+    </form>
+</div>
