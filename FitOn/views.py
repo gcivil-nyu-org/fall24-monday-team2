@@ -1,10 +1,18 @@
 from django.shortcuts import render, redirect
 from .dynamodb import (
     add_fitness_trainer_application,
+    create_post,
+    create_reply,
+    create_thread,
     create_user,
     delete_user_by_username,
+    fetch_all_threads,
+    fetch_posts_for_thread,
+    fetch_thread,
     get_fitness_trainer_applications,
     get_last_reset_request_time,
+    get_replies,
+    get_thread_details,
     get_user,
     get_user_by_email,
     get_user_by_uid,
@@ -43,6 +51,10 @@ from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_encode
 import os
 import uuid, ssl
+from django.contrib.auth.decorators import login_required
+from .dynamodb import create_thread, threads_table, delete_post, posts_table
+import json
+from django.http import HttpResponse
 
 def homepage(request):
     username = request.session.get('username', 'Guest')
@@ -341,4 +353,109 @@ def fitness_trainer_applications_list_view(request):
 
 
 
+# -------------------------------
+# Forums Functions
+# -------------------------------
+
+def forum_view(request):
+    threads = fetch_all_threads()
+    return render(request, 'forums.html', {'threads': threads})
+
+# View to display a single thread with its posts
+def thread_detail_view(request, thread_id):
+    # Fetch thread details from DynamoDB
+    thread = threads_table.get_item(Key={'ThreadID': thread_id}).get('Item')
+    posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
+
+    if not thread:
+        return JsonResponse({'status': 'error', 'message': 'Thread not found'}, status=404)
+
+    user_id = request.session.get('username')  # Assuming user is logged in
+
+    if request.method == 'POST':
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            # Get the list of users who have liked the thread
+            liked_by = thread.get('LikedBy', [])
+
+            if user_id in liked_by:
+                # If user has already liked the post, "unlike" (remove the like)
+                likes = max(0, thread.get('Likes', 0) - 1)  # Ensure likes never go below 0
+                liked_by.remove(user_id)  # Remove the user from the LikedBy list
+            else:
+                # If user hasn't liked the post, add a like
+                likes = thread.get('Likes', 0) + 1
+                liked_by.append(user_id)  # Add the current user to the LikedBy list
+
+            # Update the thread with the new like count and LikedBy list
+            threads_table.update_item(
+                Key={'ThreadID': thread_id},
+                UpdateExpression="set Likes=:l, LikedBy=:lb",
+                ExpressionAttributeValues={
+                    ':l': likes,
+                    ':lb': liked_by
+                }
+            )
+            return JsonResponse({'status': 'success', 'likes': likes, 'liked': user_id in liked_by})
+
+        else:
+            # Handle reply submission (non-AJAX form submission)
+            content = request.POST.get('content')
+
+            if content and user_id:
+                create_reply(thread_id=thread_id, user_id=user_id, content=content)
+                return redirect('thread_detail', thread_id=thread_id)
+
+    return render(request, 'thread_detail.html', {'thread': thread, 'posts': posts, 'liked': user_id in thread.get('LikedBy', [])})
+
+
+def new_thread_view(request):
+    print("PrePost")
+    if request.method == 'POST':
+        print("Post")
+        title = request.POST.get('title')
+        content = request.POST.get('content')
+        user_id = request.session.get('username')  # Assuming the user is logged in
+
+        # Debugging: Add print statements to confirm values
+        print(f"Title: {title}, Content: {content}, User: {user_id}")
+
+        if title and content and user_id:
+            # Call your DynamoDB function to create a new thread
+            create_thread(title=title, user_id=user_id, content=content)
+
+            # Redirect to the forums page after successfully creating the thread
+            return redirect('forum')
+        else:
+            # If something's missing, return the form with an error message
+            return render(request, 'new_thread.html', {'error': 'All fields are required.'})
+    
+    # If the request method is GET, simply show the form
+    return render(request, 'new_thread.html')
+
+
+def delete_post_view(request):
+    
+    if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        try:
+            
+            data = json.loads(request.body.decode('utf-8'))
+            post_id = data.get('post_id')
+            thread_id = data.get('thread_id')  # Make sure you're getting thread_id too
+
+             # Log the post_id and thread_id for debugging
+            print("post_id: {post_id}, thread_id: {thread_id}")
+            print("Hello?")
+            
+            if not post_id or not thread_id:
+                return JsonResponse({'status': 'error', 'message': 'Post or Thread ID missing'}, status=400)
+
+            # Call the delete_post function to delete from DynamoDB
+            if delete_post(post_id, thread_id):
+                return JsonResponse({'status': 'success'})
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Failed to delete post'}, status=500)
+
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
 

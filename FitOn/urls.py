@@ -17,16 +17,20 @@ Including another URLconf
 from .views import (
     confirm_deactivation,
     deactivate_account,
+    delete_post_view,
     fitness_trainer_application_view,
     fitness_trainer_applications_list_view,
+    forum_view,
     homepage,
     login,
+    new_thread_view,
     password_reset_complete,
     password_reset_confirm,
     password_reset_done,
     password_reset_request,
     profile_view,
     signup,
+    thread_detail_view,
     upload_profile_picture_view,
 )
 from django.conf import settings
@@ -52,6 +56,10 @@ urlpatterns = [
     path('upload_profile_picture/', upload_profile_picture_view, name='upload_profile_picture'),
     path('fitness_trainer_application_view/', fitness_trainer_application_view, name='fitness_trainer_application_view'),
     path('fitness_trainer_applications_list/', fitness_trainer_applications_list_view, name='fitness_trainer_applications_list'),
+    path('forum/', forum_view, name='forum'),
+    path('forum/new/', new_thread_view, name='new_thread'),
+    path('forum/<str:thread_id>/', thread_detail_view, name='thread_detail'),
+    path('delete_post/', delete_post_view, name='delete_post'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     
 

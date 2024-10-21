@@ -5,6 +5,8 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.conf import settings
+import uuid
+from datetime import datetime
 
 
 # Connect to DynamoDB
@@ -12,6 +14,8 @@ dynamodb = boto3.resource('dynamodb', region_name=settings.AWS_S3_REGION_NAME)
 s3_client = boto3.client('s3', region_name=settings.AWS_S3_REGION_NAME)
 
 users_table = dynamodb.Table('Users')
+threads_table = dynamodb.Table('ForumThreads')
+posts_table = dynamodb.Table('ForumPosts')
 
 password_reset_table = dynamodb.Table('PasswordResetRequests')
 
@@ -344,4 +348,136 @@ def get_fitness_trainer_applications():
         print(f"Unexpected error retrieving applications: {e}")
         return []
 
+# -------------------------------
+# Forums Functions
+# -------------------------------
+
+def create_thread(title, user_id, content):
+    thread_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+    
+    thread = {
+        'ThreadID': thread_id,
+        'Title': title,
+        'UserID': user_id,
+        'Content': content,
+        'CreatedAt': created_at,
+        'Likes': 0,
+        'LikedBy': [] 
+    }
+    print(thread)
+    
+    threads_table.put_item(Item=thread)
+    return thread
+
+def fetch_all_threads():
+    threads = threads_table.scan().get('Items', [])
+
+    for thread in threads:
+        # Convert the thread's 'CreatedAt' string to a datetime object
+        thread_created_at_str = thread.get('CreatedAt')
+        if thread_created_at_str:
+            thread['CreatedAt'] = datetime.fromisoformat(thread_created_at_str)
+        
+        # Fetch all posts for this thread
+        replies = fetch_posts_for_thread(thread['ThreadID'])
+
+        # Add reply count
+        thread['ReplyCount'] = len(replies)
+
+        # Determine the latest post (if there are any replies)
+        if replies:
+            latest_post = max(replies, key=lambda x: x['CreatedAt'])
+
+            # Convert 'CreatedAt' string to a Python datetime object for the latest post
+            last_post_time_str = latest_post['CreatedAt']
+            last_post_time = datetime.fromisoformat(last_post_time_str)
+
+            thread['LastPostUser'] = latest_post['UserID']
+            thread['LastPostTime'] = last_post_time
+        else:
+            thread['LastPostUser'] = 'No replies yet'
+            thread['LastPostTime'] = None
+
+    return threads
+
+
+def fetch_thread(thread_id):
+    response = threads_table.get_item(Key={'ThreadID': thread_id})
+    return response.get('Item', None)
+
+def create_post(thread_id, user_id, content):
+    post_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+    
+    post = {
+        'PostID': post_id,
+        'ThreadID': thread_id,
+        'UserID': user_id,
+        'Content': content,
+        'CreatedAt': created_at
+    }
+    print(post)
+    
+    posts_table.put_item(Item=post)
+    return post
+
+def fetch_posts_for_thread(thread_id):
+    response = posts_table.scan(
+        FilterExpression="#tid = :thread_id",
+        ExpressionAttributeNames={"#tid": "ThreadID"},  # Handle 'ThreadID' as an attribute name
+        ExpressionAttributeValues={":thread_id": thread_id}  # Corrected to pass the thread ID
+    )
+    return response.get('Items', [])
+
+def create_reply(thread_id, user_id, content):
+    post_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+
+    reply = {
+        'ThreadID': thread_id,
+        'PostID': post_id,
+        'UserID': user_id,
+        'Content': content,
+        'CreatedAt': created_at
+    }
+
+    # Insert the reply into the DynamoDB table
+    posts_table.put_item(Item=reply)
+
+def get_replies(thread_id):
+    response = posts_table.scan(
+        FilterExpression="#tid = :thread_id",
+        ExpressionAttributeNames={"#tid": "ThreadID"},  # Handle 'ThreadID' as an attribute name
+        ExpressionAttributeValues={":thread_id": thread_id}  # Pass the thread ID value
+    )
+    return response.get('Items', [])
+
+def get_thread_details(thread_id):
+    response = posts_table.scan(
+        FilterExpression="#tid = :thread_id",
+        ExpressionAttributeNames={"#tid": "ThreadID"},
+        ExpressionAttributeValues={":thread_id": thread_id}
+    )
+    
+    items = response.get('Items', [])
+    if items:
+        return items[0]  # Assuming the thread details are in the first item
+    return None
+
+def delete_post(post_id, thread_id):
+    """
+    Deletes a post from the DynamoDB posts table based on the post ID and thread ID.
+    """
+    try:
+        response = posts_table.delete_item(
+            Key={
+                'ThreadID': thread_id,  # Adjust this according to your table schema
+                'PostID': post_id
+            }
+        )
+        return True
+    except Exception as e:
+        print("Error deleting post: {e}")
+        return False
 
