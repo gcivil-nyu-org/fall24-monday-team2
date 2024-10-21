@@ -18,6 +18,7 @@ db.sqlite3
 
 # Ignore .DS_Store folder/file
 .DS_Store
-
-# Ignore FitOn/.DS_Store folder/file
 FitOn/.DS_Store
+
+# Ignore .ebextensions
+.ebextensions/
