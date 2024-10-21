@@ -33,7 +33,7 @@
         
         <!-- Like Button -->
         <button id="like-btn" data-thread-id="{{ thread.ThreadID }}" style="background-color: {% if liked %}darkgreen{% else %}green{% endif %}; color: white; border: none; padding: 5px 10px; margin-left: 10px; cursor: pointer;">
-            ▲ {% if liked %} Unlike {% else %} Like {% endif %}
+            ▲ {{ thread.Likes }} Like{% if thread.Likes != 1 %}s{% endif %}
         </button>
 
         <!-- Report Button (Placeholder) -->
@@ -66,13 +66,14 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                document.getElementById('like-count').textContent = data.likes;
+                // Update the like count in the UI
+                let likeText = data.likes + ' Like' + (data.likes !== 1 ? 's' : '');
+                likeButton.textContent = `▲ ${likeText}`;
+                // Change button color based on like/unlike status
                 if (data.liked) {
                     likeButton.style.backgroundColor = 'darkgreen';
-                    likeButton.textContent = '▲ Unlike';
                 } else {
                     likeButton.style.backgroundColor = 'green';
-                    likeButton.textContent = '▲ Like';
                 }
             } else {
                 alert('Error: ' + data.message);
