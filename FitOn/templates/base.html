@@ -19,7 +19,7 @@
             </div>
             <ul class="navbar-links">
                 {% if request.session.username %}
-                    <li><a href="{% url 'homepage' %}">Forums</a></li>
+                    <li><a href="{% url 'forum' %}">Forums</a></li>
                     <li><a href="{% url 'homepage' %}">Workouts</a></li>
                     <li><a href="{% url 'homepage' %}">Metrics</a></li>
                     <li><a href="{% url 'profile' %}">Profile</a></li>
