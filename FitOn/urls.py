@@ -14,7 +14,25 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from .views import signup, homepage, login, password_reset_complete, password_reset_confirm, password_reset_request, password_reset_done, profile_view, upload_profile_picture, deactivate_account, confirm_deactivation, forum_view, thread_detail_view, new_thread_view, delete_post_view
+from .views import (
+    confirm_deactivation,
+    deactivate_account,
+    delete_post_view,
+    fitness_trainer_application_view,
+    fitness_trainer_applications_list_view,
+    forum_view,
+    homepage,
+    login,
+    new_thread_view,
+    password_reset_complete,
+    password_reset_confirm,
+    password_reset_done,
+    password_reset_request,
+    profile_view,
+    signup,
+    thread_detail_view,
+    upload_profile_picture_view,
+)
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -22,6 +40,7 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 urlpatterns = [
+    path('', login, name='landing'),
     path('admin/', admin.site.urls),
     path('signup/', signup, name='signup'),
     path('home/', homepage, name='homepage'),
@@ -34,7 +53,9 @@ urlpatterns = [
     path('reset-password/done/', password_reset_done, name='password_reset_done'),
     path('reset-password/complete/', password_reset_complete, name='password_reset_complete'),
     path('profile/', profile_view, name='profile'),
-    path('upload_profile_picture/', upload_profile_picture, name='upload_profile_picture'),
+    path('upload_profile_picture/', upload_profile_picture_view, name='upload_profile_picture'),
+    path('fitness_trainer_application_view/', fitness_trainer_application_view, name='fitness_trainer_application_view'),
+    path('fitness_trainer_applications_list/', fitness_trainer_applications_list_view, name='fitness_trainer_applications_list'),
     path('forum/', forum_view, name='forum'),
     path('forum/new/', new_thread_view, name='new_thread'),
     path('forum/<str:thread_id>/', thread_detail_view, name='thread_detail'),

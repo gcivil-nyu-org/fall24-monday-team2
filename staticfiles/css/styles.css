@@ -230,6 +230,43 @@ footer {
     }
 }
 
+.page-title {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.table-container {
+    overflow-x: auto; /* Enables horizontal scrolling */
+}
+
+.applications-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+    font-size: 16px;
+}
+
+.applications-table th,
+.applications-table td {
+    padding: 10px;
+    border: 1px solid #ddd; /* Add border to cells */
+    text-align: left; /* Align text to the left */
+}
+
+.applications-table th {
+    background-color: #f4f4f4; /* Light gray background for header */
+}
+
+.applications-table tr:nth-child(even) {
+    background-color: #f9f9f9; /* Zebra striping for even rows */
+}
+
+.no-applications {
+    text-align: center;
+    font-weight: bold;
+    color: red; /* Indicate no applications found */
+}
+
 .error {
     color: red;
     font-size: 12px;
@@ -316,24 +353,94 @@ footer {
     color: #FFFFFF; /* White */
 }
 
+
+/* Hamburger Menu */
+.hamburger {
+    display: none;
+    flex-direction: column;
+    cursor: pointer;
+}
+
+.hamburger span {
+    height: 4px;
+    width: 30px;
+    background: white;
+    margin: 2px 0;
+    transition: all 0.3s ease;
+}
+
+/* Modal Styles */
 .modal {
-    display: none; /* Hidden by default */
+    display: none;
     position: fixed;
-    z-index: 1;
+    z-index: 1001;
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5); /* Black with opacity */
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.85); /* Darker overlay for more contrast */
 }
 
 .modal-content {
-    background-color: #fefefe;
-    margin: 15% auto;
-    padding: 20px;
-    border: 1px solid #888;
-    width: 30%;
-    text-align: center;
+    background-color: #FFFFFF; /* White background to match navbar */
+    border-radius: 10px; /* Rounded corners */
+    margin: 15% auto; /* Center the modal vertically */
+    padding: 30px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); /* Soft shadow */
+    width: fit-content; /* Width based on content */
+    max-width: 90%; /* Maximum width to ensure responsiveness */
+    transition: transform 0.3s ease; /* Smooth transition */
+    transform: translateY(-20px); /* Initial position */
+}
+
+.modal-content.show {
+    transform: translateY(0); /* Slide down effect */
+}
+
+
+/* Button Styles */
+.modal-buttons {
+    display: flex;
+    flex-direction: column; /* Stack buttons vertically */
+}
+
+.modal-buttons button {
+    background-color: #007bff; /* Match navbar color */
+    color: #ECF0F1; /* Light grey text */
+    border: none; /* Remove default border */
+    padding: 15px 20px; /* Padding for buttons */
+    font-size: 20px; /* Increased font size */
+    font-weight: bold; /* Bold text */
+    border-radius: 8px; /* Slightly larger rounded corners */
+    margin: 10px 0; /* Space between buttons */
+    cursor: pointer; /* Pointer on hover */
+    transition: background-color 0.3s, transform 0.2s; /* Smooth transition */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); /* Soft shadow */
+}
+
+.modal-buttons button:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+    transform: scale(1.05); /* Slightly enlarge on hover */
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .navbar-links {
+        display: none; /* Hide links in mobile view */
+    }
+
+    .hamburger {
+        display: flex; /* Show hamburger menu in mobile view */
+    }
+
+    .modal-content {
+        padding: 20px; /* Adjust padding for mobile */
+    }
+
+    .modal-buttons button {
+        font-size: 18px; /* Slightly smaller font size for mobile */
+    }
 }
 
 .button-confirm {
