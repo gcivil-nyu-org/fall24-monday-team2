@@ -1,6 +1,36 @@
 from django.shortcuts import render, redirect
-from .dynamodb import create_user, get_user_by_username, get_user_by_email, get_user_by_uid, update_user_password, MockUser, update_reset_request_time, get_last_reset_request_time, get_user, update_user, delete_user_by_username
-from .forms import SignUpForm, LoginForm, PasswordResetForm, SetNewPasswordForm, ProfileForm
+from .dynamodb import (
+    add_fitness_trainer_application,
+    create_post,
+    create_reply,
+    create_thread,
+    create_user,
+    delete_user_by_username,
+    fetch_all_threads,
+    fetch_posts_for_thread,
+    fetch_thread,
+    get_fitness_trainer_applications,
+    get_last_reset_request_time,
+    get_replies,
+    get_thread_details,
+    get_user,
+    get_user_by_email,
+    get_user_by_uid,
+    get_user_by_username,
+    MockUser,
+    update_reset_request_time,
+    update_user,
+    update_user_password,
+    upload_profile_picture,
+)
+from .forms import (
+    FitnessTrainerApplicationForm,
+    LoginForm,
+    PasswordResetForm,
+    ProfileForm,
+    SetNewPasswordForm,
+    SignUpForm,
+)
 from .models import PasswordResetRequest
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
@@ -22,6 +52,10 @@ from django.utils.http import urlsafe_base64_encode
 import os
 import uuid, ssl
 from google_auth_oauthlib.flow import Flow
+from django.contrib.auth.decorators import login_required
+from .dynamodb import create_thread, threads_table, delete_post, posts_table
+import json
+from django.http import HttpResponse
 
 SCOPES = [
     'https://www.googleapis.com/auth/fitness.activity.read', 
@@ -183,33 +217,20 @@ def password_reset_complete(request):
 def password_reset_done(request):
     return render(request, 'password_reset_done.html')
 
-def upload_profile_picture(request):
+def upload_profile_picture_view(request):
     user_id = request.session.get('user_id')  # Get the user ID from the session
 
     if request.method == 'POST' and request.FILES.get('profile_picture'):
         profile_picture = request.FILES['profile_picture']
-        
-        # Define the path where the image will be saved
-        image_dir = os.path.join(settings.BASE_DIR, 'FitOn/static/images')
-        print(image_dir, settings.BASE_DIR)
-        # Create the directory if it doesn't exist
-        os.makedirs(image_dir, exist_ok=True)
 
-        # Create a custom filename based on user_id
-        picture_name = f"{user_id}_profile.jpg"
-        image_path = os.path.join(image_dir, picture_name)
+        # Upload to S3 and get the URL
+        new_image_url = upload_profile_picture(user_id, profile_picture)
 
-        # Save the image to the specified path
-        with open(image_path, 'wb+') as destination:
-            for chunk in profile_picture.chunks():
-                destination.write(chunk)
+        if new_image_url:
+            return JsonResponse({'success': True, 'new_image_url': new_image_url})
+        else:
+            return JsonResponse({'success': False, 'message': 'Failed to upload image to S3'})
 
-        # Construct the new image URL
-        new_image_url = f"/static/images/{picture_name}"
-
-        # Respond with success
-        return JsonResponse({'success': True, 'new_image_url': new_image_url})
-    
     return JsonResponse({'success': False, 'message': 'No file uploaded'})
 
 def profile_view(request):
@@ -226,20 +247,15 @@ def profile_view(request):
         # Handle profile picture upload
         if 'profile_picture' in request.FILES:
             profile_picture = request.FILES['profile_picture']
-            picture_name = f"{user_id}_profile.jpg"  # Create custom file name
-            picture_path = os.path.join(settings.BASE_DIR, 'FitOn/static/images', picture_name)
+            image_url = upload_profile_picture(user_id, profile_picture)
 
-            # Save the profile picture
-            with open(picture_path, 'wb+') as destination:
-                for chunk in profile_picture.chunks():
-                    destination.write(chunk)
-
-            # Update the user's profile picture URL in DynamoDB
-            update_user(user_id, {'profile_picture': {"Value": f'/static/images/{picture_name}'}})
-
-            messages.success(request, "Profile picture updated successfully!")
-            return redirect('profile')
-
+            if image_url:
+                # Update the user's profile picture URL in DynamoDB
+                update_user(user_id, {'profile_picture': {"Value": image_url}})
+                messages.success(request, "Profile picture updated successfully!")
+                return redirect('profile')
+            else:
+                messages.error(request, "Failed to upload profile picture.")
 
         # Handling other profile updates
         form = ProfileForm(request.POST)
@@ -344,3 +360,157 @@ def callback_google_fit(request):
             'scopes': credentials.scopes
         }
     return redirect(reverse("metrics:get_metric_data"))
+
+def fitness_trainer_application_view(request):
+    user_id = request.session.get('user_id')
+    if request.method == 'POST':
+        form = FitnessTrainerApplicationForm(request.POST, request.FILES)
+        if form.is_valid():
+            past_experience_trainer = form.cleaned_data.get('past_experience_trainer')
+            past_experience_dietician = form.cleaned_data.get('past_experience_dietician')
+            resume = request.FILES['resume']
+            certifications = request.FILES.get('certifications')
+            reference_name = form.cleaned_data.get('reference_name')
+            reference_contact = form.cleaned_data.get('reference_contact')
+
+            # Call the DynamoDB function, making sure all names match
+            add_fitness_trainer_application(
+                user_id=user_id,
+                past_experience_trainer=past_experience_trainer,
+                past_experience_dietician=past_experience_dietician,
+                resume=resume,
+                certifications=certifications,
+                reference_name=reference_name,
+                reference_contact=reference_contact
+            )
+
+            # Notify user and redirect
+            messages.success(request, "Your application has been submitted successfully!")
+            return redirect('profile')
+
+    else:
+        form = FitnessTrainerApplicationForm()
+
+    return render(request, 'fitness_trainer_application.html', {'form': form})
+
+
+def fitness_trainer_applications_list_view(request):
+    # Retrieve applications from DynamoDB
+    applications = get_fitness_trainer_applications()
+
+    # Render the list of applications
+    return render(request, 'fitness_trainer_applications_list.html', {'applications': applications})
+
+
+
+
+
+
+
+
+# -------------------------------
+# Forums Functions
+# -------------------------------
+
+def forum_view(request):
+    threads = fetch_all_threads()
+    return render(request, 'forums.html', {'threads': threads})
+
+# View to display a single thread with its posts
+def thread_detail_view(request, thread_id):
+    # Fetch thread details from DynamoDB
+    thread = threads_table.get_item(Key={'ThreadID': thread_id}).get('Item')
+    posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
+
+    if not thread:
+        return JsonResponse({'status': 'error', 'message': 'Thread not found'}, status=404)
+
+    user_id = request.session.get('username')  # Assuming user is logged in
+
+    if request.method == 'POST':
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            # Get the list of users who have liked the thread
+            liked_by = thread.get('LikedBy', [])
+
+            if user_id in liked_by:
+                # If user has already liked the post, "unlike" (remove the like)
+                likes = max(0, thread.get('Likes', 0) - 1)  # Ensure likes never go below 0
+                liked_by.remove(user_id)  # Remove the user from the LikedBy list
+            else:
+                # If user hasn't liked the post, add a like
+                likes = thread.get('Likes', 0) + 1
+                liked_by.append(user_id)  # Add the current user to the LikedBy list
+
+            # Update the thread with the new like count and LikedBy list
+            threads_table.update_item(
+                Key={'ThreadID': thread_id},
+                UpdateExpression="set Likes=:l, LikedBy=:lb",
+                ExpressionAttributeValues={
+                    ':l': likes,
+                    ':lb': liked_by
+                }
+            )
+            return JsonResponse({'status': 'success', 'likes': likes, 'liked': user_id in liked_by})
+
+        else:
+            # Handle reply submission (non-AJAX form submission)
+            content = request.POST.get('content')
+
+            if content and user_id:
+                create_reply(thread_id=thread_id, user_id=user_id, content=content)
+                return redirect('thread_detail', thread_id=thread_id)
+
+    return render(request, 'thread_detail.html', {'thread': thread, 'posts': posts, 'liked': user_id in thread.get('LikedBy', [])})
+
+
+def new_thread_view(request):
+    print("PrePost")
+    if request.method == 'POST':
+        print("Post")
+        title = request.POST.get('title')
+        content = request.POST.get('content')
+        user_id = request.session.get('username')  # Assuming the user is logged in
+
+        # Debugging: Add print statements to confirm values
+        print(f"Title: {title}, Content: {content}, User: {user_id}")
+
+        if title and content and user_id:
+            # Call your DynamoDB function to create a new thread
+            create_thread(title=title, user_id=user_id, content=content)
+
+            # Redirect to the forums page after successfully creating the thread
+            return redirect('forum')
+        else:
+            # If something's missing, return the form with an error message
+            return render(request, 'new_thread.html', {'error': 'All fields are required.'})
+    
+    # If the request method is GET, simply show the form
+    return render(request, 'new_thread.html')
+
+
+def delete_post_view(request):
+    
+    if request.method == 'POST' and request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        try:
+            
+            data = json.loads(request.body.decode('utf-8'))
+            post_id = data.get('post_id')
+            thread_id = data.get('thread_id')  # Make sure you're getting thread_id too
+
+             # Log the post_id and thread_id for debugging
+            print("post_id: {post_id}, thread_id: {thread_id}")
+            print("Hello?")
+            
+            if not post_id or not thread_id:
+                return JsonResponse({'status': 'error', 'message': 'Post or Thread ID missing'}, status=400)
+
+            # Call the delete_post function to delete from DynamoDB
+            if delete_post(post_id, thread_id):
+                return JsonResponse({'status': 'success'})
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Failed to delete post'}, status=500)
+
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
+

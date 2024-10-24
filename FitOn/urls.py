@@ -25,6 +25,7 @@ from django.urls import path
 urlpatterns = [
     path('callback/', views.callback_google_fit, name='callback_google_fit'),
     path('authorize/', views.authorize_google_fit, name='authorize_google_fit'),
+    path('', views.login, name='landing'),
     path('admin/', admin.site.urls),
     path('signup/', views.signup, name='signup'),
     path('home/', views.homepage, name='homepage'),
@@ -38,6 +39,12 @@ urlpatterns = [
     path('reset-password/complete/', views.password_reset_complete, name='password_reset_complete'),
     path('profile/', views.profile_view, name='profile'),
     path('upload_profile_picture/', views.upload_profile_picture, name='upload_profile_picture'),
+    path('fitness_trainer_application_view/', views.fitness_trainer_application_view, name='fitness_trainer_application_view'),
+    path('fitness_trainer_applications_list/', views.fitness_trainer_applications_list_view, name='fitness_trainer_applications_list'),
+    path('forum/', views.forum_view, name='forum'),
+    path('forum/new/', views.new_thread_view, name='new_thread'),
+    path('forum/<str:thread_id>/', views.thread_detail_view, name='thread_detail'),
+    path('delete_post/', views.delete_post_view, name='delete_post'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     
 
