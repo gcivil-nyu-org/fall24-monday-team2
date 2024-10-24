@@ -12,6 +12,7 @@ venv/
 
 # Ignore any environment variable files (if needed)
 .env
+.venv
 
 # Ignore db.sqlite3 file
 db.sqlite3
@@ -20,5 +21,7 @@ db.sqlite3
 .DS_Store
 FitOn/.DS_Store
 
+# Ignore Credentials.json file
+FitOn/credentials.json
 # Ignore .ebextensions
 .ebextensions/
