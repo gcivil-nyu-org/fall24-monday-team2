@@ -14,7 +14,8 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from .views import signup, homepage, login, password_reset_complete, password_reset_confirm, password_reset_request, password_reset_done, profile_view, upload_profile_picture, deactivate_account, confirm_deactivation
+# from .views import signup, homepage, login, password_reset_complete, password_reset_confirm, password_reset_request, password_reset_done, profile_view, upload_profile_picture, deactivate_account, confirm_deactivation
+from . import views
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -22,19 +23,21 @@ from django.contrib.auth import views as auth_views
 from django.urls import path
 
 urlpatterns = [
+    path('callback/', views.callback_google_fit, name='callback_google_fit'),
+    path('authorize/', views.authorize_google_fit, name='authorize_google_fit'),
     path('admin/', admin.site.urls),
-    path('signup/', signup, name='signup'),
-    path('home/', homepage, name='homepage'),
-    path('login/', login, name='login'),
-    path('deactivate/', deactivate_account, name='deactivate_account'),
-    path('deactivate/confirm/', confirm_deactivation, name='confirm_deactivation'),
-    path('logout/', login, name='logout'),
-    path('reset-password/', password_reset_request, name='password_reset_request'),
-    path('reset-password/<str:user_id>/<str:token>/', password_reset_confirm, name='password_reset_confirm'),
-    path('reset-password/done/', password_reset_done, name='password_reset_done'),
-    path('reset-password/complete/', password_reset_complete, name='password_reset_complete'),
-    path('profile/', profile_view, name='profile'),
-    path('upload_profile_picture/', upload_profile_picture, name='upload_profile_picture'),
+    path('signup/', views.signup, name='signup'),
+    path('home/', views.homepage, name='homepage'),
+    path('login/', views.login, name='login'),
+    path('deactivate/', views.deactivate_account, name='deactivate_account'),
+    path('deactivate/confirm/', views.confirm_deactivation, name='confirm_deactivation'),
+    path('logout/', views.login, name='logout'),
+    path('reset-password/', views.password_reset_request, name='password_reset_request'),
+    path('reset-password/<str:user_id>/<str:token>/', views.password_reset_confirm, name='password_reset_confirm'),
+    path('reset-password/done/', views.password_reset_done, name='password_reset_done'),
+    path('reset-password/complete/', views.password_reset_complete, name='password_reset_complete'),
+    path('profile/', views.profile_view, name='profile'),
+    path('upload_profile_picture/', views.upload_profile_picture, name='upload_profile_picture'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     
 

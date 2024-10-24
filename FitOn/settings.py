@@ -12,9 +12,23 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+import boto3
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+
+def get_secrets():
+    client = boto3.client('secretsmanager')
+    response = client.get_secret_value(
+        SecretId='googleFit_credentials'
+    )
+    print(response)
+    return response['GOOGLEFIT_CLIENT_ID'],response['GOOGLEFIT_CLIENT_SECRET']
+
+
 
 
 # Quick-start development settings - unsuitable for production
@@ -24,9 +38,43 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-iqw@@a4osoerv=_))5ipw&kthcyr@v55xwz#=sse!13()+s#l_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
+
+SCOPES = [
+    'https://www.googleapis.com/auth/fitness.activity.read', 
+    'https://www.googleapis.com/auth/fitness.body.read', 
+    'https://www.googleapis.com/auth/fitness.heart_rate.read', 
+    'https://www.googleapis.com/auth/fitness.sleep.read',
+    'https://www.googleapis.com/auth/fitness.blood_glucose.read',
+    'https://www.googleapis.com/auth/fitness.blood_pressure.read',
+    'https://www.googleapis.com/auth/fitness.body_temperature.read',
+    'https://www.googleapis.com/auth/fitness.location.read',
+    'https://www.googleapis.com/auth/fitness.nutrition.read',
+    'https://www.googleapis.com/auth/fitness.oxygen_saturation.read',
+    'https://www.googleapis.com/auth/fitness.reproductive_health.read'
+]
+
+GOOGLEFIT_PROJECT_ID = "dulcet-coast-387705"
+GOOGLEFIT_TOKEN_URI = "https://accounts.google.com/o/oauth2/token"
+GOOGLEFIT_CLIENT_ID = get_secrets[0]
+GOOGLEFIT_CLIENT_SECRET = get_secrets[1]
+
+BASE_URL = "http://127.0.0.1:8000" if DEBUG else "http://fiton-env.eba-ne2cfzpm.us-west-2.elasticbeanstalk.com"
+REDIRECT_URI = os.getenv("REDIRECT_URL", BASE_URL + "/callback/")
+
+GOOGLEFIT_CLIENT_CONFIG = {
+    'web': {
+        'client_id': GOOGLEFIT_CLIENT_ID,
+        'project_id': GOOGLEFIT_PROJECT_ID,
+        'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
+        'token_uri': 'https://oauth2.googleapis.com/token',
+        'client_secret': GOOGLEFIT_CLIENT_SECRET,
+        'redirect_uris': [REDIRECT_URI]
+    }
+}
+
 
 
 # Application definition
