@@ -24,122 +24,11 @@
                     </div>
                 </div>             
 
-<<<<<<< HEAD
-                    <!-- Email -->
-                    <div class="form-group">
-                        <label for="email">Email</label>
-                        {{ form.email }}
-                    </div>
-                    
-                    <!-- Gender and Date of Birth -->
-                    <div class="form-group">
-                        <div class="gender-dob-container">
-                            <div class="gender-container">
-                                <label for="gender">Gender</label>
-                                {{ form.gender }}  <!-- Gender field -->
-                            </div>
-                            <div class="dob-container">
-                                <label for="date_of_birth">Date of Birth</label>
-                                {{ form.date_of_birth }}  <!-- Date of Birth field -->
-                            </div>
-                        </div>
-                        {% if form.gender.errors %}
-                            <span class="error">{{ form.gender.errors }}</span>
-                        {% endif %}
-                        {% if form.date_of_birth.errors %}
-                            <span class="error">{{ form.date_of_birth.errors }}</span>
-                        {% endif %}
-                    </div>
-
-                    <!-- Phone Number with Country Code -->
-                    <div class="form-group">
-                        <label for="phone_number">Phone Number</label>
-                        <div class="phone-number-container">
-                            <div class="country-code-container">
-                                {{ form.country_code }}  <!-- Country code field -->
-                            </div>
-                            <div class="phone-number-input-container">
-                                {{ form.phone_number }}  <!-- Phone number field -->
-                            </div>
-                        </div>
-                        {% if form.phone_number.errors %}
-                            <span class="error">{{ form.phone_number.errors }}</span>
-                        {% endif %}
-                    </div>
-
-                    <!-- Address -->
-                    <div class="form-group">
-                        <label for="address">Address</label>
-                        {{ form.address }}
-                        {% if form.address.errors %}
-                            <span class="error">{{ form.address.errors }}</span>
-                        {% endif %}
-                    </div>
-
-                    <!-- Bio -->
-                    <div class="form-group">
-                        <label for="bio">Bio</label>
-                        {{ form.bio }}
-                        {% if form.bio.errors %}
-                            <span class="error">{{ form.bio.errors }}</span>
-                        {% endif %}
-                    </div>
-                    
-                    <!-- Submit and Deactivate Buttons -->
-                    <div class="button-container">
-                        <button type="submit" class="submit-button">
-                            Update Profile
-                        </button>
-                    </div>
-
-                    <!-- Google Sign-in Button (New Addition) -->
-                    <div class="button-container">
-                        <button class='btn btn-success'>
-                            <a href="{% url 'authorize_google_fit' %}" style="color: white;">
-                                Sign In using Google
-                            </a>
-                        </button>
-                    </div>
-                </form>
-            </div>
-
-
-            <div class="button-container">
-                <!-- Button to trigger the modal -->
-                <button id="deactivateBtn" class="deactivate-button" type="button">Deactivate Account</button>
-
-                <!-- Confirmation Modal -->
-                <div id="myModal" class="modal">
-                    <div class="modal-content">
-                        <h3>Are you sure you want to deactivate your account?</h3>
-                        <p>This action cannot be undone.</p>
-
-                        <!-- Confirm and Cancel buttons inside the modal -->
-                        <form method="POST" action="{% url 'confirm_deactivation' %}">
-                            {% csrf_token %}
-                            <button type="submit" class="button-confirm">Yes, Deactivate</button>
-                        </form>
-                        <button id="cancelBtn" class="button-cancel">Cancel</button>
-                    </div>
-                </div>
-
-                <!-- Success Modal -->
-                <div id="successModal" class="modal">
-                    <div class="modal-content">
-                        <h3>Your account has been successfully deactivated.</h3>
-                        <button id="okBtn" class="button-ok-btn">OK</button>
-                    </div>
-                </div>
-
-                <!-- Check if the deactivation was successful and display the success modal if true -->
-                <input type="hidden" id="deactivationSuccess" value="{{ deactivation_success }}">
-=======
                 {% if user %}
                     <h1>{{ user.username }}</h1>
                 {% else %}
                     <h1>Guest</h1>
                 {% endif %}
->>>>>>> main
             </div>
         </div>
 
@@ -221,6 +110,15 @@
                 <div class="button-container">
                     <button type="submit" class="submit-button">
                         Update Profile
+                    </button>
+                </div>
+
+                <!-- Google Sign-in Button (New Addition) -->
+                <div class="button-container">
+                    <button class='btn btn-success'>
+                        <a href="{% url 'authorize_google_fit' %}" style="color: white;">
+                            Sign In using Google
+                        </a>
                     </button>
                 </div>
             </form>
@@ -367,4 +265,3 @@
     </script>
 
 {% endblock %}
-
