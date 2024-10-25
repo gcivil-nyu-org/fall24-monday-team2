@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 from datetime import timedelta
 import boto3
-import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -28,8 +27,6 @@ SECRET_KEY = 'django-insecure-iqw@@a4osoerv=_))5ipw&kthcyr@v55xwz#=sse!13()+s#l_
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
-
-ALLOWED_HOSTS = ['*']
 
 SCOPES = [
     'https://www.googleapis.com/auth/fitness.activity.read', 
