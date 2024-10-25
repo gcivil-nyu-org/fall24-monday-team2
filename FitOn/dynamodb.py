@@ -1,5 +1,5 @@
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Key, Attr
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.files.storage import default_storage
@@ -480,4 +480,77 @@ def delete_post(post_id, thread_id):
     except Exception as e:
         print("Error deleting post: {e}")
         return False
+    
+def fetch_filtered_threads(username='', thread_type='all', start_date='', end_date='', search_text=''):
+    # Start building the filter expression
+    filter_expression = Attr('ThreadID').exists()  # A base filter that always evaluates to true (returns all)
+
+    # Apply username filter if provided
+    if username:
+        filter_expression &= Attr('UserID').eq(username)
+
+    # Apply date range filter if provided
+    if start_date:
+        start_date_dt = datetime.strptime(start_date, '%Y-%m-%d').isoformat()
+        filter_expression &= Attr('CreatedAt').gte(start_date_dt)
+
+    if end_date:
+        end_date_dt = datetime.strptime(end_date, '%Y-%m-%d').isoformat()
+        filter_expression &= Attr('CreatedAt').lte(end_date_dt)
+
+    # Apply search text filter if provided (checks both thread titles and content)
+    if search_text:
+        filter_expression &= (Attr('Title').contains(search_text) | Attr('Content').contains(search_text))
+
+    # Apply type filter (thread/reply) if provided
+    if thread_type == 'thread':
+        filter_expression &= Attr('ReplyCount').eq(0)  # Assuming threads with 0 replies are initial posts
+    elif thread_type == 'reply':
+        filter_expression &= Attr('ReplyCount').gt(0)  # Show threads with replies
+
+    # Scan the DynamoDB table with the filter expression
+    response = threads_table.scan(
+        FilterExpression=filter_expression
+    )
+
+    threads = response.get('Items', [])
+
+    # Process each thread (e.g., add reply count and last post info)
+    for thread in threads:
+        thread_created_at_str = thread.get('CreatedAt')
+        if thread_created_at_str:
+            thread['CreatedAt'] = datetime.fromisoformat(thread_created_at_str)
+
+        replies = fetch_posts_for_thread(thread['ThreadID'])
+        thread['ReplyCount'] = len(replies)
+
+        if replies:
+            latest_post = max(replies, key=lambda x: x['CreatedAt'])
+            last_post_time_str = latest_post['CreatedAt']
+            thread['LastPostUser'] = latest_post['UserID']
+            thread['LastPostTime'] = datetime.fromisoformat(last_post_time_str)
+        else:
+            thread['LastPostUser'] = 'No replies yet'
+            thread['LastPostTime'] = None
+
+    return threads
+
+def fetch_all_users():
+    # This will scan the threads table to get all unique users
+    response = threads_table.scan(
+        ProjectionExpression='UserID'  # Only fetch the UserID attribute
+    )
+    
+    threads = response.get('Items', [])
+    
+    # Set to store unique user IDs
+    unique_users = set()
+
+    for thread in threads:
+        user_id = thread.get('UserID')
+        if user_id:
+            unique_users.add(user_id)
+
+    # Return the list of unique user IDs
+    return [{'username': user} for user in unique_users]
 

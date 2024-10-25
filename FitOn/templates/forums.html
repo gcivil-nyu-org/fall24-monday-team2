@@ -17,7 +17,43 @@
         <h2>Forum Threads</h2>
         <a href="{% url 'new_thread' %}" class="new-thread-btn">New Thread</a>
     </div>
-    
+
+    <!-- Filters Section -->
+    <div class="forum-filters">
+        <form method="GET" action="{% url 'forum' %}">
+            <!-- Filter by username (dropdown) -->
+            <label for="username">Filter by User:</label>
+            <select id="username" name="username">
+                <option value="">All Users</option>
+                {% for user in users %}
+                    <option value="{{ user.username }}">{{ user.username }}</option>
+                {% endfor %}
+            </select>
+
+            <!-- Filter by thread or reply -->
+            <label for="type">Filter by Type:</label>
+            <select id="type" name="type">
+                <option value="all">All</option>
+                <option value="thread">Thread</option>
+                <option value="reply">Reply</option>
+            </select>
+
+            <!-- Filter by date range -->
+            <label for="start-date">From:</label>
+            <input type="date" id="start-date" name="start_date">
+
+            <label for="end-date">To:</label>
+            <input type="date" id="end-date" name="end_date">
+
+            <!-- Filter by phrase or text -->
+            <label for="search">Search by Text:</label>
+            <input type="text" id="search" name="search" placeholder="Enter keyword...">
+
+            <!-- Submit button for filters -->
+            <button type="submit" class="filter-btn">Apply Filters</button>
+        </form>
+    </div>
+
     <div class="forum-table">
         <table>
             <thead>
@@ -27,25 +63,16 @@
                     <th>Replies</th>
                     <th>Thread Created</th>
                     <th>Last Post</th>
-                    <th>Likes</th>  <!-- Column for Likes -->
+                    <th>Likes</th>
                 </tr>
             </thead>
             <tbody>
                 {% for thread in threads %}
                 <tr>
-                    <!-- Thread title with a link to the thread detail page -->
                     <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title }}</a></td>
-                    
-                    <!-- Thread author (UserID) -->
                     <td>{{ thread.UserID }}</td>
-                    
-                    <!-- Reply count -->
                     <td>{{ thread.ReplyCount }}</td>
-                    
-                    <!-- Thread creation date -->
                     <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td>
-                    
-                    <!-- Last post details -->
                     <td>
                         {% if thread.LastPostTime %}
                             User: {{ thread.LastPostUser }}<br>
@@ -54,8 +81,6 @@
                             No replies yet
                         {% endif %}
                     </td>
-
-                    <!-- Number of Likes for the thread -->
                     <td>{{ thread.Likes }} Likes</td>
                 </tr>
                 {% endfor %}

@@ -22,6 +22,8 @@ from .dynamodb import (
     update_user,
     update_user_password,
     upload_profile_picture,
+    fetch_filtered_threads,
+    fetch_all_users
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -458,4 +460,23 @@ def delete_post_view(request):
         except Exception as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
     return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
+
+def forum_view(request):
+    # Get filter inputs from the request's GET parameters
+    username = request.GET.get('username', '')  # Username filter
+    thread_type = request.GET.get('type', 'all')  # Thread or Reply filter
+    start_date = request.GET.get('start_date', '')  # Start date filter
+    end_date = request.GET.get('end_date', '')  # End date filter
+    search_text = request.GET.get('search', '')  # Search text filter
+
+    # Fetch filtered threads based on the inputs
+    threads = fetch_filtered_threads(username=username, thread_type=thread_type, 
+                                     start_date=start_date, end_date=end_date, 
+                                     search_text=search_text)
+
+    # Fetch all users for the dropdown filter
+    users = fetch_all_users()  # Assuming you have a function to fetch users who posted threads/replies
+
+    return render(request, 'forums.html', {'threads': threads, 'users': users})
+
 
