@@ -116,16 +116,16 @@ WSGI_APPLICATION = 'FitOn.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
+    }
+}
 
-SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
-DYNAMODB_SESSIONS_TABLE_NAME = 'django-user-sessions'
-SESSION_SAVE_EVERY_REQUEST = True
+# SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
+# DYNAMODB_SESSIONS_TABLE_NAME = 'django-user-sessions'
+# SESSION_SAVE_EVERY_REQUEST = True
 
 
 # Password validation

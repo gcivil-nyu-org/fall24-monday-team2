@@ -18,7 +18,7 @@ credentials.json
 
 
 # Ignore db.sqlite3 file
-db.sqlite3
+# db.sqlite3
 
 # Ignore .DS_Store folder/file
 .DS_Store
