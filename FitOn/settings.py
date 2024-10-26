@@ -196,4 +196,7 @@ EMAIL_HOST_USER = 'fiton.notifications@gmail.com'
 EMAIL_HOST_PASSWORD = 'usfb imrp rhyq npif'
 
 os.environ['OAUTHLIB_INSECURE_TRANSPORT']='1'
+#For google redirection
+SECURE_SSL_REDIRECT = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
