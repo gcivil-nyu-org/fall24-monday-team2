@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def get_secrets():
-    client = boto3.client('secretsmanager')
+    client = boto3.client('secretsmanager',region_name='us-west-2')
     response = client.get_secret_value(
         SecretId='googleFit_credentials'
     )
