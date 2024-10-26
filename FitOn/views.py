@@ -330,7 +330,7 @@ def authorize_google_fit(request):
         # else:
         print(settings.GOOGLEFIT_CLIENT_CONFIG)
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
-        flow.redirect_uri = request.build_absolute_uri(reverse('user:callback_google_fit')).replace("http://", "https://")
+        flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit')).replace("http://", "https://")
 
         authorization_url, state = flow.authorization_url(
             access_type='offline',
@@ -353,7 +353,7 @@ def callback_google_fit(request):
         # else:
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES, state=state)
         
-        flow.redirect_uri = request.build_absolute_uri(reverse('user:callback_google_fit')).replace("http://", "https://")
+        flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit')).replace("http://", "https://")
 
         flow.fetch_token(authorization_response=request.build_absolute_uri())
         
