@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 import boto3
+import json
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -13,8 +14,10 @@ def get_secrets():
     response = client.get_secret_value(
         SecretId='googleFit_credentials'
     )
-    print(response)
-    return response['GOOGLEFIT_CLIENT_ID'],response['GOOGLEFIT_CLIENT_SECRET']
+    response=json.loads(response['SecretString'])
+    GOOGLEFIT_CLIENT_ID=response.get('GOOGLEFIT_CLIENT_ID')
+    GOOGLEFIT_CLIENT_SECRET=response.get('GOOGLEFIT_CLIENT_SECRET')
+    return (GOOGLEFIT_CLIENT_ID,GOOGLEFIT_CLIENT_SECRET)
 
 
 
@@ -44,10 +47,12 @@ SCOPES = [
 
 GOOGLEFIT_PROJECT_ID = "dulcet-coast-387705"
 GOOGLEFIT_TOKEN_URI = "https://accounts.google.com/o/oauth2/token"
-GOOGLEFIT_CLIENT_ID = get_secrets[0]
-GOOGLEFIT_CLIENT_SECRET = get_secrets[1]
+GOOGLEFIT_CLIENT_ID = get_secrets()[0]
+GOOGLEFIT_CLIENT_SECRET = get_secrets()[1]
 
-BASE_URL = "http://127.0.0.1:8000" if DEBUG else "http://fiton-env.eba-ne2cfzpm.us-west-2.elasticbeanstalk.com"
+# BASE_URL = "http://127.0.0.1:8000" if DEBUG else "http://fiton-dev.us-west-2.elasticbeanstalk.com"
+BASE_URL = "http://fiton-dev.us-west-2.elasticbeanstalk.com"
+
 REDIRECT_URI = os.getenv("REDIRECT_URL", BASE_URL + "/callback/")
 
 GOOGLEFIT_CLIENT_CONFIG = {
