@@ -365,12 +365,17 @@ def callback_google_fit(request):
             'scopes': credentials.scopes
         }
 
+        # Set a success message
+        messages.success(request, "Signed in Successfully")
+
         # Set login_success to True for successful login
         login_success = True
         return render(request, 'profile.html', {'login_success': login_success})
 
     # In case of failure or missing state, redirect to a fallback page or profile without login_success
-    return redirect('profile')
+    # Handle invalid state
+    messages.error(request, "Sign-in failed. Please try again.")
+    return redirect('homepage')
 
 def fitness_trainer_application_view(request):
     user_id = request.session.get('user_id')

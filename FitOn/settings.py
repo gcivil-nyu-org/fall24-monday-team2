@@ -29,7 +29,7 @@ def get_secrets():
 SECRET_KEY = 'django-insecure-iqw@@a4osoerv=_))5ipw&kthcyr@v55xwz#=sse!13()+s#l_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 SCOPES = [
     'https://www.googleapis.com/auth/fitness.activity.read', 
