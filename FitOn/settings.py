@@ -51,7 +51,7 @@ GOOGLEFIT_CLIENT_ID = get_secrets()[0]
 GOOGLEFIT_CLIENT_SECRET = get_secrets()[1]
 
 # BASE_URL = "http://127.0.0.1:8000" if DEBUG else "http://fiton-dev.us-west-2.elasticbeanstalk.com"
-BASE_URL = "http://fiton-dev.us-west-2.elasticbeanstalk.com"
+BASE_URL = "fiton-dev-without-template.us-west-2.elasticbeanstalk.com"
 
 REDIRECT_URI = os.getenv("REDIRECT_URL", BASE_URL + "/callback/")
 
@@ -116,15 +116,16 @@ WSGI_APPLICATION = 'FitOn.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
-# SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
-# SESSION_SAVE_EVERY_REQUEST = True
+SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
+DYNAMODB_SESSIONS_TABLE_NAME = 'django-user-sessions'
+SESSION_SAVE_EVERY_REQUEST = True
 
 
 # Password validation
@@ -193,4 +194,6 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'fiton.notifications@gmail.com'
 EMAIL_HOST_PASSWORD = 'usfb imrp rhyq npif'
+
+os.environ['OAUTHLIB_INSECURE_TRANSPORT']='1'
 
