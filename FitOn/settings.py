@@ -29,7 +29,7 @@ def get_secrets():
 SECRET_KEY = 'django-insecure-iqw@@a4osoerv=_))5ipw&kthcyr@v55xwz#=sse!13()+s#l_'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 SCOPES = [
     'https://www.googleapis.com/auth/fitness.activity.read', 
@@ -50,8 +50,8 @@ GOOGLEFIT_TOKEN_URI = "https://accounts.google.com/o/oauth2/token"
 GOOGLEFIT_CLIENT_ID = get_secrets()[0]
 GOOGLEFIT_CLIENT_SECRET = get_secrets()[1]
 
-# BASE_URL = "http://127.0.0.1:8000" if DEBUG else "http://fiton-dev.us-west-2.elasticbeanstalk.com"
-BASE_URL = "fiton-dev-without-template.us-west-2.elasticbeanstalk.com"
+BASE_URL = "http://127.0.0.1:8000" if DEBUG else "http://fiton-dev-without-template.us-west-2.elasticbeanstalk.com"
+# BASE_URL = "fiton-dev-without-template.us-west-2.elasticbeanstalk.com"
 
 REDIRECT_URI = os.getenv("REDIRECT_URL", BASE_URL + "/callback/")
 
