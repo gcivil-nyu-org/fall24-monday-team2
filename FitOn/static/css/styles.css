@@ -460,3 +460,8 @@ footer {
     color: white;
     border: none;
 }
+
+/* Green background for successful login */
+.submit-button.success {
+    background-color: #28a745; /* Green color */
+}

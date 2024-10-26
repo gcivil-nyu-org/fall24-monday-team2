@@ -113,10 +113,9 @@
                     </button>
                 </div>
 
-                <!-- Google Sign-in Button (New Addition) -->
                 <div class="button-container">
-                    <button class='btn btn-success'>
-                        <a href="{% url 'authorize_google_fit' %}" style="color: white;">
+                    <button id="google-sign-in" class="submit-button">
+                        <a href="{% url 'authorize_google_fit' %}" style="color: white; text-decoration: none;">
                             Sign In using Google
                         </a>
                     </button>
@@ -182,7 +181,6 @@
             }
             return cookieValue;
         }
-        
 
         // Function to redirect to the fitness trainer application view
         function redirectToFitnessTrainerApplication() {
@@ -227,6 +225,8 @@
                 });
             });
         });
+
+        
 
         // Get the modal elements
         var modal = document.getElementById("myModal");

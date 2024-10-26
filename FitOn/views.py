@@ -325,30 +325,35 @@ def authorize_google_fit(request):
     credentials = request.session.get('google_fit_credentials')
 
     if not credentials or credentials.expired:
-        if settings.DEBUG == True:
-            flow = Flow.from_client_secrets_file('credentials.json', SCOPES)
-        else:
-            flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
+        # if settings.DEBUG == True:
+        #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES)
+        # else:
+        print(settings.GOOGLEFIT_CLIENT_CONFIG)
+        flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
         flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit'))
         authorization_url, state = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true'
         )
+        # Debugging print statements
+        print("Authorization URL:", authorization_url)
+        print("State:", state)
         
         request.session['google_fit_state'] = state
-
-    return redirect(authorization_url)
+        return redirect(authorization_url)
+    return redirect('profile')
 
 def callback_google_fit(request):
-    state = request.session['google_fit_state']
+    state = request.session.get('google_fit_state')
     
     if state:
-        if settings.DEBUG == True:
-            flow = Flow.from_client_secrets_file('credentials.json', SCOPES, state=state)
-        else:
-            flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES, state=state)
+        # if settings.DEBUG:
+        #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES, state=state)
+        # else:
+        flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES, state=state)
+        
         flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit'))
-        flow.fetch_token(authorization_response = request.build_absolute_uri())
+        flow.fetch_token(authorization_response=request.build_absolute_uri())
         
         credentials = flow.credentials
         request.session['credentials'] = {
@@ -359,7 +364,13 @@ def callback_google_fit(request):
             'client_secret': credentials.client_secret,
             'scopes': credentials.scopes
         }
-    return redirect(reverse("metrics:get_metric_data"))
+
+        # Set login_success to True for successful login
+        login_success = True
+        return render(request, 'profile.html', {'login_success': login_success})
+
+    # In case of failure or missing state, redirect to a fallback page or profile without login_success
+    return redirect('profile')
 
 def fitness_trainer_application_view(request):
     user_id = request.session.get('user_id')
