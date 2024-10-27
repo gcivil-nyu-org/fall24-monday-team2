@@ -10,8 +10,8 @@ from datetime import datetime
 
 
 # Connect to DynamoDB
-dynamodb = boto3.resource('dynamodb', region_name=settings.AWS_S3_REGION_NAME)
-s3_client = boto3.client('s3', region_name=settings.AWS_S3_REGION_NAME)
+dynamodb = boto3.resource('dynamodb', region_name='us-west-2')
+s3_client = boto3.client('s3', region_name='us-west-2')
 
 users_table = dynamodb.Table('Users')
 threads_table = dynamodb.Table('ForumThreads')

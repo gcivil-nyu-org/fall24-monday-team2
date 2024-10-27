@@ -53,10 +53,25 @@ from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_encode
 import os
 import uuid, ssl
+from google_auth_oauthlib.flow import Flow
 from django.contrib.auth.decorators import login_required
 from .dynamodb import create_thread, threads_table, delete_post, posts_table
 import json
 from django.http import HttpResponse
+
+SCOPES = [
+    'https://www.googleapis.com/auth/fitness.activity.read', 
+    'https://www.googleapis.com/auth/fitness.body.read', 
+    'https://www.googleapis.com/auth/fitness.heart_rate.read', 
+    'https://www.googleapis.com/auth/fitness.sleep.read',
+    'https://www.googleapis.com/auth/fitness.blood_glucose.read',
+    'https://www.googleapis.com/auth/fitness.blood_pressure.read',
+    'https://www.googleapis.com/auth/fitness.body_temperature.read',
+    'https://www.googleapis.com/auth/fitness.location.read',
+    'https://www.googleapis.com/auth/fitness.nutrition.read',
+    'https://www.googleapis.com/auth/fitness.oxygen_saturation.read',
+    'https://www.googleapis.com/auth/fitness.reproductive_health.read'
+]
 
 def homepage(request):
     username = request.session.get('username', 'Guest')
@@ -307,6 +322,81 @@ def confirm_deactivation(request):
     else:
         # Redirect to the deactivate page if the request method is not POST
         return redirect('deactivate_account')
+
+def authorize_google_fit(request):
+    credentials = request.session.get('google_fit_credentials')
+    print("inside auth")
+
+
+    if not credentials or credentials.expired:
+        # if settings.DEBUG == True:
+        #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES)
+        # else:
+        print(settings.GOOGLEFIT_CLIENT_CONFIG)
+        flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
+        flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit'))
+        print("Redirected URI: ",flow.redirect_uri)
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true'
+        ) 
+        # Debugging print statements
+        print("Authorization URL:", authorization_url)
+        print("State:", state)
+        
+        request.session['google_fit_state'] = state
+        return redirect(authorization_url)
+    return redirect('profile')
+
+def callback_google_fit(request):
+    user_id = request.session.get('user_id')
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
+    state = request.session.get('google_fit_state')        
+    if state:
+        # if settings.DEBUG:
+        #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES, state=state)
+        # else:
+        print("inside calback")
+
+        flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES, state=state)
+        print("flow=",flow)
+        flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit'))
+        flow.fetch_token(authorization_response=request.build_absolute_uri())
+        
+        credentials = flow.credentials
+        request.session['credentials'] = {
+            'token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+
+        form = ProfileForm(initial={
+            'name': user.get('name', ''),
+            'date_of_birth': user.get('date_of_birth', ''),
+            'email': user.get('email', ''),
+            'gender': user.get('gender', ''),
+            'phone_number': user.get('phone_number', ''),
+            'address': user.get('address', ''),
+            'bio': user.get('bio', ''),
+            'country_code': user.get('country_code', '')  # Default country code
+        })
+
+        # Set a success message
+        messages.success(request, "Signed in Successfully")
+
+        # Set login_success to True for successful login
+        login_success = True
+        return render(request, 'profile.html', {'login_success': login_success, 'form': form, 'user': user})
+
+    # In case of failure or missing state, redirect to a fallback page or profile without login_success
+    # Handle invalid state
+    messages.error(request, "Sign-in failed. Please try again.")
+    return redirect('homepage')
 
 def fitness_trainer_application_view(request):
     user_id = request.session.get('user_id')

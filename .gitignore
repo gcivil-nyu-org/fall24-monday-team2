@@ -16,6 +16,7 @@ credentials.json
 # Ignore any environment variable files (if needed)
 .env
 
+
 # Ignore db.sqlite3 file
 # db.sqlite3
 
