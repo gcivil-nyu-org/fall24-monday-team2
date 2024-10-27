@@ -323,6 +323,8 @@ def confirm_deactivation(request):
 
 def authorize_google_fit(request):
     credentials = request.session.get('google_fit_credentials')
+    print("inside auth")
+
 
     if not credentials or credentials.expired:
         # if settings.DEBUG == True:
@@ -330,12 +332,12 @@ def authorize_google_fit(request):
         # else:
         print(settings.GOOGLEFIT_CLIENT_CONFIG)
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
-        flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit')).replace("http://", "https://")
-
+        flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit'))
+        print("Redirected URI: ",flow.redirect_uri)
         authorization_url, state = flow.authorization_url(
             access_type='offline',
             include_granted_scopes='true'
-        )
+        ) 
         # Debugging print statements
         print("Authorization URL:", authorization_url)
         print("State:", state)
@@ -345,16 +347,20 @@ def authorize_google_fit(request):
     return redirect('profile')
 
 def callback_google_fit(request):
-    state = request.session.get('google_fit_state')
-    
+    user_id = request.session.get('user_id')
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
+    state = request.session.get('google_fit_state')        
     if state:
         # if settings.DEBUG:
         #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES, state=state)
         # else:
-        flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES, state=state)
-        
-        flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit')).replace("http://", "https://")
+        print("inside calback")
 
+        flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES, state=state)
+        print("flow=",flow)
+        flow.redirect_uri = request.build_absolute_uri(reverse('callback_google_fit'))
         flow.fetch_token(authorization_response=request.build_absolute_uri())
         
         credentials = flow.credentials
@@ -367,12 +373,23 @@ def callback_google_fit(request):
             'scopes': credentials.scopes
         }
 
+        form = ProfileForm(initial={
+            'name': user.get('name', ''),
+            'date_of_birth': user.get('date_of_birth', ''),
+            'email': user.get('email', ''),
+            'gender': user.get('gender', ''),
+            'phone_number': user.get('phone_number', ''),
+            'address': user.get('address', ''),
+            'bio': user.get('bio', ''),
+            'country_code': user.get('country_code', '')  # Default country code
+        })
+
         # Set a success message
         messages.success(request, "Signed in Successfully")
 
         # Set login_success to True for successful login
         login_success = True
-        return render(request, 'profile.html', {'login_success': login_success})
+        return render(request, 'profile.html', {'login_success': login_success, 'form': form, 'user': user})
 
     # In case of failure or missing state, redirect to a fallback page or profile without login_success
     # Handle invalid state
