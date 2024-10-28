@@ -46,8 +46,8 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 
-from django.utils.encoding import force_bytes, force_str
 # from django.utils.html import strip_tags
+from django.utils.encoding import force_str, force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 import os
 import uuid
@@ -191,15 +191,19 @@ def password_reset_request(request):
                     if timezone.is_naive(last_request_dt):
                         last_request_dt = timezone.make_aware(last_request_dt)
                     time_since_last_request = timezone.now() - last_request_dt
+                reset_token = default_token_generator.make_token(user)
+                reset_url = request.build_absolute_uri(
+                    reverse('password_reset_confirm', args=[urlsafe_base64_encode(force_bytes(user.pk)), reset_token])
+                )
 
-                    if time_since_last_request < timezone.timedelta(minutes=2):
-                        countdown = 120 - time_since_last_request.seconds
-                        print(f"Countdown in effect: {countdown} seconds")  # Show countdown if applicable
-                        return render(
-                            request,
-                            "password_reset_request.html",
-                            {"form": form, "countdown": countdown},
-                        )
+                if time_since_last_request < timezone.timedelta(minutes=2):
+                    countdown = 120 - time_since_last_request.seconds
+                    print(f"Countdown in effect: {countdown} seconds")  # Show countdown if applicable
+                    return render(
+                        request,
+                        "password_reset_request.html",
+                        {"form": form, "countdown": countdown},
+                    )
 
                 update_reset_request_time(user.pk)
                 print("Reset request time updated.")  # Confirming update of reset time
