@@ -1,0 +1,32 @@
+dist: focal
+
+language: python
+python:
+- "3.11"
+
+
+install:
+  - pip install -r requirements.txt
+
+script:
+- black --check .
+- flake8 --max-line-length=150 --exclude=venv --ignore=E261,F821,W293,W503 .
+- coverage run manage.py test
+- env
+
+
+after_scripts:
+- coveralls
+
+deploy:
+  provider: elasticbeanstalk
+  access_key_id: $AWS_ID
+  secret_access_key: $AWS_KEY
+  region: us-west-2
+  app: fiton-fall2024
+  env: fiton-dev-without-template
+  bucket_name: elasticbeanstalk-us-west-2-225989339915
+  on:
+    repo: gcivil-nyu-org/fall24-monday-team2
+    branch: main
+  skip_cleanup: 'true'
