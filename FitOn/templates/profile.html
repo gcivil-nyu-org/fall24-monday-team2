@@ -112,6 +112,10 @@
                         Update Profile
                     </button>
                 </div>
+
+                <div class="button-container">
+                    <a href="{% url 'authorize_google_fit' %}" class="submit-button">Sign In using Google</a>
+                </div>
             </form>
         </div>
 
@@ -173,7 +177,6 @@
             }
             return cookieValue;
         }
-        
 
         // Function to redirect to the fitness trainer application view
         function redirectToFitnessTrainerApplication() {
@@ -219,6 +222,8 @@
             });
         });
 
+        
+
         // Get the modal elements
         var modal = document.getElementById("myModal");
         var successModal = document.getElementById("successModal");
@@ -256,4 +261,3 @@
     </script>
 
 {% endblock %}
-
