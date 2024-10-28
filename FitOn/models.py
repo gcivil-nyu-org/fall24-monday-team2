@@ -8,4 +8,4 @@ class PasswordResetRequest(models.Model):
     last_request_time = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        app_label = 'FitOn'
+        app_label = "FitOn"
