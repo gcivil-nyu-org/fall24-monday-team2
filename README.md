@@ -1,8 +1,8 @@
 # fall24-monday-team2
 
-[![Build Status](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2.svg?token=Ws8r5XrbQFzCJMCr9AX7&branch=forum_filter)](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2)
+[![Build Status](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2.svg?token=Ws8r5XrbQFzCJMCr9AX7&branch=develop)](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2)
 
-Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/fall24-monday-team2/badge.svg?branch=forum_filter)](https://coveralls.io/github/gcivil-nyu-org/fall24-monday-team2?branch=forum_filter)
+Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/fall24-monday-team2/badge.svg?branch=develop)](https://coveralls.io/github/gcivil-nyu-org/fall24-monday-team2?branch=develop)
 
 
 ## Team Members:
