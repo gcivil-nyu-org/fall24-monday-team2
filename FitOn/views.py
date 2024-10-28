@@ -1,18 +1,18 @@
 from django.shortcuts import render, redirect
 from .dynamodb import (
     add_fitness_trainer_application,
-    create_post,
+    # create_post,
     create_reply,
     create_thread,
     create_user,
     delete_user_by_username,
-    fetch_all_threads,
+    # fetch_all_threads,
     fetch_posts_for_thread,
-    fetch_thread,
+    # fetch_thread,
     get_fitness_trainer_applications,
     get_last_reset_request_time,
-    get_replies,
-    get_thread_details,
+    # get_replies,
+    # get_thread_details,
     get_user,
     get_user_by_email,
     get_user_by_uid,
@@ -33,31 +33,39 @@ from .forms import (
     SetNewPasswordForm,
     SignUpForm,
 )
-from .models import PasswordResetRequest
+
+# from .models import PasswordResetRequest
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
-from django.contrib.auth.models import User
+
+# from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import logout
 from django.contrib import messages
 from django.conf import settings
-from django.core.files.storage import FileSystemStorage
+
+# from django.core.files.storage import FileSystemStorage
 from django.core.mail import send_mail, get_connection
-from django.core.mail import EmailMultiAlternatives
+
+# from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.encoding import force_bytes
-from django.utils.html import strip_tags
-from django.utils.http import urlsafe_base64_encode
-import os
-import uuid, ssl
+
+# from django.utils.encoding import force_bytes
+# from django.utils.html import strip_tags
+# from django.utils.http import urlsafe_base64_encode
+# import os
+import uuid
+import ssl
 from google_auth_oauthlib.flow import Flow
-from django.contrib.auth.decorators import login_required
-from .dynamodb import create_thread, threads_table, delete_post, posts_table
+
+# from django.contrib.auth.decorators import login_required
+from .dynamodb import threads_table, delete_post
 import json
-from django.http import HttpResponse
+
+# from django.http import HttpResponse
 
 SCOPES = [
     "https://www.googleapis.com/auth/fitness.activity.read",
@@ -205,10 +213,10 @@ def password_reset_request(request):
                 )
 
                 return redirect("password_reset_done")
-            else:
-                error_message = (
-                    "The email you entered is not registered with an account."
-                )
+            # else:
+            #     error_message = (
+            #         "The email you entered is not registered with an account."
+            #     )
     else:
         form = PasswordResetForm()
     return render(
@@ -495,9 +503,9 @@ def fitness_trainer_applications_list_view(request):
 # -------------------------------
 
 
-def forum_view(request):
-    threads = fetch_all_threads()
-    return render(request, "forums.html", {"threads": threads})
+# def forum_view(request):
+#     threads = fetch_all_threads()
+#     return render(request, "forums.html", {"threads": threads})
 
 
 # View to display a single thread with its posts

@@ -1,8 +1,9 @@
 import boto3
-from boto3.dynamodb.conditions import Key, Attr
+from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import check_password, make_password
-from django.core.files.storage import default_storage
+from django.contrib.auth.hashers import make_password
+
+# from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.conf import settings
 import uuid
@@ -483,7 +484,7 @@ def delete_post(post_id, thread_id):
     Deletes a post from the DynamoDB posts table based on the post ID and thread ID.
     """
     try:
-        response = posts_table.delete_item(
+        posts_table.delete_item(
             Key={
                 "ThreadID": thread_id,  # Adjust this according to your table schema
                 "PostID": post_id,
@@ -491,7 +492,7 @@ def delete_post(post_id, thread_id):
         )
         return True
     except Exception as e:
-        print("Error deleting post: {e}")
+        print(f"Error deleting post: {e}")
         return False
 
 
