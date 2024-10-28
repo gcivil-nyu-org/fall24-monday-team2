@@ -46,6 +46,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_str, force_bytes
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.encoding import force_str, force_bytes
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 import os
 import uuid
 
@@ -200,12 +202,9 @@ def password_reset_confirm(request, user_id, token):
                 {"error_message": "The password reset link is invalid or has expired."},
             )
 
-    print("[DEBUG] Invalid user or token")
-    return render(
-        request,
-        "password_reset_invalid.html",
-        {"error_message": "The password reset link is invalid or has expired."},
-    )
+    return render(request, 'password_reset_invalid.html', {
+        'error_message': 'The password reset link is invalid or has expired.'
+    })
 
 
 def password_reset_complete(request):
