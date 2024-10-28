@@ -104,6 +104,7 @@ class ForumTests(TestCase):
     @classmethod
     def tearDownClass(cls):
         # Delete 'threads' and 'posts' tables after tests conclude
+        print("Deleting tables threads and posts...")
         cls.dynamodb.Table('threads').delete()
         cls.dynamodb.Table('posts').delete()
         
