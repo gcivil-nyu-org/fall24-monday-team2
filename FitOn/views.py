@@ -26,8 +26,8 @@ from django.core import mail
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.encoding import force_str
-from django.utils.http import urlsafe_base64_decode
+from django.utils.encoding import force_str, force_bytes
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 import os
 import uuid
 
@@ -92,7 +92,7 @@ def password_reset_request(request):
             if user:
                 reset_token = default_token_generator.make_token(user)
                 reset_url = request.build_absolute_uri(
-                    reverse('password_reset_confirm', args=[user.pk, reset_token])
+                    reverse('password_reset_confirm', args=[urlsafe_base64_encode(force_bytes(user.pk)), reset_token])
                 )
 
                 subject = 'Password Reset Requested'
@@ -126,16 +126,14 @@ def password_reset_confirm(request, user_id, token):
     try:
         user_id = force_str(urlsafe_base64_decode(user_id))  # Decode the user_id
         user = get_user_by_uid(user_id)  # Fetch user by UID
-        print(f"[DEBUG] Decoded User ID: {user_id}, Fetched User: {user}")
     except Exception as e:
-        print(f"[DEBUG] Error decoding UID: {e}")
         user = None
 
     if user:
         is_token_valid = default_token_generator.check_token(user, token)
-        print(f"[DEBUG] Token Valid: {is_token_valid}")
 
         if is_token_valid:
+            # Token is valid, proceed with password reset
             if request.method == 'POST':
                 form = SetNewPasswordForm(request.POST)
                 if form.is_valid():
@@ -153,8 +151,16 @@ def password_reset_confirm(request, user_id, token):
 
             return render(request, 'password_reset_confirm.html', {'form': form})
 
-    print("[DEBUG] Invalid user or token")
-    return render(request, 'password_reset_invalid.html')
+        else:
+            # If token is invalid or expired, render error message
+            return render(request, 'password_reset_invalid.html', {
+                'error_message': 'The password reset link is invalid or has expired.'
+            })
+
+    return render(request, 'password_reset_invalid.html', {
+        'error_message': 'The password reset link is invalid or has expired.'
+    })
+
 
 def password_reset_complete(request):
     return render(request, 'password_reset_complete.html')
