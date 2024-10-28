@@ -1,13 +1,14 @@
 import boto3
 from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.conf import settings
 import uuid
 from datetime import datetime
+import os
 
 
 # Connect to DynamoDB
@@ -22,18 +23,35 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 
-
 class MockUser:
     def __init__(self, user_data):
-        self.email = user_data.get("email")
-        self.username = user_data.get("username")
-        self.password = user_data.get("password")
-        self.is_active = True
-        self.last_login = None
-        self.pk = user_data.get("user_id")
+        if isinstance(user_data, dict):
+            self.user_id = user_data.get('user_id', None)
+            self.email = user_data.get('email', '')
+            self.username = user_data.get('username', '')
+            self.password = user_data.get('password', '')
+            self.date_of_birth = user_data.get('date_of_birth', '')
+            self.is_active = user_data.get('is_active', True)
+            self.last_login = user_data.get('last_login', None)
+            self.pk = self.user_id 
+        else:
+            self.user_id = None
+            self.email = ''
+            self.username = ''
+            self.password = ''
+            self.date_of_birth = ''
+            self.is_active = True
+            self.last_login = None
+            self.pk = None  
 
     def get_email_field_name(self):
-        return "email"
+        return 'email'
+
+    def get_username(self):
+        return self.username
+
+    def is_authenticated(self):
+        return True
 
 
 def get_user_by_username(username):
@@ -114,29 +132,35 @@ def delete_user_by_username(username):
 
 def get_user_by_email(email):
     try:
+        print(f"Attempting to fetch user with email: {email}")
         response = users_table.scan(
             FilterExpression="#e = :email",
             ExpressionAttributeNames={"#e": "email"},
             ExpressionAttributeValues={":email": email},
         )
         users = response.get("Items", [])
+        print(f"Response from DynamoDB: {response}")  # Debug: Show the full response
         if users:
+            print("User found:", users[0])  # Confirm user found
             return MockUser(users[0])
+        print("No user found with that email.")
         return None
     except Exception as e:
         print(f"Error querying DynamoDB for email '{email}': {e}")
         return None
-
-
+        
 def get_user_by_uid(uid):
     try:
-        response = users_table.get_item(Key={"user_id": uid})
-        return response.get("Item", None)
-    except Exception as e:
-        print(f"Error fetching user by UID: {e}")
+        # Fetch from DynamoDB table
+        response = users_table.get_item(Key={'user_id': uid})
+        user_data = response.get('Item', None)
+
+        if user_data:
+            return MockUser(user_data)
         return None
-
-
+    except Exception as e:
+        return None
+        
 def update_user_password(user_id, new_password):
     try:
         hashed_password = make_password(new_password)
@@ -168,10 +192,9 @@ def update_reset_request_time(user_id):
         response = password_reset_table.put_item(
             Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
         )
-        return response
+        print(f"Reset request time updated for user_id '{user_id}'.")
     except Exception as e:
         print(f"Error updating reset request time for user_id '{user_id}': {e}")
-    return None
 
 
 def get_user(user_id):

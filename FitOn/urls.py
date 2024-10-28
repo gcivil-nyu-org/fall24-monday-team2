@@ -40,7 +40,7 @@ urlpatterns = [
         "reset-password/", views.password_reset_request, name="password_reset_request"
     ),
     path(
-        "reset-password/<str:user_id>/<str:token>/",
+        "reset-password/<str:uidb64>/<str:token>/",
         views.password_reset_confirm,
         name="password_reset_confirm",
     ),
