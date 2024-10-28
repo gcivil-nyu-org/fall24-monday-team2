@@ -10,7 +10,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 def get_secrets():
-    client = boto3.client('secretsmanager',region_name='us-west-2')
+    client = boto3.client('secretsmanager',
+                          region_name='us-west-2',
+                          aws_access_key_id=os.getenv('AWS_ID'),
+                          aws_secret_access_key=os.getenv('AWS_KEY'))
     response = client.get_secret_value(
         SecretId='googleFit_credentials'
     )
