@@ -1,5 +1,5 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from django.test import TestCase, Client
 from django.urls import reverse
 # pip install moto
@@ -8,6 +8,9 @@ import boto3
 from .dynamodb import fetch_filtered_threads, fetch_all_users
 from .views import forum_view
 import time
+
+last_week_date = (datetime.now() - timedelta(days=7)).isoformat()
+another_date = (datetime.now() - timedelta(days=5)).isoformat()
 
 class ForumTests(TestCase):
     @classmethod
@@ -43,7 +46,7 @@ class ForumTests(TestCase):
                 'UserID': 'test_user',
                 'Title': 'Test Thread',
                 'Content': 'This is a test content',
-                'CreatedAt': datetime.now().isoformat(),
+                'CreatedAt': last_week_date,
                 'ReplyCount': 0
             }
         )
@@ -53,7 +56,7 @@ class ForumTests(TestCase):
                 'UserID': 'another_user',
                 'Title': 'Another Thread',
                 'Content': 'This is another test content',
-                'CreatedAt': datetime.now().isoformat(),
+                'CreatedAt': another_date,
                 'ReplyCount': 2
             }
         )
