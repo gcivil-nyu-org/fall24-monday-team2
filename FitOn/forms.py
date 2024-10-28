@@ -62,7 +62,6 @@ class SetNewPasswordForm(forms.Form):
 
         if new_password != confirm_password:
             raise forms.ValidationError("Passwords do not match.")
-
         return cleaned_data
 
 class ProfileForm(forms.Form):

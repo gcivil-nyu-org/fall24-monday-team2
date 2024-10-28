@@ -1,35 +1,17 @@
 from django.shortcuts import render, redirect
 from .dynamodb import (
-    add_fitness_trainer_application,
-    create_post,
-    create_reply,
-    create_thread,
-    create_user,
-    delete_user_by_username,
-    fetch_all_threads,
-    fetch_posts_for_thread,
-    fetch_thread,
-    get_fitness_trainer_applications,
-    get_last_reset_request_time,
-    get_replies,
-    get_thread_details,
-    get_user,
-    get_user_by_email,
-    get_user_by_uid,
-    get_user_by_username,
-    MockUser,
-    update_reset_request_time,
-    update_user,
-    update_user_password,
+    add_fitness_trainer_application, create_post, create_reply,
+    create_thread, create_user, delete_user_by_username,
+    fetch_all_threads, fetch_posts_for_thread, fetch_thread,
+    get_fitness_trainer_applications, get_last_reset_request_time,
+    get_replies, get_thread_details, get_user, get_user_by_email,
+    get_user_by_uid, get_user_by_username, MockUser,
+    update_reset_request_time, update_user, update_user_password,
     upload_profile_picture,
 )
 from .forms import (
-    FitnessTrainerApplicationForm,
-    LoginForm,
-    PasswordResetForm,
-    ProfileForm,
-    SetNewPasswordForm,
-    SignUpForm,
+    FitnessTrainerApplicationForm, LoginForm, PasswordResetForm,
+    ProfileForm, SetNewPasswordForm, SignUpForm,
 )
 from .models import PasswordResetRequest
 from datetime import timedelta
@@ -39,22 +21,15 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import logout
 from django.contrib import messages
 from django.conf import settings
-from django.core.files.storage import FileSystemStorage
-from django.core.mail import send_mail, get_connection
-from django.core.mail import EmailMultiAlternatives
-from django.http import JsonResponse
+from django.core.mail import send_mail
+from django.core import mail
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.encoding import force_bytes
-from django.utils.html import strip_tags
-from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 import os
-import uuid, ssl
-from django.contrib.auth.decorators import login_required
-from .dynamodb import create_thread, threads_table, delete_post, posts_table
-import json
-from django.http import HttpResponse
+import uuid
 
 def homepage(request):
     username = request.session.get('username', 'Guest')
@@ -62,24 +37,16 @@ def homepage(request):
 
 def login(request):
     error_message = None
-    
     if request.method == 'POST':
         form = LoginForm(request.POST)
         if form.is_valid():
             username = form.cleaned_data['username']
             password = form.cleaned_data['password']
-            
-            # Query DynamoDB for the user by username
             user = get_user_by_username(username)
-            
             if user:
-                # Get the hashed password from DynamoDB
                 stored_password = user['password']
                 user_id = user['user_id']
-                
-                # Verify the password using Django's check_password
                 if check_password(password, stored_password):
-                    # Set the session and redirect to the homepage
                     request.session['username'] = username
                     request.session['user_id'] = user_id
                     return redirect('homepage')
@@ -87,10 +54,8 @@ def login(request):
                     error_message = 'Invalid password. Please try again.'
             else:
                 error_message = 'User does not exist.'
-
     else:
         form = LoginForm()
-
     return render(request, 'login.html', {'form': form, 'error_message': error_message})
 
 def signup(request):
@@ -103,14 +68,8 @@ def signup(request):
             date_of_birth = form.cleaned_data['date_of_birth']
             gender = form.cleaned_data['gender']
             password = form.cleaned_data['password']
-            
-            # Hash the password before saving it
             hashed_password = make_password(password)
-            
-            # Create a unique user ID
             user_id = str(uuid.uuid4())
-            
-            # Sync data with DynamoDB
             if create_user(user_id, username, email, name, date_of_birth, gender, hashed_password):
                 request.session['username'] = username
                 request.session['user_id'] = user_id
@@ -118,89 +77,91 @@ def signup(request):
             else:
                 form.add_error(None, 'Error creating user in DynamoDB.')
     else:
-        form = SignUpForm()  # Return an empty form for the GET request
-
-    return render(request, 'signup.html', {'form': form})  # Ensure form is passed for both GET and POST
+        form = SignUpForm()
+    return render(request, 'signup.html', {'form': form})
 
 def password_reset_request(request):
-    countdown = None
+    error_message = None
 
     if request.method == 'POST':
         form = PasswordResetForm(request.POST)
         if form.is_valid():
             email = form.cleaned_data['email']
             user = get_user_by_email(email)
-            
+
             if user:
-                # Get last reset request time
-                last_request_time = get_last_reset_request_time(user.pk)
-                if last_request_time:
-                    last_request_dt = timezone.datetime.fromisoformat(last_request_time)
-                    if timezone.is_naive(last_request_dt):
-                        last_request_dt = timezone.make_aware(last_request_dt)
-                    
-                    time_since_last_request = timezone.now() - last_request_dt
-                    
-                    if time_since_last_request < timedelta(minutes=2):
-                        countdown = 120 - time_since_last_request.seconds
-                        return render(request, 'password_reset_request.html', {'form': form, 'countdown': countdown})
-                    
-                    # Update reset request time if time has passed
-                    update_reset_request_time(user.pk)
-                else:
-                    update_reset_request_time(user.pk)
-                
-                # Send reset email
                 reset_token = default_token_generator.make_token(user)
                 reset_url = request.build_absolute_uri(
                     reverse('password_reset_confirm', args=[user.pk, reset_token])
                 )
+
                 subject = 'Password Reset Requested'
-                email_context = {
-                    'username': user.username,
-                    'reset_url': reset_url
-                }
+                email_context = {'username': user.username, 'reset_url': reset_url}
                 html_message = render_to_string('password_reset_email.html', email_context)
 
-                # Create an unverified SSL context
-                unverified_ssl_context = ssl._create_unverified_context()
+                try:
+                    send_mail(
+                        subject, '', 'fiton.notifications@gmail.com', [email],
+                        html_message=html_message
+                    )
+                except Exception as e:
+                    error_message = f"There was an issue sending the email: {e}"
+                    return render(request, 'password_reset_request.html', {
+                        'form': form, 'error_message': error_message
+                    })
 
-                # Send the email with the unverified context
-                connection = get_connection(ssl_context=unverified_ssl_context)
-                send_mail(subject, '', 'fiton.notifications@gmail.com', [email], html_message=html_message, connection=connection)
-
+                update_reset_request_time(user.pk)
                 return redirect('password_reset_done')
             else:
                 error_message = 'The email you entered is not registered with an account.'
+
     else:
         form = PasswordResetForm()
-    return render(request, 'password_reset_request.html', {'form': form, 'countdown': countdown})
 
+    return render(request, 'password_reset_request.html', {
+        'form': form, 'error_message': error_message
+    })
 
 def password_reset_confirm(request, user_id, token):
-    user = MockUser(get_user_by_uid(user_id))
+    try:
+        user_id = force_str(urlsafe_base64_decode(user_id))  # Decode the user_id
+        user = get_user_by_uid(user_id)  # Fetch user by UID
+        print(f"[DEBUG] Decoded User ID: {user_id}, Fetched User: {user}")
+    except Exception as e:
+        print(f"[DEBUG] Error decoding UID: {e}")
+        user = None
 
-    if user and default_token_generator.check_token(user, token):
-        if request.method == 'POST':
-            form = SetNewPasswordForm(request.POST)
-            if form.is_valid():
-                new_password = form.cleaned_data['new_password']
-                
-                # Update the user's password in DynamoDB
-                update_user_password(user.pk, new_password)
-                return redirect('password_reset_complete')
-        else:
-            form = SetNewPasswordForm()
-        return render(request, 'password_reset_confirm.html', {'form': form})
-    else:
-        return render(request, 'password_reset_invalid.html')
-    
+    if user:
+        is_token_valid = default_token_generator.check_token(user, token)
+        print(f"[DEBUG] Token Valid: {is_token_valid}")
+
+        if is_token_valid:
+            if request.method == 'POST':
+                form = SetNewPasswordForm(request.POST)
+                if form.is_valid():
+                    new_password = form.cleaned_data['new_password']
+                    confirm_password = form.cleaned_data['confirm_password']
+
+                    if new_password == confirm_password:
+                        update_user_password(user.pk, new_password)
+                        messages.success(request, 'Your password has been successfully reset.')
+                        return redirect('password_reset_complete')
+                    else:
+                        form.add_error('confirm_password', 'Passwords do not match.')
+            else:
+                form = SetNewPasswordForm()
+
+            return render(request, 'password_reset_confirm.html', {'form': form})
+
+    print("[DEBUG] Invalid user or token")
+    return render(request, 'password_reset_invalid.html')
 
 def password_reset_complete(request):
     return render(request, 'password_reset_complete.html')
 
 def password_reset_done(request):
     return render(request, 'password_reset_done.html')
+
 
 def upload_profile_picture_view(request):
     user_id = request.session.get('user_id')  # Get the user ID from the session
