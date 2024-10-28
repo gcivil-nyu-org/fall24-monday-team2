@@ -36,4 +36,5 @@ FitOn/credentials.json
 !.elasticbeanstalk/*.global.yml
 =======
 !.elasticbeanstalk/*.global.yml
->>>>>>> 5e20de8 (update password testing)
+
+README.md
