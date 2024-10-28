@@ -1,14 +1,17 @@
 import boto3
 from boto3.dynamodb.conditions import Attr
+import boto3, uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 from django.contrib.auth.hashers import make_password, check_password
+from datetime import datetime, timezone
+from django.conf import settings
+
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.conf import settings
 import uuid
 from datetime import datetime
-import os
 
 
 # Connect to DynamoDB
@@ -45,7 +48,7 @@ class MockUser:
             self.pk = None  
 
     def get_email_field_name(self):
-        return 'email'
+        return "email"
 
     def get_username(self):
         return self.username
@@ -152,15 +155,16 @@ def get_user_by_email(email):
 def get_user_by_uid(uid):
     try:
         # Fetch from DynamoDB table
-        response = users_table.get_item(Key={'user_id': uid})
-        user_data = response.get('Item', None)
+        response = users_table.get_item(Key={"user_id": uid})
+        user_data = response.get("Item", None)
 
         if user_data:
             return MockUser(user_data)
         return None
     except Exception as e:
         return None
-        
+
+
 def update_user_password(user_id, new_password):
     try:
         hashed_password = make_password(new_password)
@@ -189,6 +193,11 @@ def get_last_reset_request_time(user_id):
 
 def update_reset_request_time(user_id):
     try:
+        if not user_id:
+            print("User ID is None. Cannot update reset request time.")
+            return None
+
+        # Insert a new entry or update the existing reset request time
         response = password_reset_table.put_item(
             Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
         )

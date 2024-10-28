@@ -1,19 +1,10 @@
 from django.shortcuts import render, redirect
 from .dynamodb import (
-    add_fitness_trainer_application, 
-    # create_post, 
-    create_reply,
-    create_thread, 
-    create_user, 
-    delete_user_by_username,
-    #fetch_all_threads, 
-    fetch_posts_for_thread, 
-    # fetch_thread,
-    get_fitness_trainer_applications,
-    get_last_reset_request_time,
-    # get_replies, 
-    # get_thread_details, 
-    get_user, get_user_by_email,
+    add_fitness_trainer_application, create_post, create_reply,
+    create_thread, create_user, delete_user_by_username,
+    fetch_all_threads, fetch_posts_for_thread, fetch_thread,
+    get_fitness_trainer_applications, get_last_reset_request_time,
+    get_replies, get_thread_details, get_user, get_user_by_email,
     get_user_by_uid, get_user_by_username, MockUser,
     update_reset_request_time, update_user, update_user_password,
     upload_profile_picture,
@@ -21,8 +12,12 @@ from .dynamodb import (
     fetch_all_users,
 )
 from .forms import (
-    FitnessTrainerApplicationForm, LoginForm, PasswordResetForm,
-    ProfileForm, SetNewPasswordForm, SignUpForm,
+    FitnessTrainerApplicationForm,
+    LoginForm,
+    PasswordResetForm,
+    ProfileForm,
+    SetNewPasswordForm,
+    SignUpForm,
 )
 
 from .models import PasswordResetRequest
@@ -193,7 +188,10 @@ def password_reset_request(request):
                     time_since_last_request = timezone.now() - last_request_dt
                 reset_token = default_token_generator.make_token(user)
                 reset_url = request.build_absolute_uri(
-                    reverse('password_reset_confirm', args=[urlsafe_base64_encode(force_bytes(user.pk)), reset_token])
+                    reverse(
+                        "password_reset_confirm",
+                        args=[urlsafe_base64_encode(force_bytes(user.pk)), reset_token],
+                    )
                 )
 
                 if time_since_last_request < timezone.timedelta(minutes=2):
@@ -271,9 +269,23 @@ def password_reset_confirm(request, uidb64, token):
                     print("New password form is valid")
                     update_user_password(user.user_id, new_password)
                     return redirect("password_reset_complete")
+                    new_password = form.cleaned_data["new_password"]
+                    confirm_password = form.cleaned_data["confirm_password"]
+
+                    if new_password == confirm_password:
+                        update_user_password(user.pk, new_password)
+                        messages.success(
+                            request, "Your password has been successfully reset."
+                        )
+                        return redirect("password_reset_complete")
+                    else:
+                        form.add_error("confirm_password", "Passwords do not match.")
             else:
                 form = SetNewPasswordForm()
             return render(request, "password_reset_confirm.html", {"form": form})
+
+            return render(request, "password_reset_confirm.html", {"form": form})
+
         else:
             print("Invalid token or user")
             return render(request, "password_reset_invalid.html")
@@ -288,7 +300,6 @@ def password_reset_complete(request):
 
 def password_reset_done(request):
     return render(request, "password_reset_done.html")
-
 
 
 def upload_profile_picture_view(request):
@@ -306,11 +317,11 @@ def upload_profile_picture_view(request):
             return JsonResponse(
                 {"success": False, "message": "Failed to upload image to S3"}
             )
-
     return JsonResponse({"success": False, "message": "No file uploaded"})
 
 
 def profile_view(request):
+    user_id = request.session.get("user_id")
     user_id = request.session.get("user_id")
 
     # Fetch user details from DynamoDB
@@ -318,6 +329,7 @@ def profile_view(request):
 
     if not user:
         messages.error(request, "User not found.")
+        return redirect("homepage")
         return redirect("homepage")
 
     if request.method == "POST":
@@ -329,7 +341,9 @@ def profile_view(request):
             if image_url:
                 # Update the user's profile picture URL in DynamoDB
                 update_user(user_id, {"profile_picture": {"Value": image_url}})
+                update_user(user_id, {"profile_picture": {"Value": image_url}})
                 messages.success(request, "Profile picture updated successfully!")
+                return redirect("profile")
                 return redirect("profile")
             else:
                 messages.error(request, "Failed to upload profile picture.")
@@ -344,23 +358,46 @@ def profile_view(request):
                 "gender": {"Value": form.cleaned_data["gender"]},
                 "bio": {"Value": form.cleaned_data["bio"]},
                 "address": {"Value": form.cleaned_data["address"]},
+                "name": {"Value": form.cleaned_data["name"]},
+                "date_of_birth": {"Value": form.cleaned_data["date_of_birth"]},
+                "gender": {"Value": form.cleaned_data["gender"]},
+                "bio": {"Value": form.cleaned_data["bio"]},
+                "address": {"Value": form.cleaned_data["address"]},
             }
 
             # Only add phone number and country code if provided
             country_code = form.cleaned_data["country_code"]
             phone_number = form.cleaned_data["phone_number"]
 
+            country_code = form.cleaned_data["country_code"]
+            phone_number = form.cleaned_data["phone_number"]
+
             if country_code:  # If country code is provided, add it to update_data
                 update_data["country_code"] = {"Value": country_code}
+                update_data["country_code"] = {"Value": country_code}
             if phone_number:  # If phone number is provided, add it to update_data
+                update_data["phone_number"] = {"Value": phone_number}
                 update_data["phone_number"] = {"Value": phone_number}
 
             update_user(user_id, update_data)
             messages.success(request, "Profile updated successfully!")
             return redirect("profile")
+            return redirect("profile")
         else:
             messages.error(request, "Please correct the errors below")
     else:
+        form = ProfileForm(
+            initial={
+                "name": user.get("name", ""),
+                "date_of_birth": user.get("date_of_birth", ""),
+                "email": user.get("email", ""),
+                "gender": user.get("gender", ""),
+                "phone_number": user.get("phone_number", ""),
+                "address": user.get("address", ""),
+                "bio": user.get("bio", ""),
+                "country_code": user.get("country_code", ""),  # Default country code
+            }
+        )
         form = ProfileForm(
             initial={
                 "name": user.get("name", ""),
@@ -381,8 +418,13 @@ def deactivate_account(request):
     # This simply shows the confirmation page
     return render(request, "deactivate.html")
 
+    return render(request, "deactivate.html")
+
 
 def confirm_deactivation(request):
+    if request.method == "POST":
+        username = request.session.get("username")
+
     if request.method == "POST":
         username = request.session.get("username")
 
@@ -392,7 +434,13 @@ def confirm_deactivation(request):
                 # Log the user out and redirect to the homepage
                 logout(request)
                 return redirect("homepage")  # Redirect to homepage after deactivation
+                return redirect("homepage")  # Redirect to homepage after deactivation
             else:
+                return render(
+                    request,
+                    "deactivate.html",
+                    {"error_message": "Error deleting the account."},
+                )
                 return render(
                     request,
                     "deactivate.html",
@@ -401,8 +449,11 @@ def confirm_deactivation(request):
         else:
             # Redirect to login if there's no username in session
             return redirect("login")
+            return redirect("login")
     else:
         # Redirect to the deactivate page if the request method is not POST
+        return redirect("deactivate_account")
+
         return redirect("deactivate_account")
 
 
@@ -543,10 +594,9 @@ def fitness_trainer_applications_list_view(request):
 # -------------------------------
 
 
-# def forum_view(request):
-#     threads = fetch_all_threads()
-#     return render(request, "forums.html", {"threads": threads})
-
+def forum_view(request):
+    threads = fetch_all_threads()
+    return render(request, 'forums.html', {'threads': threads})
 
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
@@ -664,30 +714,6 @@ def delete_post_view(request):
                 )
 
         except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=500)
-    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
 
-
-def forum_view(request):
-    # Get filter inputs from the request's GET parameters
-    username = request.GET.get("username", "")  # Username filter
-    thread_type = request.GET.get("type", "all")  # Thread or Reply filter
-    start_date = request.GET.get("start_date", "")  # Start date filter
-    end_date = request.GET.get("end_date", "")  # End date filter
-    search_text = request.GET.get("search", "")  # Search text filter
-
-    # Fetch filtered threads based on the inputs
-    threads = fetch_filtered_threads(
-        username=username,
-        thread_type=thread_type,
-        start_date=start_date,
-        end_date=end_date,
-        search_text=search_text,
-    )
-
-    # Fetch all users for the dropdown filter
-    users = (
-        fetch_all_users()
-    )  # Assuming you have a function to fetch users who posted threads/replies
-
-    return render(request, "forums.html", {"threads": threads, "users": users})

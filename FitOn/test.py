@@ -169,6 +169,7 @@ another_date = (datetime.now() - timedelta(days=5)).isoformat()
 #         super().tearDownClass()
 
 
+
 class PasswordResetTests(TestCase):
     @classmethod
     @override_settings(EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
@@ -363,7 +364,6 @@ class PasswordResetTests(TestCase):
     #         {"username": self.user.username, "password": "newpassword123"},
     #     )
     #     self.assertRedirects(login_response, reverse("homepage"))
-
 
 
 
