@@ -12,8 +12,6 @@ before_script:
 - aws secretsmanager get-secret-value --secret-id googleFit_credentials --region us-west-2
 
 script:
-- echo "AWS_ID: $AWS_ID"
-- echo "AWS_KEY: $AWS_KEY"
 - black --check .
 - flake8 --max-line-length=150 --exclude=venv --ignore=E261,F821,W293,W503 .
 - coverage run manage.py test FitOn
