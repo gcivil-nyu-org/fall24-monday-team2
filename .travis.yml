@@ -35,5 +35,5 @@ deploy:
   bucket_name: elasticbeanstalk-us-west-2-225989339915
   on:
     repo: gcivil-nyu-org/fall24-monday-team2
-    branch: main
+    branch: [main,develop]
   skip_cleanup: 'true'
