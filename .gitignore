@@ -3,7 +3,10 @@ __pycache__/
 FitOn/__pycache__/
 
 # Ignore virtual environment
-venv/
+venv/*
+
+# Ignore credentials file
+credentials.json
 
 # Ignore other typical Python files
 *.py[cod]
@@ -13,11 +16,18 @@ venv/
 # Ignore any environment variable files (if needed)
 .env
 
+
 # Ignore db.sqlite3 file
-db.sqlite3
+# db.sqlite3
 
 # Ignore .DS_Store folder/file
 .DS_Store
-
-# Ignore FitOn/.DS_Store folder/file
 FitOn/.DS_Store
+
+# Ignore Credentials.json file
+FitOn/credentials.json
+
+# Elastic Beanstalk Files
+.elasticbeanstalk/*
+!.elasticbeanstalk/*.cfg.yml
+!.elasticbeanstalk/*.global.yml
