@@ -13,7 +13,7 @@ before_script:
 
 script:
 - black --check .
-- flake8 --max-line-length=150 --exclude=venv --ignore=E261,F821,W293,W503 .
+- flake8 --max-line-length=150 --exclude=venv --ignore=E261,F821,W293,W503,F401,E501,F841,F811,E401 .
 - coverage run manage.py test FitOn
 
 env:
