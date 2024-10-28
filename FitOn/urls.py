@@ -36,6 +36,8 @@ from .views import (
     signup,
     thread_detail_view,
     upload_profile_picture_view,
+    deactivate_account, 
+    confirm_deactivation
 )
 >>>>>>> 5e20de8 (update password testing)
 from django.conf import settings
