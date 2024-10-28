@@ -265,6 +265,21 @@ footer {
     text-align: center;
     font-weight: bold;
     color: red; /* Indicate no applications found */
+/* Additional styles for buttons */
+.submit-button {
+    background-color: #6A82FB; /* Button background color */
+    color: white; /* Text color */
+    padding: 10px 20px; /* Padding for the button */
+    border: none; /* Remove default border */
+    border-radius: 6px; /* Rounded corners for the button */
+    cursor: pointer; /* Pointer cursor on hover */
+    font-size: 16px; /* Font size */
+    transition: background-color 0.3s ease; /* Transition for background color */
+}
+
+/* Hover effect for button */
+.submit-button:hover {
+    background-color: #5766db; /* Darker shade on hover */
 }
 
 .error {
@@ -459,4 +474,5 @@ footer {
     background-color: blue;
     color: white;
     border: none;
+}
 }
