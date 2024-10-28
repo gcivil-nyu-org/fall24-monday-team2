@@ -95,7 +95,7 @@ class ForumTests(TestCase):
         user_ids = [user["username"] for user in users]
         self.assertIn("test_user", user_ids)
         self.assertIn("another_user", user_ids)
-        self.assertEqual(len(users), 4)  # Five unique users
+        self.assertEqual(len(users), 5)  # Five unique users
 
     def test_forum_view(self):
         response = self.client.get(reverse("forum"))
