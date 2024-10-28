@@ -1,7 +1,7 @@
 import boto3
 
 # Connect to DynamoDB
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource("dynamodb")
 
 # List all tables in DynamoDB
 tables = list(dynamodb.tables.all())
