@@ -33,6 +33,8 @@ from .views import (
     signup,
     thread_detail_view,
     upload_profile_picture_view,
+    deactivate_account, 
+    confirm_deactivation
 )
 from django.conf import settings
 from django.conf.urls.static import static
