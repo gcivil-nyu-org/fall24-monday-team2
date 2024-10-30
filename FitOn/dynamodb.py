@@ -66,6 +66,10 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
                 "date_of_birth": str(date_of_birth),
                 "gender": gender,
                 "password": password,  # Hashed password
+                "is_admin": False,
+                "is_fitness_trainer": False,
+                "is_muted": False,
+                "is_banned": False,
             }
         )
 
