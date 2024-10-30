@@ -33,3 +33,6 @@ FitOn/credentials.json
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
 !.elasticbeanstalk/*.global.yml
+
+# TODO.txt
+TODO.txt
