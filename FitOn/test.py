@@ -148,6 +148,16 @@ class ForumTests(TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        # Delete only the threads created by 'test_user' and 'another_user'
+        users_to_delete = ["test_user", "another_user"]
+        for user_id in users_to_delete:
+            response = cls.threads_table.scan(
+                FilterExpression=boto3.dynamodb.conditions.Attr("UserID").eq(user_id)
+            )
+            for item in response.get("Items", []):
+                cls.threads_table.delete_item(Key={"ThreadID": item["ThreadID"]})
+
+        # Ensure tables are deleted after tests
         cls.dynamodb.Table("threads").delete()
         cls.dynamodb.Table("posts").delete()
         cls.threads_table.meta.client.get_waiter("table_not_exists").wait(

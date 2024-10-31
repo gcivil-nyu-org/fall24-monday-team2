@@ -513,6 +513,10 @@ def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
     thread = threads_table.get_item(Key={"ThreadID": thread_id}).get("Item")
     posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
+    user_id = request.session.get("user_id")
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
 
     if not thread:
         return JsonResponse(
@@ -559,6 +563,7 @@ def thread_detail_view(request, thread_id):
         request,
         "thread_detail.html",
         {
+            "user": user,
             "thread": thread,
             "posts": posts,
             "liked": user_id in thread.get("LikedBy", []),
