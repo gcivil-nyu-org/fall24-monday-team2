@@ -40,6 +40,7 @@ class ForumTests(TestCase):
             AttributeDefinitions=[{"AttributeName": "PostID", "AttributeType": "S"}],
             ProvisionedThroughput={"ReadCapacityUnits": 5, "WriteCapacityUnits": 5},
         )
+        cls.threads_table_main = cls.dynamodb.Table("ForumThreads")
         time.sleep(10)  # Ensure tables are ready
 
     def setUp(self):
@@ -151,11 +152,12 @@ class ForumTests(TestCase):
         # Delete only the threads created by 'test_user' and 'another_user'
         users_to_delete = ["test_user", "another_user"]
         for user_id in users_to_delete:
-            response = cls.threads_table.scan(
+            response = cls.threads_table_main.scan(
                 FilterExpression=boto3.dynamodb.conditions.Attr("UserID").eq(user_id)
             )
             for item in response.get("Items", []):
-                cls.threads_table.delete_item(Key={"ThreadID": item["ThreadID"]})
+                # Ensure correct key structure in delete_item
+                cls.threads_table_main.delete_item(Key={"ThreadID": item["ThreadID"]})
 
         # Ensure tables are deleted after tests
         cls.dynamodb.Table("threads").delete()
