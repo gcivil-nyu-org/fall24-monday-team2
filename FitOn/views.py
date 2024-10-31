@@ -522,56 +522,76 @@ def thread_detail_view(request, thread_id):
 
     user_id = request.session.get("username")  # Assuming user is logged in
 
-    if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
-        # Parse the AJAX request data
-        data = json.loads(request.body.decode("utf-8"))
-        action = data.get("action")
-        post_id = data.get("post_id")
+    if request.method == "POST":
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            # Parse the AJAX request data
+            data = json.loads(request.body.decode("utf-8"))
+            action = data.get("action")
+            post_id = data.get("post_id")
 
-        if action == "like_post":
-            # Handle like/unlike for the main thread post
-            liked_by = thread.get("LikedBy", [])
-            if user_id in liked_by:
-                # Unlike logic
-                likes = max(0, thread.get("Likes", 0) - 1)
-                liked_by.remove(user_id)
-            else:
-                # Like logic
-                likes = thread.get("Likes", 0) + 1
-                liked_by.append(user_id)
-            threads_table.update_item(
-                Key={"ThreadID": thread_id},
-                UpdateExpression="SET Likes=:l, LikedBy=:lb",
-                ExpressionAttributeValues={":l": likes, ":lb": liked_by}
-            )
-            return JsonResponse({"status": "success", "likes": likes, "liked": user_id in liked_by})
+            if action == "like_post":
+                # Handle like/unlike for the main thread post
+                liked_by = thread.get("LikedBy", [])
+                if user_id in liked_by:
+                    # Unlike logic
+                    likes = max(0, thread.get("Likes", 0) - 1)
+                    liked_by.remove(user_id)
+                else:
+                    # Like logic
+                    likes = thread.get("Likes", 0) + 1
+                    liked_by.append(user_id)
+                threads_table.update_item(
+                    Key={"ThreadID": thread_id},
+                    UpdateExpression="SET Likes=:l, LikedBy=:lb",
+                    ExpressionAttributeValues={":l": likes, ":lb": liked_by}
+                )
+                return JsonResponse({"status": "success", "likes": likes, "liked": user_id in liked_by})
 
-        elif action == "like_comment":
-            # Handle like/unlike for a comment
-            post = posts_table.get_item(Key={"PostID": post_id, "ThreadID": thread_id}).get("Item")
-            if not post:
-                return JsonResponse({"status": "error", "message": "Comment not found"}, status=404)
+            elif action == "like_comment":
+                # Handle like/unlike for a comment
+                post = posts_table.get_item(Key={"PostID": post_id, "ThreadID": thread_id}).get("Item")
+                if not post:
+                    return JsonResponse({"status": "error", "message": "Comment not found"}, status=404)
 
-            liked_by = post.get("LikedBy", [])
-            if user_id in liked_by:
-                # Unlike logic
-                likes = max(0, post.get("Likes", 0) - 1)
-                liked_by.remove(user_id)
-            else:
-                # Like logic
-                likes = post.get("Likes", 0) + 1
-                liked_by.append(user_id)
-            posts_table.update_item(
-                Key={"PostID": post_id, "ThreadID": thread_id},
-                UpdateExpression="SET Likes=:l, LikedBy=:lb",
-                ExpressionAttributeValues={":l": likes, ":lb": liked_by}
-            )
-            return JsonResponse({"status": "success", "likes": likes, "liked": user_id in liked_by})
+                liked_by = post.get("LikedBy", [])
+                if user_id in liked_by:
+                    # Unlike logic
+                    likes = max(0, post.get("Likes", 0) - 1)
+                    liked_by.remove(user_id)
+                else:
+                    # Like logic
+                    likes = post.get("Likes", 0) + 1
+                    liked_by.append(user_id)
+                posts_table.update_item(
+                    Key={"PostID": post_id, "ThreadID": thread_id},
+                    UpdateExpression="SET Likes=:l, LikedBy=:lb",
+                    ExpressionAttributeValues={":l": likes, ":lb": liked_by}
+                )
+                return JsonResponse({"status": "success", "likes": likes, "liked": user_id in liked_by})
 
-        elif action == "report_comment":
-            # Handle report for a comment (you can define reporting logic here)
-            # For simplicity, let's say reporting just returns a success message
-            return JsonResponse({"status": "success", "message": "Comment reported successfully!"})
+            elif action == "report_comment":
+                # Handle report for a comment (you can define reporting logic here)
+                # For simplicity, let's say reporting just returns a success message
+                return JsonResponse({"status": "success", "message": "Comment reported successfully!"})
+
+            elif action == "add_reply":
+                # Handle adding a reply to a comment
+                reply_content = data.get("content", "").strip()
+                if not reply_content:
+                    return JsonResponse({"status": "error", "message": "Reply content cannot be empty!"})
+
+                # Assuming we have a function `add_reply_to_post`
+                reply_id = add_reply_to_post(post_id=post_id, thread_id=thread_id, user_id=user_id, content=reply_content)
+                
+                # Return success and the reply content with the username
+                return JsonResponse({"status": "success", "content": reply_content, "username": user_id, "reply_id": reply_id})
+        
+        # Handle non-AJAX post submission for creating a new comment
+        elif "content" in request.POST:
+            # Add a new post to the thread
+            new_content = request.POST.get("content").strip()
+            if new_content:
+                create_reply(thread_id=thread_id, user_id=user_id, content=new_content)
 
     # Render the thread detail page for a non-AJAX request
     return render(request, "thread_detail.html", {
@@ -579,6 +599,7 @@ def thread_detail_view(request, thread_id):
         "posts": posts,
         "liked": user_id in thread.get("LikedBy", []),
     })
+
 
 
 
