@@ -195,6 +195,54 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     });
+
+     // Delete post logic with added console logs for troubleshooting
+     deletePostButtons.forEach(button => {
+        console.log("Attaching event listener to delete button");
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            console.log("Delete button clicked");
+
+            const postId = this.dataset.postId;
+            const threadId = this.dataset.threadId;
+
+            console.log("Post ID:", postId);
+            console.log("Thread ID:", threadId);
+
+            if (!postId || !threadId) {
+                console.error("Post or Thread ID is missing");
+                alert('Post or Thread ID is missing');
+                return;
+            }
+
+            fetch('/delete_post/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ 'post_id': postId, 'thread_id': threadId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Response from server:", data);
+                if (data.status === 'success') {
+                    const postElement = document.getElementById(`post-${postId}`);
+                    if (postElement) {
+                        postElement.remove();
+                        console.log("Post deleted from DOM");
+                    } else {
+                        console.error('Post element not found in DOM');
+                    }
+                } else {
+                    console.error('Error:', data.message);
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error in fetch request:', error));
+        });
+    });
 });
 </script>
 {% endblock %}
