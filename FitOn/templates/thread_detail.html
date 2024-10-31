@@ -57,12 +57,15 @@
             </div>
             <!-- Reply box container (initially hidden) -->
             <div id="reply-box-{{ post.PostID }}" style="display: none; margin-top: 10px;">
-                <textarea placeholder="Write your reply..." rows="3" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
+                <!-- Add unique id for the textarea -->
+                <textarea id="reply-content-{{ post.PostID }}" placeholder="Write your reply..." rows="3" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
+                
                 <div style="display: flex; justify-content: flex-end; margin-top: 5px;">
-                    <button onclick="toggleReplyBox('{{ post.PostID }}')" style="margin-right: 5px; background-color: lightgray; color: black; border: none; padding: 5px 15px; cursor: pointer;">Cancel</button>
-                    <button style="background-color: #007bff; color: white; border: none; padding: 5px 15px; cursor: pointer;">Comment</button>
+                    <!-- Add class and data-post-id for JavaScript -->
+                    <button class="submit-reply-btn" data-post-id="{{ post.PostID }}" style="background-color: #007bff; color: white; border: none; padding: 5px 15px; cursor: pointer;">Comment</button>
                 </div>
             </div>
+
             {% endif %}
     
             <!-- Delete Button for the User's Own Comments Only -->
@@ -111,6 +114,57 @@ document.addEventListener('DOMContentLoaded', function() {
         button.addEventListener('click', function() {
             const postId = this.dataset.postId;
             toggleReplyBox(postId);
+        });
+    });
+    
+    // Handle Submit Reply Button Click
+    document.querySelectorAll('.submit-reply-btn').forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            const postId = this.dataset.postId;
+            const replyContent = document.getElementById(`reply-content-${postId}`).value;
+            
+             // Debugging log to ensure the button click is detected
+            console.log("Reply submitted for post:", postId);  // First log
+            
+            if (replyContent.trim() === "") {
+                alert("Reply content cannot be empty!");
+                return;
+            }
+
+             // Another log to confirm AJAX call is about to happen
+            console.log("Sending reply via AJAX for post:", postId);  // Second log
+
+            fetch('/add_reply/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ 'post_id': postId, 'content': replyContent })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const replyBox = document.getElementById(`reply-box-${postId}`);
+                    replyBox.style.display = 'none';
+                    document.getElementById(`reply-content-${postId}`).value = "";
+
+                    // Append the new reply to the replies section
+                    const repliesContainer = document.getElementById(`replies-${postId}`);
+                    const newReply = document.createElement("div");
+                    newReply.classList.add("reply");
+                    newReply.style.border = "1px solid #ddd";
+                    newReply.style.padding = "5px";
+                    newReply.style.marginTop = "5px";
+                    newReply.innerHTML = `<p><strong>${data.user}</strong> said: ${data.content}</p><p style="color: #888; font-size: 12px;">Just now</p>`;
+                    repliesContainer.appendChild(newReply);
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
         });
     });
 

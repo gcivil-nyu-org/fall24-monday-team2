@@ -593,6 +593,9 @@ def thread_detail_view(request, thread_id):
             if new_content:
                 create_reply(thread_id=thread_id, user_id=user_id, content=new_content)
 
+        # Redirect after posting to avoid resubmission on refresh
+        return redirect("thread_detail", thread_id=thread_id)
+
     # Render the thread detail page for a non-AJAX request
     return render(request, "thread_detail.html", {
         "thread": thread,
@@ -689,3 +692,32 @@ def forum_view(request):
 
     return render(request, "forums.html", {"threads": threads, "users": users})
 
+def add_reply(request):
+    if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
+        data = json.loads(request.body.decode("utf-8"))
+        post_id = data.get("post_id")
+        content = data.get("content")
+        user_id = request.session.get("username")
+
+        # Insert logic to save reply in database (DynamoDB or other database)
+        # Example:
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        new_reply = {
+            "UserID": user_id,
+            "Content": content,
+            "CreatedAt": now
+        }
+
+        # Append this reply to the post (this depends on your database structure)
+        # Assuming you have a Replies attribute for each post
+        posts_table.update_item(
+            Key={"PostID": post_id},
+            UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :new_reply)",
+            ExpressionAttributeValues={
+                ":new_reply": [new_reply],
+                ":empty_list": []
+            }
+        )
+
+        return JsonResponse({"status": "success", "content": content})
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)

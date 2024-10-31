@@ -70,4 +70,5 @@ urlpatterns = [
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),
     path("delete_post/", views.delete_post_view, name="delete_post"),
+    path("add_reply/", views.add_reply, name="add_reply"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
