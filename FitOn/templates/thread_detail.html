@@ -81,10 +81,10 @@
     </div>    
     
     <!-- Post form -->
-    <form method="post" style="display: flex; align-items: center; margin-top: 30px;">
+    <form id="post-form" method="post" style="display: flex; align-items: center; margin-top: 30px;">
         {% csrf_token %}
-        <textarea name="content" rows="3" placeholder="Write your post" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
-        <button type="submit" style="margin-left: 10px; padding: 8px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Post</button>
+        <textarea name="content" id="post-content" rows="3" placeholder="Write your post" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
+        <button type="submit" id="post-submit" style="margin-left: 10px; padding: 8px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Post</button>
     </form>
     
 </div>
@@ -98,6 +98,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const likeCommentButtons = document.querySelectorAll('.like-comment-btn');
     const reportCommentButtons = document.querySelectorAll('.report-comment-btn');
     const replyCommentButtons = document.querySelectorAll('.reply-comment-btn');
+    const postForm = document.getElementById('post-form');
+    const postSubmitButton = document.getElementById('post-submit');
+
+    postForm.addEventListener('submit', function(event) {
+        // Disable the submit button to prevent multiple clicks
+        postSubmitButton.disabled = true;
+        postSubmitButton.textContent = "Posting..."; // Optional: change button text
+
+        // Enable the button again after form submission is complete
+        setTimeout(() => {
+            postSubmitButton.disabled = false;
+            postSubmitButton.textContent = "Post"; // Restore original text
+        }, 3000); // Adjust timeout duration based on response time if needed
+    });
 
     // Toggle visibility of the reply box
     function toggleReplyBox(postId) {
