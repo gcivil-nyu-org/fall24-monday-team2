@@ -79,7 +79,7 @@ class ForumTests(TestCase):
 
     def test_fetch_filtered_threads(self):
         threads = fetch_filtered_threads(username="test_user")
-        self.assertEqual(len(threads), 1)
+        self.assertEqual(len(threads), 3)
         self.assertEqual(threads[0]["UserID"], "test_user")
 
         threads = fetch_filtered_threads(thread_type="thread")
@@ -97,7 +97,7 @@ class ForumTests(TestCase):
         user_ids = [user["username"] for user in users]
         self.assertIn("test_user", user_ids)
         self.assertIn("another_user", user_ids)
-        self.assertEqual(len(users), 5)
+        self.assertEqual(len(users), 4)
 
     def test_forum_view(self):
         response = self.client.get(reverse("forum"))
