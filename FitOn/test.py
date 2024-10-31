@@ -73,7 +73,7 @@ class ForumTests(TestCase):
 
         # Create a thread in DynamoDB to work with
         thread = create_thread(
-            title="Test Thread", user_id="testuser", content="Test Content"
+            title="Test Thread", user_id="test_user", content="Test Content"
         )
         self.thread_id = thread["ThreadID"]
 
@@ -149,7 +149,7 @@ class ForumTests(TestCase):
     @classmethod
     def tearDownClass(cls):
         # Delete only the threads created by 'test_user' and 'another_user'
-        users_to_delete = ["testuser", "another_user"]
+        users_to_delete = ["test_user", "another_user"]
         for user_id in users_to_delete:
             response = cls.threads_table.scan(
                 FilterExpression=boto3.dynamodb.conditions.Attr("UserID").eq(user_id)
