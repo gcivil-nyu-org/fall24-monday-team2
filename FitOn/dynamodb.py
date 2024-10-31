@@ -575,3 +575,61 @@ def fetch_all_users():
 
     # Return the list of unique user IDs
     return [{"username": user} for user in unique_users]
+
+
+def like_comment(post_id, user_id):
+    # Fetch the comment by post_id
+    response = posts_table.get_item(Key={"PostID": post_id})
+    post = response.get("Item")
+
+    if not post:
+        raise ValueError("Comment not found")
+
+    liked_by = post.get("LikedBy", [])
+    likes = post.get("Likes", 0)
+
+    # Check if the user has already liked the post
+    if user_id in liked_by:
+        # Unlike the post
+        likes = max(0, likes - 1)
+        liked_by.remove(user_id)
+        liked = False
+    else:
+        # Like the post
+        likes += 1
+        liked_by.append(user_id)
+        liked = True
+
+    # Update the item in DynamoDB
+    posts_table.update_item(
+        Key={"PostID": post_id},
+        UpdateExpression="SET Likes = :likes, LikedBy = :liked_by",
+        ExpressionAttributeValues={
+            ":likes": likes,
+            ":liked_by": liked_by
+        }
+    )
+
+    return likes, liked
+
+
+def report_comment(post_id, user_id):
+    # Update the comment as reported by adding user_id to ReportedBy
+    response = posts_table.get_item(Key={"PostID": post_id})
+    post = response.get("Item")
+
+    if not post:
+        raise ValueError("Comment not found")
+
+    reported_by = post.get("ReportedBy", [])
+    if user_id not in reported_by:
+        reported_by.append(user_id)
+
+    # Update the item in DynamoDB
+    posts_table.update_item(
+        Key={"PostID": post_id},
+        UpdateExpression="SET ReportedBy = :reported_by",
+        ExpressionAttributeValues={
+            ":reported_by": reported_by
+        }
+    )

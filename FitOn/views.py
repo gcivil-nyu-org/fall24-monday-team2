@@ -24,6 +24,9 @@ from .dynamodb import (
     upload_profile_picture,
     fetch_filtered_threads,
     fetch_all_users,
+    like_comment,
+    report_comment,
+    posts_table
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -512,58 +515,71 @@ def fitness_trainer_applications_list_view(request):
 def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
     thread = threads_table.get_item(Key={"ThreadID": thread_id}).get("Item")
-    posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
+    posts = fetch_posts_for_thread(thread_id)  # Fetch comments related to the thread
 
     if not thread:
-        return JsonResponse(
-            {"status": "error", "message": "Thread not found"}, status=404
-        )
+        return JsonResponse({"status": "error", "message": "Thread not found"}, status=404)
 
     user_id = request.session.get("username")  # Assuming user is logged in
 
-    if request.method == "POST":
-        if request.headers.get("x-requested-with") == "XMLHttpRequest":
-            # Get the list of users who have liked the thread
+    if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
+        # Parse the AJAX request data
+        data = json.loads(request.body.decode("utf-8"))
+        action = data.get("action")
+        post_id = data.get("post_id")
+
+        if action == "like_post":
+            # Handle like/unlike for the main thread post
             liked_by = thread.get("LikedBy", [])
-
             if user_id in liked_by:
-                # If user has already liked the post, "unlike" (remove the like)
-                likes = max(
-                    0, thread.get("Likes", 0) - 1
-                )  # Ensure likes never go below 0
-                liked_by.remove(user_id)  # Remove the user from the LikedBy list
+                # Unlike logic
+                likes = max(0, thread.get("Likes", 0) - 1)
+                liked_by.remove(user_id)
             else:
-                # If user hasn't liked the post, add a like
+                # Like logic
                 likes = thread.get("Likes", 0) + 1
-                liked_by.append(user_id)  # Add the current user to the LikedBy list
-
-            # Update the thread with the new like count and LikedBy list
+                liked_by.append(user_id)
             threads_table.update_item(
                 Key={"ThreadID": thread_id},
-                UpdateExpression="set Likes=:l, LikedBy=:lb",
-                ExpressionAttributeValues={":l": likes, ":lb": liked_by},
+                UpdateExpression="SET Likes=:l, LikedBy=:lb",
+                ExpressionAttributeValues={":l": likes, ":lb": liked_by}
             )
-            return JsonResponse(
-                {"status": "success", "likes": likes, "liked": user_id in liked_by}
+            return JsonResponse({"status": "success", "likes": likes, "liked": user_id in liked_by})
+
+        elif action == "like_comment":
+            # Handle like/unlike for a comment
+            post = posts_table.get_item(Key={"PostID": post_id, "ThreadID": thread_id}).get("Item")
+            if not post:
+                return JsonResponse({"status": "error", "message": "Comment not found"}, status=404)
+
+            liked_by = post.get("LikedBy", [])
+            if user_id in liked_by:
+                # Unlike logic
+                likes = max(0, post.get("Likes", 0) - 1)
+                liked_by.remove(user_id)
+            else:
+                # Like logic
+                likes = post.get("Likes", 0) + 1
+                liked_by.append(user_id)
+            posts_table.update_item(
+                Key={"PostID": post_id, "ThreadID": thread_id},
+                UpdateExpression="SET Likes=:l, LikedBy=:lb",
+                ExpressionAttributeValues={":l": likes, ":lb": liked_by}
             )
+            return JsonResponse({"status": "success", "likes": likes, "liked": user_id in liked_by})
 
-        else:
-            # Handle reply submission (non-AJAX form submission)
-            content = request.POST.get("content")
+        elif action == "report_comment":
+            # Handle report for a comment (you can define reporting logic here)
+            # For simplicity, let's say reporting just returns a success message
+            return JsonResponse({"status": "success", "message": "Comment reported successfully!"})
 
-            if content and user_id:
-                create_reply(thread_id=thread_id, user_id=user_id, content=content)
-                return redirect("thread_detail", thread_id=thread_id)
+    # Render the thread detail page for a non-AJAX request
+    return render(request, "thread_detail.html", {
+        "thread": thread,
+        "posts": posts,
+        "liked": user_id in thread.get("LikedBy", []),
+    })
 
-    return render(
-        request,
-        "thread_detail.html",
-        {
-            "thread": thread,
-            "posts": posts,
-            "liked": user_id in thread.get("LikedBy", []),
-        },
-    )
 
 
 def new_thread_view(request):
@@ -651,3 +667,4 @@ def forum_view(request):
     )  # Assuming you have a function to fetch users who posted threads/replies
 
     return render(request, "forums.html", {"threads": threads, "users": users})
+

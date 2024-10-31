@@ -80,6 +80,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const likeButton = document.getElementById('like-btn');
     const reportButton = document.getElementById('report-btn');
     const deletePostButtons = document.querySelectorAll('.delete-post-btn');
+    const likeCommentButtons = document.querySelectorAll('.like-comment-btn');
+    const reportCommentButtons = document.querySelectorAll('.report-comment-btn');
 
     likeButton.addEventListener('click', function(event) {
         event.preventDefault();
@@ -204,6 +206,82 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(error => console.error('Error:', error));
+        });
+    });
+
+    // Like/Unlike thread post
+    likeButton.addEventListener('click', function(event) {
+        event.preventDefault();
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json',
+                'x-requested-with': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ action: 'like_post' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                likeButton.textContent = `▲ ${data.likes} Like${data.likes !== 1 ? 's' : ''}`;
+                likeButton.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
+            } else {
+                alert('Error: ' + data.message);
+            }
+        });
+    });
+
+    // Like/Unlike comment
+    likeCommentButtons.forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            const postId = this.dataset.postId;
+
+            fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ action: 'like_comment', post_id: postId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    button.textContent = `▲ ${data.likes} Like${data.likes !== 1 ? 's' : ''}`;
+                    button.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            });
+        });
+    });
+
+    // Report comment
+    reportCommentButtons.forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            const postId = this.dataset.postId;
+
+            fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ action: 'report_comment', post_id: postId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert(data.message);
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            });
         });
     });
 });
