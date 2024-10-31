@@ -46,7 +46,9 @@ class ForumTests(TestCase):
     def setUp(self):
         # User setup and login
         self.client = Client()
-        another_user = User.objects.create_user(username="another_user", password="12345")
+        another_user = User.objects.create_user(
+            username="another_user", password="12345"
+        )
         self.user = User.objects.create_user(username="test_user", password="12345")
         self.client.login(username="testuser", password="12345")
 
