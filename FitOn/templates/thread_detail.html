@@ -37,6 +37,23 @@
                 <p style="color: #888; font-size: 12px;">{{ post.CreatedAt|date:"M d, Y H:i" }}</p>
             </div>
             <p>{{ post.Content }}</p>
+    
+            <!-- Like and Report Buttons for Other Users' Comments Only -->
+            {% if post.UserID != request.session.username %}
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <!-- Like/Unlike Comment Button -->
+                <button class="like-comment-btn" data-post-id="{{ post.PostID }}" style="background-color: {% if post.PostID in liked_comments %}darkgreen{% else %}green{% endif %}; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+                    ▲ {{ post.Likes|default:0 }} Like{% if post.Likes != 1 %}s{% endif %}
+                </button>
+    
+                <!-- Report Comment Button -->
+                <button class="report-comment-btn" data-post-id="{{ post.PostID }}" style="background-color: red; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+                    ⚑ Report
+                </button>
+            </div>
+            {% endif %}
+    
+            <!-- Delete Button for the User's Own Comments Only -->
             {% if post.UserID == request.session.username %}
             <button class="delete-post-btn" data-post-id="{{ post.PostID }}" data-thread-id="{{ thread.ThreadID }}" style="background-color: white; color: red; border: 1px solid red; padding: 5px 10px; cursor: pointer; margin-top: 10px;">
                 Delete Post
@@ -46,7 +63,8 @@
         {% empty %}
         <p>No posts yet. Be the first to post!</p>
         {% endfor %}
-    </div>
+    </div>    
+    
 
     <!-- Post form -->
     <form method="post" style="display: flex; align-items: center; margin-top: 30px;">
@@ -130,6 +148,63 @@ document.addEventListener('DOMContentLoaded', function() {
     reportButton.addEventListener('click', function(event) {
         event.preventDefault();
         alert('Report functionality coming soon!');
+    });
+
+    // Like/Unlike Comment Button Click
+    document.querySelectorAll('.like-comment-btn').forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            
+            const postId = this.dataset.postId;
+
+            fetch('/like_comment/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ 'post_id': postId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    this.textContent = `▲ ${data.likes} Like${data.likes !== 1 ? 's' : ''}`;
+                    this.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    });
+
+    // Report Comment Button Click
+    document.querySelectorAll('.report-comment-btn').forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            
+            const postId = this.dataset.postId;
+            
+            fetch('/report_comment/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ 'post_id': postId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('Comment reported successfully');
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        });
     });
 });
 </script>
