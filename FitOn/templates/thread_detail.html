@@ -55,6 +55,14 @@
                     ↩️ Reply
                 </button>
             </div>
+            <!-- Reply box container (initially hidden) -->
+            <div id="reply-box-{{ post.PostID }}" style="display: none; margin-top: 10px;">
+                <textarea placeholder="Write your reply..." rows="3" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
+                <div style="display: flex; justify-content: flex-end; margin-top: 5px;">
+                    <button onclick="toggleReplyBox('{{ post.PostID }}')" style="margin-right: 5px; background-color: lightgray; color: black; border: none; padding: 5px 15px; cursor: pointer;">Cancel</button>
+                    <button style="background-color: #007bff; color: white; border: none; padding: 5px 15px; cursor: pointer;">Comment</button>
+                </div>
+            </div>
             {% endif %}
     
             <!-- Delete Button for the User's Own Comments Only -->
@@ -69,7 +77,6 @@
         {% endfor %}
     </div>    
     
-
     <!-- Post form -->
     <form method="post" style="display: flex; align-items: center; margin-top: 30px;">
         {% csrf_token %}
@@ -78,7 +85,7 @@
     </form>
 </div>
 
-<!-- JavaScript to handle Like, Delete Post, and Report buttons via AJAX -->
+<!-- JavaScript to handle Like, Delete Post, Report buttons, and Reply Box toggling via AJAX -->
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const likeButton = document.getElementById('like-btn');
@@ -86,134 +93,27 @@ document.addEventListener('DOMContentLoaded', function() {
     const deletePostButtons = document.querySelectorAll('.delete-post-btn');
     const likeCommentButtons = document.querySelectorAll('.like-comment-btn');
     const reportCommentButtons = document.querySelectorAll('.report-comment-btn');
+    const replyCommentButtons = document.querySelectorAll('.reply-comment-btn');
 
-    likeButton.addEventListener('click', function(event) {
-        event.preventDefault();
+    // Toggle visibility of the reply box
+    function toggleReplyBox(postId) {
+        const replyBox = document.getElementById(`reply-box-${postId}`);
+        if (replyBox.style.display === 'none' || replyBox.style.display === '') {
+            replyBox.style.display = 'block';
+        } else {
+            replyBox.style.display = 'none';
+        }
+    }
 
-        const threadId = this.dataset.threadId;
-
-        fetch(window.location.href, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-                'Content-Type': 'application/json',
-                'x-requested-with': 'XMLHttpRequest'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                let likeText = data.likes + ' Like' + (data.likes !== 1 ? 's' : '');
-                likeButton.textContent = `▲ ${likeText}`;
-                likeButton.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
-            } else {
-                alert('Error: ' + data.message);
-            }
-        })
-        .catch(error => console.error('Error:', error));
-    });
-
-    deletePostButtons.forEach(button => {
-        button.addEventListener('click', function(event) {
-            event.preventDefault();
-            
+    // Reply Button Click
+    replyCommentButtons.forEach(button => {
+        button.addEventListener('click', function() {
             const postId = this.dataset.postId;
-            const threadId = this.dataset.threadId;
-
-            if (!postId || !threadId) {
-                alert('Post or Thread ID is missing');
-                return;
-            }
-
-            fetch('/delete_post/', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'Content-Type': 'application/json',
-                    'x-requested-with': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({ 'post_id': postId, 'thread_id': threadId })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    const postElement = document.getElementById(`post-${postId}`);
-                    if (postElement) {
-                        postElement.remove();
-                    } else {
-                        console.error('Post element not found in DOM');
-                    }
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            })
-            .catch(error => console.error('Error:', error));
+            toggleReplyBox(postId);
         });
     });
 
-    reportButton.addEventListener('click', function(event) {
-        event.preventDefault();
-        alert('Report functionality coming soon!');
-    });
-
-    // Like/Unlike Comment Button Click
-    document.querySelectorAll('.like-comment-btn').forEach(button => {
-        button.addEventListener('click', function(event) {
-            event.preventDefault();
-            
-            const postId = this.dataset.postId;
-
-            fetch('/like_comment/', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'Content-Type': 'application/json',
-                    'x-requested-with': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({ 'post_id': postId })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    this.textContent = `▲ ${data.likes} Like${data.likes !== 1 ? 's' : ''}`;
-                    this.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        });
-    });
-
-    // Report Comment Button Click
-    document.querySelectorAll('.report-comment-btn').forEach(button => {
-        button.addEventListener('click', function(event) {
-            event.preventDefault();
-            
-            const postId = this.dataset.postId;
-            
-            fetch('/report_comment/', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'Content-Type': 'application/json',
-                    'x-requested-with': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({ 'post_id': postId })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    alert('Comment reported successfully');
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        });
-    });
-
-    // Like/Unlike thread post
+    // Like thread post
     likeButton.addEventListener('click', function(event) {
         event.preventDefault();
         fetch(window.location.href, {
@@ -236,7 +136,13 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Like/Unlike comment
+    // Report main thread post
+    reportButton.addEventListener('click', function(event) {
+        event.preventDefault();
+        alert('Report functionality coming soon!');
+    });
+
+    // Like comment
     likeCommentButtons.forEach(button => {
         button.addEventListener('click', function(event) {
             event.preventDefault();
