@@ -90,7 +90,7 @@ class ForumTests(TestCase):
         )
         end_date = datetime.now().date().isoformat()
         threads = fetch_filtered_threads(start_date=start_date, end_date=end_date)
-        self.assertGreaterEqual(len(threads), 1)
+        self.assertGreaterEqual(len(threads), 4)
 
     def test_fetch_all_users(self):
         users = fetch_all_users()
