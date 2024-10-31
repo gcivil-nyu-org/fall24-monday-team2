@@ -57,13 +57,20 @@
             </div>
             <!-- Reply box container (initially hidden) -->
             <div id="reply-box-{{ post.PostID }}" style="display: none; margin-top: 10px;">
-                <!-- Add unique id for the textarea -->
                 <textarea id="reply-content-{{ post.PostID }}" placeholder="Write your reply..." rows="3" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
-                
                 <div style="display: flex; justify-content: flex-end; margin-top: 5px;">
-                    <!-- Add class and data-post-id for JavaScript -->
                     <button class="submit-reply-btn" data-post-id="{{ post.PostID }}" style="background-color: #007bff; color: white; border: none; padding: 5px 15px; cursor: pointer;">Comment</button>
                 </div>
+            </div>
+
+            <!-- Nested Replies -->
+            <div id="replies-{{ post.PostID }}" style="margin-left: 20px; margin-top: 10px;">
+                {% for reply in post.Replies %}
+                <div class="reply" style="border: 1px solid #ddd; padding: 5px; margin-top: 5px;">
+                    <p><strong>{{ reply.UserID }}</strong> said: {{ reply.Content }}</p>
+                    <p style="color: #888; font-size: 12px;">{{ reply.CreatedAt|date:"M d, Y H:i" }}</p>
+                </div>
+                {% endfor %}
             </div>
 
             {% endif %}
@@ -98,6 +105,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const likeCommentButtons = document.querySelectorAll('.like-comment-btn');
     const reportCommentButtons = document.querySelectorAll('.report-comment-btn');
     const replyCommentButtons = document.querySelectorAll('.reply-comment-btn');
+    const submitReplyButtons = document.querySelectorAll('.submit-reply-btn');
     const postForm = document.getElementById('post-form');
     const postSubmitButton = document.getElementById('post-submit');
 
@@ -116,39 +124,32 @@ document.addEventListener('DOMContentLoaded', function() {
     // Toggle visibility of the reply box
     function toggleReplyBox(postId) {
         const replyBox = document.getElementById(`reply-box-${postId}`);
-        if (replyBox.style.display === 'none' || replyBox.style.display === '') {
-            replyBox.style.display = 'block';
-        } else {
-            replyBox.style.display = 'none';
+        if (replyBox) {
+            replyBox.style.display = (replyBox.style.display === 'none' || replyBox.style.display === '') ? 'block' : 'none';
         }
     }
 
-    // Reply Button Click
+
+    // Event Listener for "Reply" buttons to open the reply box
     replyCommentButtons.forEach(button => {
         button.addEventListener('click', function() {
             const postId = this.dataset.postId;
             toggleReplyBox(postId);
         });
     });
-    
-    // Handle Submit Reply Button Click
-    document.querySelectorAll('.submit-reply-btn').forEach(button => {
-        button.addEventListener('click', function(event) {
-            event.preventDefault();
+
+    // Event Listener for "Comment" buttons to submit reply
+    submitReplyButtons.forEach(button => {
+        button.addEventListener('click', function() {
             const postId = this.dataset.postId;
             const replyContent = document.getElementById(`reply-content-${postId}`).value;
-            
-             // Debugging log to ensure the button click is detected
-            console.log("Reply submitted for post:", postId);  // First log
-            
+
             if (replyContent.trim() === "") {
                 alert("Reply content cannot be empty!");
                 return;
             }
 
-             // Another log to confirm AJAX call is about to happen
-            console.log("Sending reply via AJAX for post:", postId);  // Second log
-
+            // Sending reply via AJAX
             fetch('/add_reply/', {
                 method: 'POST',
                 headers: {
@@ -161,11 +162,6 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.status === 'success') {
-                    const replyBox = document.getElementById(`reply-box-${postId}`);
-                    replyBox.style.display = 'none';
-                    document.getElementById(`reply-content-${postId}`).value = "";
-
-                    // Append the new reply to the replies section
                     const repliesContainer = document.getElementById(`replies-${postId}`);
                     const newReply = document.createElement("div");
                     newReply.classList.add("reply");
@@ -173,12 +169,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     newReply.style.padding = "5px";
                     newReply.style.marginTop = "5px";
                     newReply.innerHTML = `<p><strong>${data.user}</strong> said: ${data.content}</p><p style="color: #888; font-size: 12px;">Just now</p>`;
+                    
                     repliesContainer.appendChild(newReply);
+
+                    // Clear the reply box and hide it
+                    document.getElementById(`reply-content-${postId}`).value = "";
+                    toggleReplyBox(postId);
                 } else {
                     alert('Error: ' + data.message);
                 }
             })
-            .catch(error => console.error('Error:', error));
+            .catch(error => console.error('Error in submitting reply:', error));
         });
     });
 
