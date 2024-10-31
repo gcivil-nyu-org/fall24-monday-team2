@@ -46,28 +46,29 @@ class ForumTests(TestCase):
     def setUp(self):
         # User setup and login
         self.client = Client()
-        self.user = User.objects.create_user(username="testuser", password="12345")
+        another_user = User.objects.create_user(username="another_user", password="12345")
+        self.user = User.objects.create_user(username="test_user", password="12345")
         self.client.login(username="testuser", password="12345")
 
         # Insert test data
-        self.threads_table.put_item(
+        self.threads_table_main.put_item(
             Item={
                 "ThreadID": "123",
                 "UserID": "test_user",
                 "Title": "Test Thread",
                 "Content": "This is a test content",
                 "CreatedAt": last_week_date,
-                "ReplyCount": 0,
+                "LikedBy": [],
             }
         )
-        self.threads_table.put_item(
+        self.threads_table_main.put_item(
             Item={
                 "ThreadID": "456",
                 "UserID": "another_user",
                 "Title": "Another Thread",
                 "Content": "This is another test content",
                 "CreatedAt": another_date,
-                "ReplyCount": 2,
+                "LikedBy": [],
             }
         )
         time.sleep(5)  # Ensure data is available for scan
@@ -80,7 +81,7 @@ class ForumTests(TestCase):
 
     def test_fetch_filtered_threads(self):
         threads = fetch_filtered_threads(username="test_user")
-        self.assertEqual(len(threads), 3)
+        self.assertEqual(len(threads), 4)
         self.assertEqual(threads[0]["UserID"], "test_user")
 
         threads = fetch_filtered_threads(thread_type="thread")
@@ -150,7 +151,7 @@ class ForumTests(TestCase):
     @classmethod
     def tearDownClass(cls):
         # Delete only the threads created by 'test_user' and 'another_user'
-        users_to_delete = ["test_user"]
+        users_to_delete = ["test_user", "another_user"]
         for user_id in users_to_delete:
             response = cls.threads_table_main.scan(
                 FilterExpression=boto3.dynamodb.conditions.Attr("UserID").eq(user_id)
