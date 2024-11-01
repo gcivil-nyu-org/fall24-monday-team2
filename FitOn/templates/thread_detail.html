@@ -34,8 +34,8 @@
              Mute
         </button>
 
-        <button id="ban-btn" style="background-color: red; color: white; border: none; padding: 5px 15px; cursor: pointer; margin-right: 10px;">
-             Ban
+        <button class="ban-post-btn" data-user-id="{{ thread.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
+            Ban
         </button>
         {% endif %}
 
@@ -65,7 +65,7 @@
                         <button class="mute-post-btn" data-post-id="{{ post.PostID }}" style="background-color: lightblue; color: black; border: 1px solid blue; padding: 5px 10px; cursor: pointer;">
                             Mute
                         </button>
-                        <button class="ban-post-btn" data-post-id="{{ post.PostID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
+                        <button class="ban-post-btn" data-user-id="{{ post.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
                             Ban
                         </button>
                     {% endif %}
@@ -92,79 +92,64 @@
 
 <!-- JavaScript to handle Like, Delete Post, and Report buttons via AJAX -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const likeButton = document.getElementById('like-btn');
-    const reportButton = document.getElementById('report-btn');
-    const deletePostButtons = document.querySelectorAll('.delete-post-btn');
-
-    likeButton.addEventListener('click', function(event) {
-        event.preventDefault();
-
-        const threadId = this.dataset.threadId;
-
-        fetch(window.location.href, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-                'Content-Type': 'application/json',
-                'x-requested-with': 'XMLHttpRequest'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                let likeText = data.likes + ' Like' + (data.likes !== 1 ? 's' : '');
-                likeButton.textContent = `▲ ${likeText}`;
-                likeButton.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
-            } else {
-                alert('Error: ' + data.message);
-            }
-        })
-        .catch(error => console.error('Error:', error));
-    });
-
-    deletePostButtons.forEach(button => {
-        button.addEventListener('click', function(event) {
-            event.preventDefault();
-            
-            const postId = this.dataset.postId;
-            const threadId = this.dataset.threadId;
-
-            if (!postId || !threadId) {
-                alert('Post or Thread ID is missing');
-                return;
-            }
-
-            fetch('/delete_post/', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'Content-Type': 'application/json',
-                    'x-requested-with': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({ 'post_id': postId, 'thread_id': threadId })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    const postElement = document.getElementById(`post-${postId}`);
-                    if (postElement) {
-                        postElement.remove();
+    document.addEventListener('DOMContentLoaded', function() {
+        const likeButton = document.getElementById('like-btn');
+        const reportButton = document.getElementById('report-btn');
+        const deletePostButtons = document.querySelectorAll('.delete-post-btn');
+        const banButtons = document.querySelectorAll('.ban-post-btn'); // Select all ban buttons
+    
+        // Ban/Unban button click event
+        banButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                
+                const userId = this.dataset.userId;  // Get user ID from data attribute
+    
+                fetch('/ban_user/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ 'user_id': userId })  // Send user ID to the backend
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Toggle button text and color based on is_banned status
+                        this.textContent = data.is_banned ? 'Unban' : 'Ban';
+                        this.style.backgroundColor = data.is_banned ? 'green' : 'red';
                     } else {
-                        console.error('Post element not found in DOM');
+                        alert('Error: ' + data.message);
                     }
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            })
-            .catch(error => console.error('Error:', error));
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        });
+    
+        // Like button functionality (example placeholder)
+        likeButton.addEventListener('click', function(event) {
+            event.preventDefault();
+            // Your like button functionality here...
+            alert('Like functionality coming soon!');
+        });
+    
+        // Delete post button functionality (example placeholder)
+        deletePostButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const postId = this.dataset.postId;
+                // Your delete functionality here...
+                alert('Delete functionality coming soon for post ID: ' + postId);
+            });
+        });
+    
+        // Report button functionality (example placeholder)
+        reportButton.addEventListener('click', function(event) {
+            event.preventDefault();
+            alert('Report functionality coming soon!');
         });
     });
-
-    reportButton.addEventListener('click', function(event) {
-        event.preventDefault();
-        alert('Report functionality coming soon!');
-    });
-});
 </script>
 {% endblock %}

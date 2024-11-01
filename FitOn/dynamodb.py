@@ -70,6 +70,7 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
                 "is_fitness_trainer": False,
                 "is_muted": False,
                 "is_banned": False,
+                "punishment_date": ""
             }
         )
 
@@ -579,3 +580,5 @@ def fetch_all_users():
 
     # Return the list of unique user IDs
     return [{"username": user} for user in unique_users]
+
+
