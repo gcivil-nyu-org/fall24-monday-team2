@@ -60,6 +60,7 @@ from django.utils import timezone
 import uuid
 import ssl
 import pytz
+import boto3
 from google_auth_oauthlib.flow import Flow
 
 # from django.contrib.auth.decorators import login_required
@@ -669,34 +670,52 @@ def forum_view(request):
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
 
-    return render(request, "forums.html", {"threads": threads, "users": users, "is_banned": is_banned,})
+    return render(
+        request,
+        "forums.html",
+        {
+            "threads": threads,
+            "users": users,
+            "is_banned": is_banned,
+        },
+    )
+
 
 # -----------------
 # Ban User Function
-#------------------
-import boto3
+# ------------------
+
 def toggle_ban_user(request):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
     users_table = dynamodb.Table("Users")
-    
-    if request.method == 'POST' and request.headers.get("x-requested-with") == "XMLHttpRequest":
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
         data = json.loads(request.body)
-        user_id = data.get('user_id')  # Ensure this matches the 'user_id' field in DynamoDB
+        user_id = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
         print(user_id)
 
         if not user_id:
-            return JsonResponse({"status": "error", "message": "User ID is missing"}, status=400)
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
 
         # Fetch user to check if they exist
         user = get_user_by_username(user_id)
         print(user)
         if not user:
-            return JsonResponse({"status": "error", "message": "User not found"}, status=404)
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
 
-        uid = user.get('user_id')
+        uid = user.get("user_id")
         # Toggle the 'is_banned' attribute
         is_banned = not user.get("is_banned", False)
-        
+
         # Define the update expression and attributes
         update_expression = "set is_banned = :b"
         expression_values = {":b": is_banned}
@@ -715,41 +734,54 @@ def toggle_ban_user(request):
         users_table.update_item(
             Key={"user_id": uid},
             UpdateExpression=update_expression,
-            ExpressionAttributeValues=expression_values
+            ExpressionAttributeValues=expression_values,
         )
 
         return JsonResponse({"status": "success", "is_banned": is_banned})
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
+
 def unban_user(request):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
     users_table = dynamodb.Table("Users")
-    
-    if request.method == 'POST' and request.headers.get("x-requested-with") == "XMLHttpRequest":
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
         data = json.loads(request.body)
-        user_id = data.get('user_id')  # Ensure this matches the 'user_id' field in DynamoDB
+        user_id = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
         print(user_id)
         if not user_id:
-            return JsonResponse({"status": "error", "message": "User ID is missing"}, status=400)
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
 
         # Fetch user to check if they exist
         if not user_id:
-            return JsonResponse({"status": "error", "message": "User not found"}, status=404)
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
 
         # Set 'is_banned' to False and remove 'punishment_date'
         users_table.update_item(
             Key={"user_id": user_id},
             UpdateExpression="set is_banned = :b remove punishment_date",
-            ExpressionAttributeValues={":b": False}
+            ExpressionAttributeValues={":b": False},
         )
 
         return JsonResponse({"status": "success", "message": "User has been unbanned"})
-    
+
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
-#-------------
+
+
+# -------------
 # Punishments
-#-------------
+# -------------
+
 
 def punishments_view(request):
     # Check if the current user is an admin
@@ -763,7 +795,7 @@ def punishments_view(request):
     users_table = dynamodb.Table("Users")
     response = users_table.scan(
         FilterExpression="is_banned = :true OR is_muted = :true",
-        ExpressionAttributeValues={":true": True}
+        ExpressionAttributeValues={":true": True},
     )
     punished_users = response.get("Items", [])
     print(punished_users)
