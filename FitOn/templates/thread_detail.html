@@ -10,6 +10,8 @@
         </div>
     </div>
 
+    <div data-thread-id="{{ thread.ThreadID }}"></div>
+    
     <div class="thread-content" style="font-size: 16px; line-height: 1.5; margin-bottom: 30px;">
         <p>{{ thread.Content }}</p>
     </div>
@@ -59,7 +61,7 @@
             <div id="reply-box-{{ post.PostID }}" style="display: none; margin-top: 10px;">
                 <textarea id="reply-content-{{ post.PostID }}" placeholder="Write your reply..." rows="3" style="width: 100%; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
                 <div style="display: flex; justify-content: flex-end; margin-top: 5px;">
-                    <button class="submit-reply-btn" data-post-id="{{ post.PostID }}" style="background-color: #007bff; color: white; border: none; padding: 5px 15px; cursor: pointer;">Comment</button>
+                    <button class="submit-reply-btn" data-post-id="{{ post.PostID }}" data-thread-id="{{ thread.ThreadID }}" style="background-color: #007bff; color: white; border: none; padding: 5px 15px; cursor: pointer;">Comment</button>
                 </div>
             </div>
 
@@ -108,6 +110,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const submitReplyButtons = document.querySelectorAll('.submit-reply-btn');
     const postForm = document.getElementById('post-form');
     const postSubmitButton = document.getElementById('post-submit');
+    const threadElement = document.querySelector('[data-thread-id]');
+    const threadId = document.querySelector('[data-thread-id]').getAttribute('data-thread-id');
 
     postForm.addEventListener('submit', function(event) {
         // Disable the submit button to prevent multiple clicks
@@ -138,10 +142,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+        
     // Event Listener for "Comment" buttons to submit reply
     submitReplyButtons.forEach(button => {
         button.addEventListener('click', function() {
             const postId = this.dataset.postId;
+            const threadId = this.dataset.threadId;  // Retrieve thread_id
+
+            console.log("Thread ID:", threadId); // for debugging
+
             const replyContent = document.getElementById(`reply-content-${postId}`).value;
 
             if (replyContent.trim() === "") {
@@ -157,7 +166,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                     'x-requested-with': 'XMLHttpRequest'
                 },
-                body: JSON.stringify({ 'post_id': postId, 'content': replyContent })
+                body: JSON.stringify({ 'post_id': postId, 'thread_id': threadId, 'content': replyContent })
             })
             .then(response => response.json())
             .then(data => {

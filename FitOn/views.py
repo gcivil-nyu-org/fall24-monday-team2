@@ -38,7 +38,7 @@ from .forms import (
 )
 
 # from .models import PasswordResetRequest
-from datetime import timedelta
+from datetime import timedelta, datetime
 from django.contrib.auth.hashers import make_password, check_password
 
 # from django.contrib.auth.models import User
@@ -697,15 +697,43 @@ def add_reply(request):
         data = json.loads(request.body.decode("utf-8"))
         post_id = data.get("post_id")
         content = data.get("content")
+        thread_id = data.get("thread_id")
         
+        print("Received thread_id:", thread_id)  # Debugging line
+
+
         if not post_id or not content:
             return JsonResponse({"status": "error", "message": "Post ID and content are required."}, status=400)
         
         # Get the user info from the session
         user_id = request.session.get("username")
+        if not user_id:
+            return JsonResponse({"status": "error", "message": "User not authenticated"}, status=403)
         
-        # Create a reply entry in your database (DynamoDB or other)
-        # Here, add code to save the reply in your database (DynamoDB code omitted for brevity)
+         # Create the reply data
+        reply_data = {
+            "ReplyID": str(uuid.uuid4()),  # Unique ID for each reply
+            "UserID": user_id,
+            "Content": content,
+           # "CreatedAt": datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+         # Save the reply to DynamoDB by appending it to the 'Replies' list for the post
+        try:
+            posts_table.update_item(
+                Key={
+                    "PostID": post_id,
+                    "ThreadID": thread_id  # Add ThreadID to match the schema
+                },
+                UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
+                ExpressionAttributeValues={
+                    ":reply": [reply_data],
+                    ":empty_list": []
+                },
+                ReturnValues="UPDATED_NEW"
+            )
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": f"Failed to save reply: {str(e)}"}, status=500)
         
         # For now, we'll assume successful addition
         return JsonResponse({"status": "success", "content": content, "username": user_id})
