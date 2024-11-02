@@ -610,3 +610,51 @@ def delete_threads_by_user(user_id):
         for thread_id in thread_ids:
             threads_table.delete_item(Key={"ThreadID": thread_id})
             print(f"Deleted ThreadID: {thread_id}")
+
+
+def delete_thread_by_id(thread_id):
+    try:
+        # Delete the forum thread by thread_id (primary key)
+        delete_response = threads_table.delete_item(
+            Key={"ThreadID": thread_id}  # Replace with your actual partition key
+        )
+
+        print(f"Forum thread with ID '{thread_id}' successfully deleted.")
+        return True
+
+    except Exception as e:
+        print(f"Error deleting forum thread with ID '{thread_id}': {e}")
+        return False
+
+
+def get_thread(title, user_id, content, created_at):
+    try:
+        response = threads_table.scan(
+            FilterExpression="#title = :title AND #user = :user_id AND #content = :content AND #created = :created_at",
+            ExpressionAttributeNames={
+                "#title": "Title",
+                "#user": "UserID",
+                "#content": "Content",
+                "#created": "CreatedAt",
+            },
+            ExpressionAttributeValues={
+                ":title": title,
+                ":user_id": user_id,
+                ":content": content,
+                ":created_at": created_at,
+            },
+        )
+
+        threads = response.get("Items", [])
+        if threads:
+            print("Thread found:", threads[0])
+            return threads[0]
+        else:
+            print(
+                "No thread found with the specified Title, UserID, Content, and CreatedAt."
+            )
+            return None
+
+    except Exception as e:
+        print(f"Error retrieving thread: {e}")
+        return None

@@ -9,6 +9,8 @@ from .dynamodb import (
     update_user,
     create_thread,
     delete_threads_by_user,
+    get_thread,
+    delete_thread_by_id,
 )
 import boto3
 from django.contrib.auth.hashers import check_password
@@ -308,19 +310,60 @@ class ForumTests(TestCase):
 
     # TODO: ADD DELETE_POST FUNCTION
 
-    def test_delete_threads_by_user(self):
-        # Step 1: Set up sample data
-        user_id = "test_user_123"
-        delete_threads_by_user(user_id)
+    def test_get_thread(self):
+        # Step 1: Create a sample thread
+        thread = create_thread(
+            title=self.thread_data["title"],
+            user_id=self.thread_data["user_id"],
+            content=self.thread_data["content"],
+        )
 
-        # Verify all threads for the user are deleted
-        response = self.threads_table.scan(
-            FilterExpression="UserID = :user",
-            ExpressionAttributeValues={":user": user_id},
+        # Step 2: Retrieve the thread using get_thread with matching parameters
+        retrieved_thread = get_thread(
+            title=thread["Title"],
+            user_id=thread["UserID"],
+            content=thread["Content"],
+            created_at=thread["CreatedAt"],
+        )
+
+        # Step 3: Verify the retrieved thread matches the created thread
+        self.assertIsNotNone(retrieved_thread, "Thread should be found.")
+        self.assertEqual(
+            retrieved_thread["Title"], thread["Title"], "Thread title does not match."
         )
         self.assertEqual(
-            len(response["Items"]), 0, "All threads for the user should be deleted."
+            retrieved_thread["UserID"],
+            thread["UserID"],
+            "Thread user ID does not match.",
         )
+        self.assertEqual(
+            retrieved_thread["Content"],
+            thread["Content"],
+            "Thread content does not match.",
+        )
+
+    def test_delete_thread_by_id(self):
+        # Step 1: Create a sample thread
+        thread = create_thread(
+            title=self.thread_data["title"],
+            user_id=self.thread_data["user_id"],
+            content=self.thread_data["content"],
+        )
+        thread_id = thread["ThreadID"]
+
+        # Verify the thread exists in DynamoDB
+        response = self.threads_table.get_item(Key={"ThreadID": thread_id})
+        self.assertIn(
+            "Item", response, "Thread should exist in DynamoDB before deletion."
+        )
+
+        # Step 2: Delete the thread
+        delete_result = delete_thread_by_id(thread_id)
+        self.assertTrue(delete_result, "Thread deletion failed.")
+
+        # Step 3: Verify the thread is deleted
+        response = self.threads_table.get_item(Key={"ThreadID": thread_id})
+        self.assertNotIn("Item", response, "Thread should be deleted from DynamoDB.")
 
     def tearDown(self):
         delete_threads_by_user("test_user_123")
