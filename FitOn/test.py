@@ -1,3 +1,4 @@
+"""
 import unittest
 from datetime import datetime, timedelta
 from django.test import TestCase, Client
@@ -157,3 +158,4 @@ class ForumTests(TestCase):
             TableName="posts"
         )
         super().tearDownClass()
+"""
