@@ -30,7 +30,7 @@
              Delete
         </button>
 
-        <button id="mute-btn" style="background-color: blue; color: white; border: none; padding: 5px 15px; cursor: pointer; margin-right: 10px;">
+        <button class="mute-post-btn" data-user-id="{{ thread.UserID }}" style="background-color: blue; color: white; border: none; padding: 5px 15px; cursor: pointer; margin-right: 10px;">
              Mute
         </button>
 
@@ -62,7 +62,7 @@
                         Delete
                     </button>
                     {% if not post.is_admin %}
-                        <button class="mute-post-btn" data-post-id="{{ post.PostID }}" style="background-color: lightblue; color: black; border: 1px solid blue; padding: 5px 10px; cursor: pointer;">
+                        <button class="mute-post-btn" data-user-id="{{ post.UserID }}" style="background-color: lightblue; color: black; border: 1px solid blue; padding: 5px 10px; cursor: pointer;">
                             Mute
                         </button>
                         <button class="ban-post-btn" data-user-id="{{ post.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
@@ -83,11 +83,17 @@
     </div>
 
     <!-- Post form -->
-    <form method="post" style="display: flex; align-items: center; margin-top: 30px;">
-        {% csrf_token %}
-        <textarea name="content" rows="3" placeholder="Write your post" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
-        <button type="submit" style="margin-left: 10px; padding: 8px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Post</button>
-    </form>
+{% if user.is_muted %}
+<div class="ban-message" style="color: red; font-weight: bold; text-align: center; margin-top: 20px; font-size: 24px;">
+    You are muted and are unable to respond on the forums.
+</div>
+{% else %}
+<form method="post" style="display: flex; align-items: center; margin-top: 30px;">
+    {% csrf_token %}
+    <textarea name="content" rows="3" placeholder="Write your post" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
+    <button type="submit" style="margin-left: 10px; padding: 8px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Post</button>
+</form>
+{% endif %}
 </div>
 
 <!-- JavaScript to handle Like, Delete Post, and Report buttons via AJAX -->
@@ -96,6 +102,7 @@
         const likeButton = document.getElementById('like-btn');
         const reportButton = document.getElementById('report-btn');
         const deletePostButtons = document.querySelectorAll('.delete-post-btn');
+        const muteButtons = document.querySelectorAll('.mute-post-btn')
         const banButtons = document.querySelectorAll('.ban-post-btn'); // Select all ban buttons
     
         // Ban/Unban button click event
@@ -120,6 +127,36 @@
                         // Toggle button text and color based on is_banned status
                         this.textContent = data.is_banned ? 'Unban' : 'Ban';
                         this.style.backgroundColor = data.is_banned ? 'green' : 'red';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        });
+        
+        // Mute/Unmute button click event
+        muteButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                
+                const userId = this.dataset.userId;  // Get user ID from data attribute
+    
+                fetch('/mute_user/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ 'user_id': userId })  // Send user ID to the backend
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Toggle button text and color based on is_banned status
+                        this.textContent = data.is_muted? 'Unmute' : 'Mute';
+                        this.style.backgroundColor = data.is_muted ? 'green' : 'blue';
                     } else {
                         alert('Error: ' + data.message);
                     }

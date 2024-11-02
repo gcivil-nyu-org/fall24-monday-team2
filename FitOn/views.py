@@ -694,18 +694,18 @@ def toggle_ban_user(request):
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
     ):
         data = json.loads(request.body)
-        user_id = data.get(
+        username = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
-        print(user_id)
+        print(username)
 
-        if not user_id:
+        if not username:
             return JsonResponse(
                 {"status": "error", "message": "User ID is missing"}, status=400
             )
 
         # Fetch user to check if they exist
-        user = get_user_by_username(user_id)
+        user = get_user_by_username(username)
         print(user)
         if not user:
             return JsonResponse(
@@ -738,6 +738,62 @@ def toggle_ban_user(request):
         )
 
         return JsonResponse({"status": "success", "is_banned": is_banned})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+def toggle_mute_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(username)
+
+        if not username:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        user = get_user_by_username(username)
+        print(user)
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        uid = user.get("user_id")
+        # Toggle the 'is_banned' attribute
+        is_muted = not user.get("is_muted", False)
+
+        # Define the update expression and attributes
+        update_expression = "set is_muted = :b"
+        expression_values = {":b": is_muted}
+
+        # If banning the user, set 'punishment_date' to the current time
+        if is_muted:
+            est = pytz.timezone("US/Eastern")
+            punishment_date = datetime.now(est).isoformat()
+            update_expression += ", punishment_date = :d"
+            expression_values[":d"] = punishment_date
+        else:
+            # If unbanning, remove punishment_date attribute
+            update_expression += " remove punishment_date"
+
+        # Update the user item in DynamoDB
+        users_table.update_item(
+            Key={"user_id": uid},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+        )
+
+        return JsonResponse({"status": "success", "is_muted": is_muted})
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
@@ -774,6 +830,41 @@ def unban_user(request):
         )
 
         return JsonResponse({"status": "success", "message": "User has been unbanned"})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+def unmute_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        user_id = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(user_id)
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        # Set 'is_banned' to False and remove 'punishment_date'
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="set is_muted = :b remove punishment_date",
+            ExpressionAttributeValues={":b": False},
+        )
+
+        return JsonResponse({"status": "success", "message": "User has been unmuted"})
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 

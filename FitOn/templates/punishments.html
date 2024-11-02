@@ -31,7 +31,7 @@
                 <td>Violation of rules</td>
                 <td>
                     <button class="button unban-btn" data-user-id="{{ user.user_id }}" {% if not user.is_banned %}disabled{% endif %}>Unban</button>
-                    <button class="button unmute-btn" {% if not user.is_muted %}disabled{% endif %}>Unmute</button>
+                    <button class="button unmute-btn" data-user-id="{{ user.user_id }}" {% if not user.is_muted %}disabled{% endif %}>Unmute</button>
                 </td>
             </tr>
             {% empty %}
@@ -47,6 +47,7 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         const unbanButtons = document.querySelectorAll('.unban-btn');
+        const unmuteButtons = document.querySelectorAll('.unmute-btn');
 
         unbanButtons.forEach(button => {
             button.addEventListener('click', function(event) {
@@ -54,6 +55,35 @@
                 const userId = this.dataset.userId;
 
                 fetch('/unban_user/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ 'user_id': userId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // If unbanned successfully, disable the Unban button and update UI
+                        this.disabled = true;
+                        this.style.backgroundColor = '#ccc';
+                        this.style.cursor = 'not-allowed';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        });
+
+        unmuteButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const userId = this.dataset.userId;
+
+                fetch('/unmute_user/', {
                     method: 'POST',
                     headers: {
                         'X-CSRFToken': '{{ csrf_token }}',
