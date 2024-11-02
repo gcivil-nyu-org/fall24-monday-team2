@@ -685,6 +685,7 @@ def forum_view(request):
 # Ban User Function
 # ------------------
 
+
 def toggle_ban_user(request):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
     users_table = dynamodb.Table("Users")
@@ -740,6 +741,7 @@ def toggle_ban_user(request):
         return JsonResponse({"status": "success", "is_banned": is_banned})
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
 
 def toggle_mute_user(request):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
@@ -832,6 +834,7 @@ def unban_user(request):
         return JsonResponse({"status": "success", "message": "User has been unbanned"})
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
 
 def unmute_user(request):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")

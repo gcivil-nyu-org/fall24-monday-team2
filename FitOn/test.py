@@ -1,11 +1,22 @@
 from django.test import TestCase
-from .dynamodb import create_user, delete_user_by_username, get_user_by_email, get_user_by_uid, get_user, update_user_password, update_user, create_thread, delete_threads_by_user
+from .dynamodb import (
+    create_user,
+    delete_user_by_username,
+    get_user_by_email,
+    get_user_by_uid,
+    get_user,
+    update_user_password,
+    update_user,
+    create_thread,
+    delete_threads_by_user,
+)
 import boto3
 from django.contrib.auth.hashers import check_password
 from botocore.exceptions import ClientError
 from datetime import datetime
 import json
 import pytz
+
 
 class UserCreationAndDeletionTests(TestCase):
     def setUp(self):
@@ -31,7 +42,9 @@ class UserCreationAndDeletionTests(TestCase):
 
         # Verify that the user was added by retrieving it from DynamoDB
         response = self.users_table.get_item(Key={"user_id": self.user_data["user_id"]})
-        self.assertIn("Item", response, "User was not found in DynamoDB after creation.")
+        self.assertIn(
+            "Item", response, "User was not found in DynamoDB after creation."
+        )
         user = response["Item"]
         self.assertEqual(user["username"], self.user_data["username"])
 
@@ -42,8 +55,14 @@ class UserCreationAndDeletionTests(TestCase):
         # Test get_user_by_email
         user_by_email = get_user_by_email(self.user_data["email"])
         self.assertIsNotNone(user_by_email, "get_user_by_email did not find the user.")
-        self.assertEqual(user_by_email.email, self.user_data["email"], "Emails do not match.")
-        self.assertEqual(user_by_email.username, self.user_data["username"], "Usernames do not match.")
+        self.assertEqual(
+            user_by_email.email, self.user_data["email"], "Emails do not match."
+        )
+        self.assertEqual(
+            user_by_email.username,
+            self.user_data["username"],
+            "Usernames do not match.",
+        )
 
     def test_get_user_by_uid(self):
         # Ensure the user exists before testing retrieval
@@ -52,8 +71,14 @@ class UserCreationAndDeletionTests(TestCase):
         # Test get_user_by_uid
         user_by_uid = get_user_by_uid(self.user_data["user_id"])
         self.assertIsNotNone(user_by_uid, "get_user_by_uid did not find the user.")
-        self.assertEqual(user_by_uid["user_id"], self.user_data["user_id"], "User IDs do not match.")
-        self.assertEqual(user_by_uid["username"], self.user_data["username"], "Usernames do not match.")
+        self.assertEqual(
+            user_by_uid["user_id"], self.user_data["user_id"], "User IDs do not match."
+        )
+        self.assertEqual(
+            user_by_uid["username"],
+            self.user_data["username"],
+            "Usernames do not match.",
+        )
 
     def test_get_user(self):
         # Step 1: Ensure the user exists by calling create_user
@@ -65,10 +90,20 @@ class UserCreationAndDeletionTests(TestCase):
 
         # Step 3: Verify the retrieved user matches the expected data
         self.assertIsNotNone(retrieved_user, "get_user did not find the user.")
-        self.assertEqual(retrieved_user["user_id"], self.user_data["user_id"], "User IDs do not match.")
-        self.assertEqual(retrieved_user["username"], self.user_data["username"], "Usernames do not match.")
-        self.assertEqual(retrieved_user["email"], self.user_data["email"], "Emails do not match.")
-    
+        self.assertEqual(
+            retrieved_user["user_id"],
+            self.user_data["user_id"],
+            "User IDs do not match.",
+        )
+        self.assertEqual(
+            retrieved_user["username"],
+            self.user_data["username"],
+            "Usernames do not match.",
+        )
+        self.assertEqual(
+            retrieved_user["email"], self.user_data["email"], "Emails do not match."
+        )
+
     def test_update_user_password(self):
         # Step 1: Update the user's password
         new_password = "new_secure_password"
@@ -78,17 +113,17 @@ class UserCreationAndDeletionTests(TestCase):
         # Step 2: Retrieve the user to verify the password update
         updated_user = get_user(self.user_data["user_id"])
         self.assertIsNotNone(updated_user, "User not found after password update.")
-        
+
         # Step 3: Verify the password was updated correctly
         is_password_correct = check_password(new_password, updated_user["password"])
         self.assertTrue(is_password_correct, "The password was not updated correctly.")
-    
+
     def test_update_user(self):
         # Step 1: Define the updates
         update_data = {
             "email": {"Value": "updated_user@example.com"},
             "name": {"Value": "Updated-Test User"},
-            "gender": {"Value": "F"}
+            "gender": {"Value": "F"},
         }
 
         # Step 2: Call update_user
@@ -100,10 +135,18 @@ class UserCreationAndDeletionTests(TestCase):
         self.assertIsNotNone(updated_user, "User not found after update.")
 
         # Step 4: Check that the updated fields match the expected values
-        self.assertEqual(updated_user["email"], update_data["email"]["Value"], "Email update failed.")
-        self.assertEqual(updated_user["name"], update_data["name"]["Value"], "Name update failed.")
-        self.assertEqual(updated_user["gender"], update_data["gender"]["Value"], "Gender update failed.")
-    
+        self.assertEqual(
+            updated_user["email"], update_data["email"]["Value"], "Email update failed."
+        )
+        self.assertEqual(
+            updated_user["name"], update_data["name"]["Value"], "Name update failed."
+        )
+        self.assertEqual(
+            updated_user["gender"],
+            update_data["gender"]["Value"],
+            "Gender update failed.",
+        )
+
     # def test_toggle_ban_user(self):
     #     create_user(**self.user_data)
     #     user = get_user_by_uid(self.user_data["user_id"])
@@ -145,8 +188,8 @@ class UserCreationAndDeletionTests(TestCase):
             UpdateExpression="set is_banned = :b, punishment_date = :d",
             ExpressionAttributeValues={
                 ":b": True,
-                ":d": datetime.now(pytz.timezone("US/Eastern")).isoformat()
-            }
+                ":d": datetime.now(pytz.timezone("US/Eastern")).isoformat(),
+            },
         )
 
         create_user(**self.user_data)
@@ -154,23 +197,32 @@ class UserCreationAndDeletionTests(TestCase):
         print(user)
         print(user["is_banned"])
 
-
         # Step 1: Unban the user
         response = self.client.post(
             "/unban_user/",
             data=json.dumps({"user_id": self.user_data["user_id"]}),
             content_type="application/json",
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest"
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
         self.assertEqual(response.status_code, 200)
         data = response.json()
-        self.assertEqual(data["message"], "User has been unbanned", "Unban message should confirm unban success.")
+        self.assertEqual(
+            data["message"],
+            "User has been unbanned",
+            "Unban message should confirm unban success.",
+        )
 
         # Step 2: Verify the user is unbanned and punishment_date is removed
         unbanned_user = get_user(self.user_data["user_id"])
-        self.assertFalse(unbanned_user["is_banned"], "User's is_banned should be False after unban.")
-        self.assertNotIn("punishment_date", unbanned_user, "punishment_date should be removed when user is unbanned.")
-    
+        self.assertFalse(
+            unbanned_user["is_banned"], "User's is_banned should be False after unban."
+        )
+        self.assertNotIn(
+            "punishment_date",
+            unbanned_user,
+            "punishment_date should be removed when user is unbanned.",
+        )
+
     def test_delete_user(self):
         # Ensure the user exists before testing deletion
         self.users_table.put_item(Item=self.user_data)
@@ -189,6 +241,7 @@ class UserCreationAndDeletionTests(TestCase):
             self.users_table.delete_item(Key={"user_id": self.user_data["user_id"]})
         except ClientError:
             pass  # Ignore if the item was already deleted
+
 
 class ForumTests(TestCase):
     def setUp(self):
@@ -221,7 +274,7 @@ class ForumTests(TestCase):
         thread = create_thread(
             title=self.thread_data["title"],
             user_id=self.thread_data["user_id"],
-            content=self.thread_data["content"]
+            content=self.thread_data["content"],
         )
 
         # Verify that the thread has a ThreadID and CreatedAt
@@ -231,13 +284,27 @@ class ForumTests(TestCase):
         # Step 2: Retrieve the thread from DynamoDB to verify it was added
         response = self.threads_table.get_item(Key={"ThreadID": thread["ThreadID"]})
         self.assertIn("Item", response, "Thread not found in DynamoDB after creation.")
-        
+
         created_thread = response["Item"]
-        self.assertEqual(created_thread["Title"], self.thread_data["title"], "Thread title does not match.")
-        self.assertEqual(created_thread["UserID"], self.thread_data["user_id"], "Thread user_id does not match.")
-        self.assertEqual(created_thread["Content"], self.thread_data["content"], "Thread content does not match.")
+        self.assertEqual(
+            created_thread["Title"],
+            self.thread_data["title"],
+            "Thread title does not match.",
+        )
+        self.assertEqual(
+            created_thread["UserID"],
+            self.thread_data["user_id"],
+            "Thread user_id does not match.",
+        )
+        self.assertEqual(
+            created_thread["Content"],
+            self.thread_data["content"],
+            "Thread content does not match.",
+        )
         self.assertEqual(created_thread["Likes"], 0, "Initial likes count should be 0.")
-        self.assertEqual(created_thread["LikedBy"], [], "Initial LikedBy list should be empty.")
+        self.assertEqual(
+            created_thread["LikedBy"], [], "Initial LikedBy list should be empty."
+        )
 
     # TODO: ADD DELETE_POST FUNCTION
 
@@ -245,13 +312,15 @@ class ForumTests(TestCase):
         # Step 1: Set up sample data
         user_id = "test_user_123"
         delete_threads_by_user(user_id)
-        
+
         # Verify all threads for the user are deleted
         response = self.threads_table.scan(
             FilterExpression="UserID = :user",
-            ExpressionAttributeValues={":user": user_id}
+            ExpressionAttributeValues={":user": user_id},
         )
-        self.assertEqual(len(response["Items"]), 0, "All threads for the user should be deleted.")
+        self.assertEqual(
+            len(response["Items"]), 0, "All threads for the user should be deleted."
+        )
 
     def tearDown(self):
         delete_threads_by_user("test_user_123")

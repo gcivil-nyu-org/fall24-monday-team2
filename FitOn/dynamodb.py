@@ -582,6 +582,7 @@ def fetch_all_users():
     # Return the list of unique user IDs
     return [{"username": user} for user in unique_users]
 
+
 def delete_threads_by_user(user_id):
     """
     Deletes all threads in the specified DynamoDB table for a given user ID.
@@ -594,20 +595,18 @@ def delete_threads_by_user(user_id):
         response = threads_table.scan(
             FilterExpression="UserID = :user",
             ExpressionAttributeValues={":user": user_id},
-            ProjectionExpression="ThreadID"
+            ProjectionExpression="ThreadID",
         )
-        
+
         # Extract ThreadIDs from the scan result
         thread_ids = [item["ThreadID"] for item in response.get("Items", [])]
-        
+
         # If there are no more items to delete, exit the loop
         if not thread_ids:
             print("No more items to delete.")
             break
-        
+
         # Loop through each ThreadID and delete the item
         for thread_id in thread_ids:
-            threads_table.delete_item(
-                Key={"ThreadID": thread_id}
-            )
+            threads_table.delete_item(Key={"ThreadID": thread_id})
             print(f"Deleted ThreadID: {thread_id}")
