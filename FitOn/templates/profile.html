@@ -112,10 +112,13 @@
                         Update Profile
                     </button>
                 </div>
-
                 <div class="button-container">
-                    <a href="{% url 'authorize_google_fit' %}" class="submit-button">Sign In using Google</a>
+                    <button type="button" class="submit-button" onclick="redirectToGoogleAuth()">
+                        Sign In using Google
+                    </button>
                 </div>
+                
+                
             </form>
         </div>
 
@@ -257,6 +260,22 @@
         // When "OK" is clicked in the success modal, redirect to the homepage
         okBtn.onclick = function() {
             window.location.href = "{% url 'homepage' %}";
+        }
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginSuccess = "{{ login_success|default:'false' }}" === "True";
+            if (loginSuccess) {
+                const signInButton = document.querySelector('.submit-button[onclick*="redirectToGoogleAuth"]');
+                if (signInButton) {
+                    signInButton.classList.add('success');
+                }
+            }
+        });
+
+        function redirectToGoogleAuth() {
+            window.location.href = "{% url 'authorize_google_fit' %}";
         }
     </script>
 

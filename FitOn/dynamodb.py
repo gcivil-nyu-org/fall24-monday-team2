@@ -17,6 +17,7 @@ s3_client = boto3.client("s3", region_name="us-west-2")
 users_table = dynamodb.Table("Users")
 threads_table = dynamodb.Table("ForumThreads")
 posts_table = dynamodb.Table("ForumPosts")
+fitness_table = dynamodb.Table("UserFitnessData")
 
 password_reset_table = dynamodb.Table("PasswordResetRequests")
 
@@ -575,3 +576,26 @@ def fetch_all_users():
 
     # Return the list of unique user IDs
     return [{"username": user} for user in unique_users]
+
+
+############################
+# Fetchng Fitness Data     #
+############################
+
+
+def get_fitness_data(metric, email, start_time, end_time):
+    try:
+        response = fitness_table.scan(
+            FilterExpression="metric = :m AND #t BETWEEN :start AND :end AND email = :email",
+            ExpressionAttributeNames={"#t": "time"},
+            ExpressionAttributeValues={
+                ":m": metric,
+                ":email": email,
+                ":start": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                ":end": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+        return response
+    except Exception as e:
+        print(f"Error querying DynamoDB for fitness data. {e}")
+        return None

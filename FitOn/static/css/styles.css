@@ -193,12 +193,14 @@ footer {
     font-size: 16px; /* Font size */
     margin: 0 10px; /* Add some space between buttons */
     transition: background-color 0.3s ease; /* Smooth transition for background color */
+    text-decoration: none; /* Remove underline */
 }
 
 /* Submit Button styles */
 .submit-button {
     background-color: #6A82FB; /* Primary blue color */
     color: white; /* White text */
+    text-decoration: none; /* Remove underline */
 }
 
 /* Hover effect for the Submit button */
@@ -466,18 +468,3 @@ footer {
     background-color: #28a745; /* Green color */
 }
 
-/* .google-sign-in-button {
-    display: inline-block;
-    background-color: #6A82FB;
-    color: white;
-    text-align: center;
-    padding: 10px 20px;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 16px;
-    transition: background-color 0.3s ease;
-}
-
-.google-sign-in-button:hover {
-    background-color: #5766db;
-} */
