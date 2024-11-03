@@ -468,3 +468,8 @@ footer {
     background-color: #28a745; /* Green color */
 }
 
+/* Green background for successful login */
+.deactivate-button.success {
+    background-color: #5c0303; /* Green color */
+}
+

@@ -1,16 +1,14 @@
 from datetime import datetime, timedelta
 from django.test import TestCase, Client
+from unittest.mock import patch, MagicMock
+from google.oauth2.credentials import Credentials
 from django.urls import reverse
+from . import dynamodb
 import boto3
-from .dynamodb import (
-    fetch_filtered_threads,
-    fetch_all_users,
-    create_thread,
-    create_post,
-)
 from django.contrib.auth.models import User
 import time
 import json
+from .views import SCOPES
 
 last_week_date = (datetime.now() - timedelta(days=7)).isoformat()
 another_date = (datetime.now() - timedelta(days=5)).isoformat()
@@ -71,28 +69,30 @@ class ForumTests(TestCase):
         time.sleep(5)  # Ensure data is available for scan
 
         # Create a thread in DynamoDB to work with
-        thread = create_thread(
+        thread = dynamodb.create_thread(
             title="Test Thread", user_id="testuser", content="Test Content"
         )
         self.thread_id = thread["ThreadID"]
 
     def test_fetch_filtered_threads(self):
-        threads = fetch_filtered_threads(username="test_user")
+        threads = dynamodb.fetch_filtered_threads(username="test_user")
         self.assertEqual(len(threads), 1)
         self.assertEqual(threads[0]["UserID"], "test_user")
 
-        threads = fetch_filtered_threads(thread_type="thread")
+        threads = dynamodb.fetch_filtered_threads(thread_type="thread")
         self.assertTrue(all(thread["ReplyCount"] == 0 for thread in threads))
 
         start_date = (
             (datetime.now().replace(year=datetime.now().year - 1)).date().isoformat()
         )
         end_date = datetime.now().date().isoformat()
-        threads = fetch_filtered_threads(start_date=start_date, end_date=end_date)
+        threads = dynamodb.fetch_filtered_threads(
+            start_date=start_date, end_date=end_date
+        )
         self.assertGreaterEqual(len(threads), 1)
 
     def test_fetch_all_users(self):
-        users = fetch_all_users()
+        users = dynamodb.fetch_all_users()
         user_ids = [user["username"] for user in users]
         self.assertIn("test_user", user_ids)
         self.assertIn("another_user", user_ids)
@@ -130,7 +130,7 @@ class ForumTests(TestCase):
         self.assertFalse(data["liked"])
 
     def test_delete_post(self):
-        create_post(
+        dynamodb.create_post(
             thread_id=self.thread_id, user_id="testuser", content="Test Post Content"
         )
 
@@ -155,4 +155,71 @@ class ForumTests(TestCase):
         cls.posts_table.meta.client.get_waiter("table_not_exists").wait(
             TableName="posts"
         )
+        super().tearDownClass()
+
+
+###########################################################
+#       TEST CASE FOR GOOGLE AUTHENTICATION               #
+###########################################################
+
+
+class GoogleAuthTestCase(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.client = Client()
+
+    @patch("FitOn.views.Flow")
+    def test_authorize_google_fit(self, mock_flow):
+        # Mock the Flow object
+        mock_instance = mock_flow.from_client_config.return_value
+        mock_instance.authorization_url.return_value = (
+            "http://mock-auth-url",
+            "mock-state",
+        )
+
+        # Simulate a GET request to the authorization view
+        response = self.client.get(reverse("authorize_google_fit"))
+
+        # Assertions to verify the response
+        self.assertEqual(response.status_code, 302)  # Check if redirect status code
+        self.assertIn("http://mock-auth-url", response.url)  # Verify redirection URL
+        self.assertIn("mock-state", self.client.session)  # Check if state is in session
+
+    @patch("FitOn.views.Flow")
+    @patch("FitOn.views.Credentials")
+    def test_callback_google_fit(self, mock_flow):
+        # Set up the mock credentials
+        mock_creds = MagicMock(spec=Credentials)
+        mock_creds.token = "mock-token"
+        mock_creds.refresh_token = "mock-refresh-token"
+        mock_creds.token_uri = "mock-token-uri"
+        mock_creds.client_id = "mock-client-id"
+        mock_creds.client_secret = "mock-client-secret"
+        mock_creds.scopes = SCOPES
+
+        # Mock the Flow object and its methods
+        mock_instance = mock_flow.from_client_config.return_value
+        mock_instance.fetch_token.return_value = None
+        mock_instance.credentials = mock_creds
+
+        # Set a user ID in the session
+        session = self.client.session
+        session["user_id"] = "mock_user_id"
+        session["google_fit_state"] = "mock-state"
+        session.save()
+
+        # Simulate a GET request to the callback view
+        response = self.client.get(reverse("callback_google_fit"))
+
+        # Assertions
+        self.assertEqual(
+            response.status_code, 200
+        )  # Adjust status code based on expected response
+        self.assertIn(
+            "Signed in Successfully", response.content.decode()
+        )  # Check for success message
+
+    @classmethod
+    def tearDownClass(cls):
         super().tearDownClass()

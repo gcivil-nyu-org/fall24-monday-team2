@@ -73,4 +73,5 @@ urlpatterns = [
     path("metrics/", views.list_metrics, name="metrics_list"),
     path("data/", views.get_metric_data, name="get_metric_data"),
     path("submit-health-data/", views.health_data_view, name="submit_health_data"),
+    path("delink/", views.delink_google_fit, name="delink_google_fit"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

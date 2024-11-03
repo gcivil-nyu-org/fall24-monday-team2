@@ -6,13 +6,9 @@ from .dynamodb import (
     create_thread,
     create_user,
     delete_user_by_username,
-    # fetch_all_threads,
     fetch_posts_for_thread,
-    # fetch_thread,
     get_fitness_trainer_applications,
     get_last_reset_request_time,
-    # get_replies,
-    # get_thread_details,
     get_user,
     get_user_by_email,
     get_user_by_uid,
@@ -66,6 +62,7 @@ from asgiref.sync import sync_to_async
 import uuid
 import ssl
 from google_auth_oauthlib.flow import Flow
+import requests
 
 # from django.contrib.auth.decorators import login_required
 from .dynamodb import threads_table, delete_post
@@ -113,6 +110,16 @@ def homepage(request):
 
 def list_metrics(request):
     return render(request, "metric_list.html")
+
+
+@sync_to_async
+def add_message(request, level, message):
+    messages.add_message(request, level, message)
+
+
+@sync_to_async
+def perform_redirect(url_name):
+    return redirect(url_name)
 
 
 def login(request):
@@ -476,6 +483,35 @@ def callback_google_fit(request):
     # Handle invalid state
     messages.error(request, "Sign-in failed. Please try again.")
     return redirect("homepage")
+
+
+def delink_google_fit(request):
+    if "credentials" in request.session:
+        credentials = Credentials(**request.session["credentials"])
+
+        # Revoke the token on Google's side (optional but recommended)
+        revoke_endpoint = "https://accounts.google.com/o/oauth2/revoke"
+        token = credentials.token
+        revoke_response = requests.post(
+            revoke_endpoint,
+            params={"token": token},
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+
+        if revoke_response.status_code == 200:
+            print("Google account successfully revoked.")
+        else:
+            print("Failed to revoke Google account.")
+
+        # Remove credentials from the session
+        del request.session["credentials"]
+
+        # Display a message to the user (optional)
+        messages.success(request, "Your Google account has been successfully delinked.")
+    else:
+        messages.error(request, "No linked Google account found.")
+
+    return redirect("profile")
 
 
 def fitness_trainer_application_view(request):
@@ -1026,13 +1062,13 @@ async def fetch_metric_data(service, metric, total_data, duration, frequency, em
     elif frequency == "monthly":
         bucket = 2592000000
 
-    print(start_time.timestamp())
-    print(end_time.timestamp())
+    # print(start_time.timestamp())
+    # print(end_time.timestamp())
 
     start_date = start_time.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     end_date = end_time.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    print(start_date)
-    print(end_date)
+    # print(start_date)
+    # print(end_date)
 
     if metric == "sleep":
         data = (
@@ -1094,11 +1130,13 @@ async def fetch_metric_data(service, metric, total_data, duration, frequency, em
         context = pressure_plot(data)
         total_data["pressure"] = context
     response = get_fitness_data(metric, email, start_time, end_time)
-
+    print(
+        f"Metric : {metric}\nResponse: {response}\n",
+    )
     print("printing processed data from DynamoDB--------------------------------")
 
     processed_data = process_dynamo_data(response["Items"], frequency)
-    # print("processed data", processed_data)
+    print("processed data", processed_data)
 
     # Assuming 'processed_data' is structured similarly for each metric
     # and 'frequency' is defined appropriately for the context in which this is run
@@ -1146,13 +1184,15 @@ def get_credentials(request):
     if "credentials" in request.session:
         credentials = Credentials(**request.session["credentials"])
         return credentials, request.user.username
-
-    return None
+    return None, None
 
 
 async def fetch_all_metric_data(request, duration, frequency):
     total_data = {}
     credentials, email = await get_credentials(request)
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    email = user.get("email")
     if credentials:
         # try:
         service = build("fitness", "v1", credentials=credentials)
@@ -1173,47 +1213,59 @@ async def fetch_all_metric_data(request, duration, frequency):
         #     total_data = {}
 
     else:
-        print("Not signed in Google")
-
+        print("Not Signed in Google")
     print("total data: ", total_data)
     return total_data
 
 
 async def get_metric_data(request):
+    credentials = await sync_to_async(lambda: request.session.get("credentials"))()
+    print("Credentials: \n", credentials)
+    if credentials:
+        duration = "week"
+        frequency = "daily"
 
-    duration = "week"
-    frequency = "daily"
+        if request.GET.get("data_drn"):
+            duration = request.GET.get("data_drn")
 
-    if request.GET.get("data_drn"):
-        duration = request.GET.get("data_drn")
+        if request.GET.get("data_freq"):
+            frequency = request.GET.get("data_freq")
 
-    if request.GET.get("data_freq"):
-        frequency = request.GET.get("data_freq")
+        total_data = await fetch_all_metric_data(request, duration, frequency)
 
-    total_data = await fetch_all_metric_data(request, duration, frequency)
-
-    context = {"data": total_data}
-    print("Inside get metric:", context)
-    return render(request, "display_metrics_data.html", context)
+        context = {"data": total_data}
+        print("Inside get metric:", context)
+        return await sync_to_async(render)(
+            request, "display_metrics_data.html", context
+        )
+    else:
+        await add_message(
+            request,
+            messages.ERROR,
+            "User not logged in. Please sign in to access your data.",
+        )
+        return await perform_redirect("profile")
 
 
 def health_data_view(request):
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    user_email = user.get("email")
     dynamodb_res = dynamodb
     table = dynamodb_res.Table("UserFitnessData")
-    default_email = request.user.username
 
     if request.method == "POST":
         data = request.POST
         print(data)
         table.put_item(
             Item={
-                "email": default_email,  # Use the default email
+                "email": user_email,  # Use the default email
                 "metric": data.get("metric"),
                 "time": data.get("time"),
                 "value": data.get("value"),
             }
         )
-        return redirect("metrics:get_metric_data")
+        return redirect("get_metric_data")
 
     # Fetch all the metrics data from DynamoDB
     response = table.scan()
@@ -1227,6 +1279,4 @@ def health_data_view(request):
     for metric in metrics_data:
         metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
 
-    return render(
-        request, "metrics/display_metric_data.html", {"metrics_data": metrics_data}
-    )
+    return render(request, "display_metric_data.html", {"metrics_data": metrics_data})

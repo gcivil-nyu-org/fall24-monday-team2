@@ -585,6 +585,9 @@ def fetch_all_users():
 
 def get_fitness_data(metric, email, start_time, end_time):
     try:
+        print("Inside Fitness Data Function\n")
+        print("Start Time: \n", start_time)
+        print("End Time: \n", end_time)
         response = fitness_table.scan(
             FilterExpression="metric = :m AND #t BETWEEN :start AND :end AND email = :email",
             ExpressionAttributeNames={"#t": "time"},
@@ -594,6 +597,9 @@ def get_fitness_data(metric, email, start_time, end_time):
                 ":start": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 ":end": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
+        )
+        print(
+            f"Metric : {metric}\nResponse: {response}\n",
         )
         return response
     except Exception as e:
