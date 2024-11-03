@@ -48,7 +48,7 @@ from django.conf import settings
 from django.core.mail import send_mail, get_connection
 
 # from django.core.mail import EmailMultiAlternatives
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -59,11 +59,14 @@ from django.utils import timezone
 # import os
 import uuid
 import ssl
+import pytz
+import boto3
 from google_auth_oauthlib.flow import Flow
 
 # from django.contrib.auth.decorators import login_required
 from .dynamodb import threads_table, delete_post
 import json
+from datetime import datetime
 
 # from django.http import HttpResponse
 
@@ -513,6 +516,14 @@ def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
     thread = threads_table.get_item(Key={"ThreadID": thread_id}).get("Item")
     posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
+    user_id = request.session.get("user_id")
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
+
+    is_banned = user.get("is_banned")
+    if is_banned:
+        return render(request, "forums.html", {"is_banned": is_banned})
 
     if not thread:
         return JsonResponse(
@@ -559,6 +570,7 @@ def thread_detail_view(request, thread_id):
         request,
         "thread_detail.html",
         {
+            "user": user,
             "thread": thread,
             "posts": posts,
             "liked": user_id in thread.get("LikedBy", []),
@@ -629,6 +641,14 @@ def delete_post_view(request):
 
 
 def forum_view(request):
+    user_id = request.session.get("username")
+    user = get_user_by_username(user_id)
+    is_banned = user.get("is_banned")
+    print(user)
+    print(is_banned)
+    if is_banned:
+        return render(request, "forums.html", {"is_banned": is_banned})
+
     # Get filter inputs from the request's GET parameters
     username = request.GET.get("username", "")  # Username filter
     thread_type = request.GET.get("type", "all")  # Thread or Reply filter
@@ -650,4 +670,229 @@ def forum_view(request):
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
 
-    return render(request, "forums.html", {"threads": threads, "users": users})
+    return render(
+        request,
+        "forums.html",
+        {
+            "threads": threads,
+            "users": users,
+            "is_banned": is_banned,
+        },
+    )
+
+
+# -----------------
+# Ban User Function
+# ------------------
+
+
+def toggle_ban_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(username)
+
+        if not username:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        user = get_user_by_username(username)
+        print(user)
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        uid = user.get("user_id")
+        # Toggle the 'is_banned' attribute
+        is_banned = not user.get("is_banned", False)
+
+        # Define the update expression and attributes
+        update_expression = "set is_banned = :b"
+        expression_values = {":b": is_banned}
+
+        # If banning the user, set 'punishment_date' to the current time
+        if is_banned:
+            est = pytz.timezone("US/Eastern")
+            punishment_date = datetime.now(est).isoformat()
+            update_expression += ", punishment_date = :d"
+            expression_values[":d"] = punishment_date
+        else:
+            # If unbanning, remove punishment_date attribute
+            update_expression += " remove punishment_date"
+
+        # Update the user item in DynamoDB
+        users_table.update_item(
+            Key={"user_id": uid},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+        )
+
+        return JsonResponse({"status": "success", "is_banned": is_banned})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def toggle_mute_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(username)
+
+        if not username:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        user = get_user_by_username(username)
+        print(user)
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        uid = user.get("user_id")
+        # Toggle the 'is_banned' attribute
+        is_muted = not user.get("is_muted", False)
+
+        # Define the update expression and attributes
+        update_expression = "set is_muted = :b"
+        expression_values = {":b": is_muted}
+
+        # If banning the user, set 'punishment_date' to the current time
+        if is_muted:
+            est = pytz.timezone("US/Eastern")
+            punishment_date = datetime.now(est).isoformat()
+            update_expression += ", punishment_date = :d"
+            expression_values[":d"] = punishment_date
+        else:
+            # If unbanning, remove punishment_date attribute
+            update_expression += " remove punishment_date"
+
+        # Update the user item in DynamoDB
+        users_table.update_item(
+            Key={"user_id": uid},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+        )
+
+        return JsonResponse({"status": "success", "is_muted": is_muted})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def unban_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        user_id = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(user_id)
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        # Set 'is_banned' to False and remove 'punishment_date'
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="set is_banned = :b remove punishment_date",
+            ExpressionAttributeValues={":b": False},
+        )
+
+        return JsonResponse({"status": "success", "message": "User has been unbanned"})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def unmute_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        user_id = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(user_id)
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        # Set 'is_banned' to False and remove 'punishment_date'
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="set is_muted = :b remove punishment_date",
+            ExpressionAttributeValues={":b": False},
+        )
+
+        return JsonResponse({"status": "success", "message": "User has been unmuted"})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+# -------------
+# Punishments
+# -------------
+
+
+def punishments_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("username")
+    user = get_user_by_username(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page.")
+
+    # Fetch only punished users (banned or muted)
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+    response = users_table.scan(
+        FilterExpression="is_banned = :true OR is_muted = :true",
+        ExpressionAttributeValues={":true": True},
+    )
+    punished_users = response.get("Items", [])
+    print(punished_users)
+
+    # Pass the punished users to the template
+    return render(request, "punishments.html", {"punished_users": punished_users})

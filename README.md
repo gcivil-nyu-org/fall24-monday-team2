@@ -1,8 +1,8 @@
 # fall24-monday-team2
 
-Buid Status:  [![Build Status](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2.svg?token=ghd6pxZi8eiJyeoYpQzW&branch=develop)](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2)
+Buid Status:  [![Build Status](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2.svg?token=ghd6pxZi8eiJyeoYpQzW&branch=adm_moderation)](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2)
 
-Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/fall24-monday-team2/badge.svg?branch=develop)](https://coveralls.io/github/gcivil-nyu-org/fall24-monday-team2?branch=develop)
+Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/fall24-monday-team2/badge.svg?branch=adm_moderation)](https://coveralls.io/github/gcivil-nyu-org/fall24-monday-team2?branch=adm_moderation)
 
 ## Team Members:
 1. Rohan Chopra
@@ -13,3 +13,7 @@ Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/
 
 ## Wiki:
 https://github.com/gcivil-nyu-org/fall24-monday-team2/wiki
+
+## TODO:
+- Deleting threads should also delete all replies/posts.
+- Delete threads by user before deleting the user

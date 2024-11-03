@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="punishments-container">
+    <h2>Punished Users</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Date</th>
+                <th>Punishment Type</th>
+                <th>Reason</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in punished_users %}
+            <tr>
+                <td>{{ user.username }}</td>
+                <td>{{ user.punishment_date|slice:":10" }} {{ user.punishment_date|slice:"11:16" }}</td>
+                <td>
+                    {% if user.is_banned and user.is_muted %}
+                        Banned, Muted
+                    {% elif user.is_banned %}
+                        Banned
+                    {% elif user.is_muted %}
+                        Muted
+                    {% endif %}
+                </td>
+                <td>Violation of rules</td>
+                <td>
+                    <button class="button unban-btn" data-user-id="{{ user.user_id }}" {% if not user.is_banned %}disabled{% endif %}>Unban</button>
+                    <button class="button unmute-btn" data-user-id="{{ user.user_id }}" {% if not user.is_muted %}disabled{% endif %}>Unmute</button>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" style="text-align: center; color: #999;">
+                    No punished users found.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const unbanButtons = document.querySelectorAll('.unban-btn');
+        const unmuteButtons = document.querySelectorAll('.unmute-btn');
+
+        unbanButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const userId = this.dataset.userId;
+
+                fetch('/unban_user/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ 'user_id': userId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // If unbanned successfully, disable the Unban button and update UI
+                        this.disabled = true;
+                        this.style.backgroundColor = '#ccc';
+                        this.style.cursor = 'not-allowed';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        });
+
+        unmuteButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const userId = this.dataset.userId;
+
+                fetch('/unmute_user/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ 'user_id': userId })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // If unbanned successfully, disable the Unban button and update UI
+                        this.disabled = true;
+                        this.style.backgroundColor = '#ccc';
+                        this.style.cursor = 'not-allowed';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        });
+    });
+</script>
+
+<style>
+    .punishments-container {
+        width: 80%;
+        margin: 20px auto;
+        font-family: Arial, sans-serif;
+    }
+
+    h2 {
+        text-align: center;
+        color: #333;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        background-color: #f9f9f9;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+
+    th, td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+
+    th {
+        background-color: #333;
+        color: white;
+    }
+
+    .button {
+        padding: 5px 10px;
+        font-size: 14px;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .unban-btn {
+        background-color: green;
+    }
+
+    .unmute-btn {
+        background-color: blue;
+    }
+
+    .button[disabled] {
+        background-color: #ccc;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
