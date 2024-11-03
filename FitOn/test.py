@@ -172,6 +172,7 @@ class GoogleAuthTestCase(TestCase):
     @patch("FitOn.views.Flow")
     def test_authorize_google_fit(self, mock_flow):
         # Mock the Flow object
+        print("Inside Auth Google Function\n")
         mock_instance = mock_flow.from_client_config.return_value
         mock_instance.authorization_url.return_value = (
             "http://mock-auth-url",
@@ -180,6 +181,8 @@ class GoogleAuthTestCase(TestCase):
 
         # Simulate a GET request to the authorization view
         response = self.client.get(reverse("authorize_google_fit"))
+        print("Sessions: ", self.client.session.items())
+        print("Response: \n", response)
 
         # Assertions to verify the response
         self.assertEqual(response.status_code, 302)  # Check if redirect status code
