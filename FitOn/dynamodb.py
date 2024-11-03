@@ -102,7 +102,7 @@ def delete_user_by_username(username):
         user_id = users[0]["user_id"]  # Get the user's 'user_id'
 
         # Delete the user by user_id (or username if it's the primary key)
-        delete_response = users_table.delete_item(
+        users_table.delete_item(
             Key={"user_id": user_id}  # Replace with your partition key
         )
         print(f"User '{username}' successfully deleted.")

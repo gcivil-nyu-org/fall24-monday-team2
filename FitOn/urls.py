@@ -72,5 +72,5 @@ urlpatterns = [
     path("delete_post/", views.delete_post_view, name="delete_post"),
     path("metrics/", views.list_metrics, name="metrics_list"),
     path("data/", views.get_metric_data, name="get_metric_data"),
-    path("submit-health-data/", views.health_data_view, name='submit_health_data'),
+    path("submit-health-data/", views.health_data_view, name="submit_health_data"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

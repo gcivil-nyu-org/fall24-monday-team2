@@ -86,7 +86,7 @@ dataTypes = {
     "oxygen": "com.google.oxygen_saturation",
     "activity": "com.google.activity.segment",
     "glucose": "com.google.blood_glucose",
-    "pressure": "com.google.blood_pressure"
+    "pressure": "com.google.blood_pressure",
 }
 
 df = pd.read_csv("google_fit_activity_types.csv")

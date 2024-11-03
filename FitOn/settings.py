@@ -27,7 +27,7 @@ SECRET_KEY = "django-insecure-iqw@@a4osoerv=_))5ipw&kthcyr@v55xwz#=sse!13()+s#l_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-#For static files
+# For static files
 IS_PRODUCTION = not DEBUG
 
 
@@ -184,8 +184,8 @@ if IS_PRODUCTION:
     STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{AWS_LOCATION}/"
     STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 else:
-    STATIC_URL = '/static/'
-    STATICFILES_DIRS = [BASE_DIR / 'static'] 
+    STATIC_URL = "/static/"
+    STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # Media files
 MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"
