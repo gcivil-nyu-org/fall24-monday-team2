@@ -712,7 +712,9 @@ def get_thread(title, user_id, content, created_at):
         print(f"Error retrieving thread: {e}")
         return None
 
-## Zejun's Code
+
+# Zejun's Code
+
 
 def create_reply(thread_id, user_id, content):
     reply_id = str(uuid.uuid4())
@@ -733,14 +735,15 @@ def create_reply(thread_id, user_id, content):
             UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
             ExpressionAttributeValues={
                 ":reply": [reply],  # Append the reply as a list item
-                ":empty_list": []   # Default to an empty list if Replies doesn't exist
-            }
+                ":empty_list": [],  # Default to an empty list if Replies doesn't exist
+            },
         )
         return {"status": "success", "reply_id": reply_id}
     except Exception as e:
         print(f"Error adding reply: {e}")
         return {"status": "error", "message": str(e)}
-    
+
+
 def like_comment(post_id, user_id):
     # Fetch the comment by post_id
     response = posts_table.get_item(Key={"PostID": post_id})
@@ -768,13 +771,11 @@ def like_comment(post_id, user_id):
     posts_table.update_item(
         Key={"PostID": post_id},
         UpdateExpression="SET Likes = :likes, LikedBy = :liked_by",
-        ExpressionAttributeValues={
-            ":likes": likes,
-            ":liked_by": liked_by
-        }
+        ExpressionAttributeValues={":likes": likes, ":liked_by": liked_by},
     )
 
     return likes, liked
+
 
 def report_comment(post_id, user_id):
     # Update the comment as reported by adding user_id to ReportedBy
@@ -792,10 +793,9 @@ def report_comment(post_id, user_id):
     posts_table.update_item(
         Key={"PostID": post_id},
         UpdateExpression="SET ReportedBy = :reported_by",
-        ExpressionAttributeValues={
-            ":reported_by": reported_by
-        }
+        ExpressionAttributeValues={":reported_by": reported_by},
     )
+
 
 def delete_reply(post_id, thread_id, reply_id):
     try:
@@ -807,29 +807,30 @@ def delete_reply(post_id, thread_id, reply_id):
             return {"status": "error", "message": "Post or replies not found"}
 
         # Filter out the reply with the specific reply_id
-        updated_replies = [reply for reply in post["Replies"] if reply["ReplyID"] != reply_id]
+        updated_replies = [
+            reply for reply in post["Replies"] if reply["ReplyID"] != reply_id
+        ]
 
         # Update the post in DynamoDB with the new list of replies
         posts_table.update_item(
             Key={"PostID": post_id, "ThreadID": thread_id},
             UpdateExpression="SET Replies = :updated_replies",
-            ExpressionAttributeValues={":updated_replies": updated_replies}
+            ExpressionAttributeValues={":updated_replies": updated_replies},
         )
 
         return {"status": "success"}
     except Exception as e:
         print(f"Error deleting reply: {e}")
         return {"status": "error", "message": str(e)}
-    
+
+
 def fetch_reported_threads_and_comments():
     reported_threads = []
     reported_comments = []
 
     # Fetch reported threads
     try:
-        response = threads_table.scan(
-            FilterExpression=Attr("ReportedBy").exists()
-        )
+        response = threads_table.scan(FilterExpression=Attr("ReportedBy").exists())
         reported_threads = response.get("Items", [])
         print(f"Fetched {len(reported_threads)} reported threads.")
     except ClientError as e:
@@ -837,9 +838,7 @@ def fetch_reported_threads_and_comments():
 
     # Fetch reported comments
     try:
-        response = posts_table.scan(
-            FilterExpression=Attr("ReportedBy").exists()
-        )
+        response = posts_table.scan(FilterExpression=Attr("ReportedBy").exists())
         reported_comments = response.get("Items", [])
         print(f"Fetched {len(reported_comments)} reported comments.")
     except ClientError as e:
@@ -847,8 +846,9 @@ def fetch_reported_threads_and_comments():
 
     return {
         "reported_threads": reported_threads,
-        "reported_comments": reported_comments
+        "reported_comments": reported_comments,
     }
+
 
 def mark_thread_as_reported(thread_id):
     try:
@@ -859,7 +859,9 @@ def mark_thread_as_reported(thread_id):
         reported_by = thread.get("ReportedBy", [])
 
         # Mark the thread as reported (or add to the list if already exists)
-        reported_by.append("admin")  # Replace "admin" with the reporting user ID if needed
+        reported_by.append(
+            "admin"
+        )  # Replace "admin" with the reporting user ID if needed
 
         # Update the thread with the reported status
         threads_table.update_item(
