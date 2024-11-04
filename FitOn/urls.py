@@ -69,6 +69,11 @@ urlpatterns = [
         views.fitness_trainer_applications_list_view,
         name="fitness_trainer_applications_list",
     ),
+    path(
+        "fitness_trainers_list/",
+        views.fitness_trainers_list_view,
+        name="fitness_trainers_list",
+    ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),
@@ -82,6 +87,16 @@ urlpatterns = [
     path("punishments/", views.punishments_view, name="punishments"),
     path("unban_user/", views.unban_user, name="unban_user"),
     path("unmute_user/", views.unmute_user, name="unmute_user"),
+    path(
+        "approve_fitness_trainer/",
+        views.approve_fitness_trainer,
+        name="approve_fitness_trainer",
+    ),
+    path(
+        "reject_fitness_trainer/",
+        views.reject_fitness_trainer,
+        name="reject_fitness_trainer",
+    ),
     path("add_reply/", views.add_reply, name="add_reply"),
     path("delete_reply/", views.delete_reply_view, name="delete_reply"),
     path("delete_thread/", views.delete_thread, name="delete_thread"),

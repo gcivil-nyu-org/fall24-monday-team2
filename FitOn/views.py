@@ -29,6 +29,9 @@ from .dynamodb import (
     dynamodb,
     threads_table,
     delete_post,
+    get_fitness_trainers,
+    make_fitness_trainer,
+    remove_fitness_trainer,
     like_comment,
     report_comment,
     delete_reply,
@@ -46,6 +49,7 @@ from .forms import (
 )
 
 # from .models import PasswordResetRequest
+import datetime as dt
 from datetime import datetime
 import pytz
 from datetime import timedelta
@@ -59,20 +63,14 @@ from django.contrib import messages
 from django.conf import settings
 
 # from django.core.files.storage import FileSystemStorage
-from django.core.mail import send_mail, get_connection
+from django.core.mail import send_mail, get_connection, EmailMessage
+from django.core.mail.backends.locmem import EmailBackend
 
 # from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.core.mail import (
-    send_mail,
-    get_connection,
-    EmailMultiAlternatives,
-    EmailMessage,
-)
-from django.core.mail.backends.locmem import EmailBackend
 from django.http import Http404
 
 # from django.utils.encoding import force_bytes
@@ -598,6 +596,12 @@ def fitness_trainer_application_view(request):
 
 
 def fitness_trainer_applications_list_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page.")
+
     # Retrieve applications from DynamoDB
     applications = get_fitness_trainer_applications()
 
@@ -607,6 +611,106 @@ def fitness_trainer_applications_list_view(request):
         "fitness_trainer_applications_list.html",
         {"applications": applications},
     )
+
+
+def fitness_trainers_list_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of trainers from DynamoDB
+    trainers = get_fitness_trainers()
+
+    # Render the list of trainers
+    return render(
+        request,
+        "fitness_trainers_list.html",
+        {"trainers": trainers},
+    )
+
+
+def approve_fitness_trainer(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get("username")
+        user = get_user_by_username(username)
+
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        make_fitness_trainer(user["user_id"])
+
+        subject = "Fitness Trainer Application Approved"
+        message = render_to_string(
+            "fitness_trainer_email.html",
+            {"username": username, "approval": True, "reason": ""},
+        )
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = user.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "html"
+        email_message.send()
+
+        return JsonResponse(
+            {"status": "success", "message": "Fitness Trainer has been approved"}
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def reject_fitness_trainer(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get("username")
+        user = get_user_by_username(username)
+
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        remove_fitness_trainer(user["user_id"])
+
+        subject = "Fitness Trainer Application Rejected"
+        message = render_to_string(
+            "fitness_trainer_email.html",
+            {
+                "username": username,
+                "approval": False,
+                "reason": "We are not accepting fitness trainers right now, please try again later",
+            },
+        )
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = user.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "html"
+        email_message.send()
+
+        return JsonResponse(
+            {"status": "success", "message": "Fitness Trainer application rejected"}
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 
 # -------------------------------
@@ -958,24 +1062,24 @@ def process_dynamo_data(items, frequency):
 
 # function to convert miliseconds to Day
 def parse_millis(millis):
-    return datetime.datetime.fromtimestamp(int(millis) / 1000).strftime("%b %d, %I %p")
+    return dt.datetime.fromtimestamp(int(millis) / 1000).strftime("%b %d, %I %p")
 
 
 def get_group_key(time, frequency):
     """Adjusts start and end times based on frequency."""
     if frequency == "hourly":
         start = time.replace(minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(hours=1)
+        end = start + dt.timedelta(hours=1)
     elif frequency == "daily":
         start = time.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(days=1)
+        end = start + dt.timedelta(days=1)
     elif frequency == "weekly":
-        start = time - datetime.timedelta(days=time.weekday())
+        start = time - dt.timedelta(days=time.weekday())
         start = start.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(days=7)
+        end = start + dt.timedelta(days=7)
     elif frequency == "monthly":
         start = time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(
+        end = start + dt.timedelta(
             days=(time.replace(month=time.month % 12 + 1, day=1) - time).days
         )
     else:
@@ -1000,7 +1104,7 @@ def merge_data(existing_data, new_data, frequency):
 
     # Helper to parse datetime from string
     def parse_time(time_str):
-        return datetime.datetime.strptime(time_str, "%b %d, %I %p")
+        return dt.datetime.strptime(time_str, "%b %d, %I %p")
 
     # Create index of existing data by start time for quick access
     data_index = {}
@@ -1203,16 +1307,16 @@ def pressure_plot(data):
 
 async def fetch_metric_data(service, metric, total_data, duration, frequency, email):
 
-    end_time = datetime.datetime.now() - datetime.timedelta(minutes=1)
+    end_time = dt.datetime.now() - dt.timedelta(minutes=1)
 
     if duration == "day":
-        start_time = end_time - datetime.timedelta(hours=23, minutes=59)
+        start_time = end_time - dt.timedelta(hours=23, minutes=59)
     elif duration == "week":
-        start_time = end_time - datetime.timedelta(days=6, hours=23, minutes=59)
+        start_time = end_time - dt.timedelta(days=6, hours=23, minutes=59)
     elif duration == "month":
-        start_time = end_time - datetime.timedelta(days=29, hours=23, minutes=59)
+        start_time = end_time - dt.timedelta(days=29, hours=23, minutes=59)
     elif duration == "quarter":
-        start_time = end_time - datetime.timedelta(days=89, hours=23, minutes=59)
+        start_time = end_time - dt.timedelta(days=89, hours=23, minutes=59)
 
     if frequency == "hourly":
         bucket = 3600000

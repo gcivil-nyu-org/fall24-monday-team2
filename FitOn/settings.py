@@ -109,6 +109,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "FitOn.context_processors.user_context",
             ],
         },
     },
@@ -183,7 +184,7 @@ if IS_PRODUCTION:
     STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 else:
     STATIC_URL = "/static/"
-    STATICFILES_DIRS = [BASE_DIR / "static"]
+    STATICFILES_DIRS = [BASE_DIR / "FitOn/static"]
 
 # Media files
 MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"

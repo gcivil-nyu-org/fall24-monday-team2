@@ -1,0 +1,92 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <div class="table-container">
+        <h2 class="page-title">Fitness Trainers</h2>
+        <div id="notification" class="notification" style="display:none;"></div>
+        <table class="trainers-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Past Experience as Trainer</th>
+                    <th>Past Experience as Dietician</th>
+                    <th>Reference</th>
+                    <th>Resume</th>
+                    <th>Certifications</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for trainer in trainers %}
+                    <tr>
+                        <td>{{ trainer.username }}</td>
+                        <td>{{ trainer.past_experience_trainer }}</td>
+                        <td>{{ trainer.past_experience_dietician }}</td>
+                        <td>{{ trainer.reference_name }} <br/> <a href="">{{ trainer.reference_contact }}</a></td>
+                        <td><a href="{{ trainer.resume_url }}" class="file-link" target="_blank">View Resume</a></td>
+                        <td>
+                            {% if trainer.certifications_url %}
+                                <a href="{{ trainer.certifications_url }}" class="file-link" target="_blank">View Certifications</a>
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="button-container" style="margin-top: 0px;">
+                                <button class="deactivate-button" data-username="{{ trainer.username }}">Remove</button>
+                            </div>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7" class="no-trainers">No Fitness Trainers found</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const rejectButtons = document.querySelectorAll('.deactivate-button');
+            const notification = document.getElementById('notification');
+
+            const showNotification = (message) => {
+                notification.textContent = message;
+                notification.classList.add('show');
+                notification.style.display = 'block';
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                    notification.style.display = 'none';
+                }, 3000);
+            };
+
+            rejectButtons.forEach(button => {
+                button.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    const username = this.dataset.username;
+                    const row = this.closest('tr');
+
+                    fetch('/reject_fitness_trainer/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token }}',
+                            'Content-Type': 'application/json',
+                            'x-requested-with': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ 'username': username })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            row.remove();
+                            showNotification(`Success: REMOVED "${username}" as a Fitness Trainer`);
+                        } else {
+                            alert('Error: ' + data.message);
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+                });
+            });
+        });
+    </script>
+{% endblock %}

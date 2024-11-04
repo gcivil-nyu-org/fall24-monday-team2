@@ -1,47 +1,106 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <div class="container">
-        <h1 class="page-title">Fitness Trainer Applications</h1>
-        
-        <!-- Table for Applications -->
-        <div class="table-container">
-            <table class="applications-table">
-                <thead>
+    <!-- Table for Applications -->
+    <div class="table-container">
+        <h2 class="page-title">Fitness Trainer Applications</h2>
+        <div id="notification" class="notification" style="display:none;"></div>
+        <table class="trainers-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Past Experience as Trainer</th>
+                    <th>Past Experience as Dietician</th>
+                    <th>Reference</th>
+                    <th>Resume</th>
+                    <th>Certifications</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for application in applications %}
                     <tr>
-                        <th>User</th>
-                        <th>Past Experience as Trainer</th>
-                        <th>Past Experience as Dietician</th>
-                        <th>Reference Name</th>
-                        <th>Reference Contact</th>
-                        <th>Resume</th>
-                        <th>Certifications</th>
+                        <td>{{ application.username }}</td>
+                        <td>{{ application.past_experience_trainer }}</td>
+                        <td>{{ application.past_experience_dietician }}</td>
+                        <td>{{ application.reference_name }} <br/> <a href="">{{ application.reference_contact }}</a></td>
+                        <td><a href="{{ application.resume_url }}" class="file-link" target="_blank">View Resume</a></td>
+                        <td>
+                            {% if application.certifications_url %}
+                                <a href="{{ application.certifications_url }}" class="file-link" target="_blank">View Certifications</a>
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="button-container" style="margin-top: 0px;">
+                                <button class="submit-button" data-username="{{ application.username }}">Approve</button>
+                            </div>
+                            <div class="button-container" style="margin-top: 5px;">
+                                <button class="deactivate-button" data-username="{{ application.username }}">Reject</button>
+                            </div>
+                        </td>
                     </tr>
-                </thead>
-                <tbody>
-                    {% for application in applications %}
-                        <tr>
-                            <td>{{ application.username }}</td>
-                            <td>{{ application.past_experience_trainer }}</td>
-                            <td>{{ application.past_experience_dietician }}</td>
-                            <td>{{ application.reference_name }}</td>
-                            <td>{{ application.reference_contact }}</td>
-                            <td><a href="{{ application.resume_url }}" class="file-link" target="_blank">View Resume</a></td>
-                            <td>
-                                {% if application.certifications_url %}
-                                    <a href="{{ application.certifications_url }}" class="file-link" target="_blank">View Certifications</a>
-                                {% else %}
-                                    N/A
-                                {% endif %}
-                            </td>
-                        </tr>
-                    {% empty %}
-                        <tr>
-                            <td colspan="7" class="no-applications">No applications found</td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                {% empty %}
+                    <tr>
+                        <td colspan="7" class="no-trainers">No applications found</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const notification = document.getElementById('notification');
+    
+            const showNotification = (message) => {
+                notification.textContent = message;
+                notification.classList.add('show');
+                notification.style.display = 'block';
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                    notification.style.display = 'none';
+                }, 3000);
+            };
+    
+            const handleApplication = (url, username, row, successMessage) => {
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ 'username': username })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        row.remove();
+                        showNotification(successMessage);
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(console.error);
+            };
+    
+            document.querySelectorAll('.submit-button, .deactivate-button').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    const row = button.closest('tr');
+                    const username = button.dataset.username;
+                    const isApprove = button.classList.contains('submit-button');
+                    const successMessge = `Success: The application by "${username}" has been ${isApprove ? 'APPROVED' : 'REJECTED'} and removed from the list`
+
+                    handleApplication(
+                        isApprove ? '/approve_fitness_trainer/' : '/reject_fitness_trainer/',
+                        username,
+                        row,
+                        successMessge
+                    );
+                });
+            });
+        });
+    </script>
 {% endblock %}

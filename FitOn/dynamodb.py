@@ -24,6 +24,7 @@ fitness_table = dynamodb.Table("UserFitnessData")
 password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
+fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
 
 class MockUser:
@@ -342,8 +343,6 @@ def get_fitness_trainer_applications():
 
         # Process the list of applications to generate S3 URLs
         for application in applications:
-            # Generate S3 URLs for resume and certifications
-            s3_client = boto3.client("s3")
             application["resume_url"] = s3_client.generate_presigned_url(
                 "get_object",
                 Params={
@@ -376,6 +375,81 @@ def get_fitness_trainer_applications():
         return []
     except Exception as e:
         print(f"Unexpected error retrieving applications: {e}")
+        return []
+
+
+def get_fitness_trainers():
+    try:
+        # Scan DynamoDB table for all fitness trainers
+        response = fitness_trainers_table.scan()
+        trainers = response.get("Items", [])
+
+        # Process the list of fitness trainers to generate S3 URLs
+        for trainer in trainers:
+            trainer["resume_url"] = s3_client.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
+                    "Key": trainer["resume"],
+                },
+                ExpiresIn=3600,  # URL valid for 1 hour
+            )
+
+            # Check if certifications exist, and generate presigned URL
+            if trainer.get("certifications"):
+                trainer["certifications_url"] = s3_client.generate_presigned_url(
+                    "get_object",
+                    Params={
+                        "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
+                        "Key": trainer["certifications"],
+                    },
+                    ExpiresIn=3600,
+                )
+            else:
+                trainer["certifications_url"] = None
+
+            user = get_user(trainer["user_id"])
+            trainer["username"] = user["username"] if user else "Unknown"
+
+        return trainers
+
+    except ClientError as client_err:
+        print(f"Client error: {client_err.response['Error']['Message']}")
+        return []
+    except Exception as e:
+        print(f"Unexpected error retrieving fitness trainers: {e}")
+        return []
+
+
+def make_fitness_trainer(user_id):
+    try:
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_fitness_trainer = :ft",
+            ExpressionAttributeValues={":ft": True},
+        )
+
+        response = applications_table.get_item(Key={"user_id": user_id})
+        application_item = response["Item"]
+
+        fitness_trainers_table.put_item(Item=application_item)
+        applications_table.delete_item(Key={"user_id": user_id})
+    except Exception as e:
+        print(f"Unexpected error making updates: {e}")
+        return []
+
+
+def remove_fitness_trainer(user_id):
+    try:
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_fitness_trainer = :ft, is_rejected = :r",
+            ExpressionAttributeValues={":ft": False, ":r": True},
+        )
+        fitness_trainers_table.delete_item(Key={"user_id": user_id})
+        applications_table.delete_item(Key={"user_id": user_id})
+    except Exception as e:
+        print(f"Unexpected error making updates: {e}")
         return []
 
 
