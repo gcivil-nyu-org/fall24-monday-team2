@@ -591,6 +591,7 @@ def thread_detail_view(request, thread_id):
                 return JsonResponse({"status": "success", "message": "Comment reported successfully!"})
 
             elif action == "add_reply":
+                print("add reply")
                 
                 # Handle adding a reply to a comment
                 reply_content = data.get("content", "").strip()
