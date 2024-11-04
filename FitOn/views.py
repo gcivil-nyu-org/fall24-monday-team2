@@ -30,6 +30,7 @@ from .dynamodb import (
     delete_reply,
     create_reply,
     fetch_reported_threads_and_comments,
+    mark_thread_as_reported,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -792,16 +793,47 @@ def delete_thread(request):
 
 
 def reports_view(request):
-    # Get user details to check if they are admin
+    # Get user details to check if they are an admin
     user = get_user(request.session.get("user_id"))
 
+    # Only allow access if the user is an admin
     if not user.get("is_admin"):
         return redirect("forum")  # Redirect non-admins to the main forum page
 
-    # Fetch reported threads and comments from DynamoDB
-    reported_threads, reported_comments = fetch_reported_threads_and_comments()
+    if request.method == "POST":
+        data = json.loads(request.body.decode("utf-8"))
+        action = data.get("action")
+        thread_id = data.get("thread_id")
 
+        # Check if the action is to report a thread
+        if action == "report_thread" and thread_id:
+            # Mark the thread as reported in DynamoDB
+            mark_thread_as_reported(thread_id)
+            return JsonResponse({"status": "success"})
+        else:
+            return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+    # If it's a GET request, retrieve reported threads and comments
+    reported_data = fetch_reported_threads_and_comments()
+    return render(request, "reports.html", reported_data)
+
+    '''
+    # Fetch reported threads and comments from DynamoDB
+    reported_data = fetch_reported_threads_and_comments()
+    reported_threads = reported_data["reported_threads"]
+    reported_comments = reported_data["reported_comments"]
+
+    # Check if the request is an AJAX request
+    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+        # Return a JSON response for AJAX requests
+        return JsonResponse({
+            "status": "success",
+            "reported_threads": reported_threads,
+            "reported_comments": reported_comments,
+        })
+
+    # For non-AJAX requests, render the HTML page
     return render(request, "reports.html", {
         "reported_threads": reported_threads,
         "reported_comments": reported_comments,
-    })
+    })'''

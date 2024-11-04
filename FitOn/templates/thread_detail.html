@@ -23,8 +23,8 @@
             ▲ {{ thread.Likes }} Like{% if thread.Likes != 1 %}s{% endif %}
         </button>
 
-        <!-- Report Button (Placeholder) -->
-        <button id="report-btn" style="background-color: red; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+        <!-- Report Button -->
+        <button id="report-btn" data-thread-id="{{ thread.ThreadID }}" style="background-color: red; color: white; border: none; padding: 5px 15px; cursor: pointer;">
             ⚑ Report
         </button>
     </div>
@@ -231,8 +231,42 @@ document.addEventListener('DOMContentLoaded', function() {
     // Report main thread post
     reportButton.addEventListener('click', function(event) {
         event.preventDefault();
-        alert('Report functionality coming soon!');
+
+        const threadId = this.getAttribute("data-thread-id"); // Get the thread ID from the data attribute
+
+        if (!threadId) {
+            alert('Error: Thread ID is missing.');
+            return;
+        }
+
+        // Sending a report request to the existing /reports/ endpoint
+        fetch('/reports/', {  // Use the existing /reports/ endpoint
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}', // CSRF token for security
+                'Content-Type': 'application/json',
+                'x-requested-with': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ 
+                'action': 'report_thread',  // Specify the action for reporting
+                'thread_id': threadId       // Include the thread ID in the request body
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('Thread has been reported successfully.');
+                 // Disable the report button or change its appearance
+                reportButton.disabled = true;
+                reportButton.style.backgroundColor = '#ccc';
+                reportButton.textContent = 'Reported';
+            } else {
+                alert('Error: ' + data.message);
+            }
+        })
+        .catch(error => console.error('Error reporting thread:', error));
     });
+
 
     // Like comment
     likeCommentButtons.forEach(button => {

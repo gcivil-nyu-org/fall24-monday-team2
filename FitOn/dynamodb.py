@@ -730,3 +730,24 @@ def fetch_reported_threads_and_comments():
         "reported_threads": reported_threads,
         "reported_comments": reported_comments
     }
+
+def mark_thread_as_reported(thread_id):
+    try:
+        # Fetch the thread to check if it already has "ReportedBy" attribute
+        response = threads_table.get_item(Key={"ThreadID": thread_id})
+        thread = response.get("Item", {})
+
+        reported_by = thread.get("ReportedBy", [])
+
+        # Mark the thread as reported (or add to the list if already exists)
+        reported_by.append("admin")  # Replace "admin" with the reporting user ID if needed
+
+        # Update the thread with the reported status
+        threads_table.update_item(
+            Key={"ThreadID": thread_id},
+            UpdateExpression="SET ReportedBy = :reported_by",
+            ExpressionAttributeValues={":reported_by": reported_by},
+        )
+        print(f"Thread {thread_id} reported.")
+    except Exception as e:
+        print(f"Error reporting thread {thread_id}: {e}")
