@@ -50,11 +50,9 @@
         </table>
     </div>
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const approveButtons = document.querySelectorAll('.submit-button');
-            const rejectButtons = document.querySelectorAll('.deactivate-button');
+        document.addEventListener('DOMContentLoaded', () => {
             const notification = document.getElementById('notification');
-
+    
             const showNotification = (message) => {
                 notification.textContent = message;
                 notification.classList.add('show');
@@ -64,60 +62,43 @@
                     notification.style.display = 'none';
                 }, 3000);
             };
-
-            approveButtons.forEach(button => {
-                button.addEventListener('click', function(event) {
+    
+            const handleApplication = (url, username, row, successMessage) => {
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ 'username': username })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        row.remove();
+                        showNotification(successMessage);
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(console.error);
+            };
+    
+            document.querySelectorAll('.submit-button, .deactivate-button').forEach(button => {
+                button.addEventListener('click', (event) => {
                     event.preventDefault();
-                    const username = this.dataset.username;
-                    const row = this.closest('tr');
+                    const row = button.closest('tr');
+                    const username = button.dataset.username;
+                    const isApprove = button.classList.contains('submit-button');
+                    const successMessge = `Success: The application by "${username}" has been ${isApprove ? 'APPROVED' : 'REJECTED'} and removed from the list`
 
-                    fetch('/approve_fitness_trainer/', {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': '{{ csrf_token }}',
-                            'Content-Type': 'application/json',
-                            'x-requested-with': 'XMLHttpRequest'
-                        },
-                        body: JSON.stringify({ 'username': username })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'success') {
-                            row.remove();
-                            showNotification('Success: The application has been APPROVED and removed from the list');
-                        } else {
-                            alert('Error: ' + data.message);
-                        }
-                    })
-                    .catch(error => console.error('Error:', error));
-                });
-            });
-
-            rejectButtons.forEach(button => {
-                button.addEventListener('click', function(event) {
-                    event.preventDefault();
-                    const username = this.dataset.username;
-                    const row = this.closest('tr');
-
-                    fetch('/reject_fitness_trainer/', {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': '{{ csrf_token }}',
-                            'Content-Type': 'application/json',
-                            'x-requested-with': 'XMLHttpRequest'
-                        },
-                        body: JSON.stringify({ 'username': username })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'success') {
-                            row.remove();
-                            showNotification('Success: The application has been REJECTED and removed from the list');
-                        } else {
-                            alert('Error: ' + data.message);
-                        }
-                    })
-                    .catch(error => console.error('Error:', error));
+                    handleApplication(
+                        isApprove ? '/approve_fitness_trainer/' : '/reject_fitness_trainer/',
+                        username,
+                        row,
+                        successMessge
+                    );
                 });
             });
         });
