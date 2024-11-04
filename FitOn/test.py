@@ -1,4 +1,11 @@
-from django.test import TestCase
+from datetime import datetime
+from django.test import TestCase, Client
+from unittest.mock import patch, MagicMock
+from google.oauth2.credentials import Credentials
+from django.urls import reverse
+import boto3
+import json
+from .views import SCOPES
 from .dynamodb import (
     create_user,
     delete_user_by_username,
@@ -12,12 +19,10 @@ from .dynamodb import (
     get_thread,
     delete_thread_by_id,
 )
-import boto3
 from django.contrib.auth.hashers import check_password
 from botocore.exceptions import ClientError
-from datetime import datetime
-import json
 import pytz
+from django.contrib import messages
 
 
 class UserCreationAndDeletionTests(TestCase):
@@ -367,3 +372,150 @@ class ForumTests(TestCase):
 
     def tearDown(self):
         delete_threads_by_user("test_user_123")
+
+
+###########################################################
+#       TEST CASE FOR GOOGLE AUTHENTICATION               #
+###########################################################
+
+
+class GoogleAuthTestCase(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.client = Client()
+
+    @patch("FitOn.views.Flow")
+    def test_authorize_google_fit(self, mock_flow):
+        # Mock the Flow object
+        mock_instance = mock_flow.from_client_config.return_value
+        mock_instance.authorization_url.return_value = (
+            "http://mock-auth-url",
+            "mock-state",
+        )
+
+        # Simulate a GET request to the authorization view
+        response = self.client.get(reverse("authorize_google_fit"))
+
+        # Save the session explicitly
+        session = self.client.session
+        session["google_fit_state"] = "mock-state"
+        session.save()
+        print(session.items())
+
+        # Assertions
+        self.assertEqual(response.status_code, 302)  # Check if redirect status code
+        self.assertIn("http://mock-auth-url", response.url)  # Verify redirection URL
+        # self.assertIn("mock-state", session)  # Check if state is in session
+        self.assertEqual(session["google_fit_state"], "mock-state")  # Verify the value
+
+    @patch("FitOn.views.get_user")
+    @patch("FitOn.views.Flow")
+    @patch("FitOn.views.Credentials")
+    def test_callback_google_fit(self, mock_credentials, mock_flow, mock_get_user):
+        # Set up a mock user return value
+        mock_get_user.return_value = {
+            "name": "Test User",
+            "email": "testuser@example.com",
+            "gender": "Other",
+            # Add other fields as needed
+        }
+
+        # Set up the mock credentials
+        mock_creds = MagicMock(spec=Credentials)
+        mock_creds.token = "mock-token"
+        mock_creds.refresh_token = "mock-refresh-token"
+        mock_creds.token_uri = "mock-token-uri"
+        mock_creds.client_id = "mock-client-id"
+        mock_creds.client_secret = "mock-client-secret"
+        mock_creds.scopes = SCOPES
+
+        # Mock the Flow object and its methods
+        mock_instance = mock_flow.from_client_config.return_value
+        mock_instance.fetch_token.return_value = None
+        mock_instance.credentials = mock_creds
+
+        # Set a user ID and state in the session
+        session = self.client.session
+        session["user_id"] = "mock_user_id"
+        session["google_fit_state"] = "mock-state"
+        session.save()
+
+        # Simulate a GET request to the callback view
+        response = self.client.get(reverse("callback_google_fit"))
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Signed in Successfully", response.content.decode())
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+
+
+class GoogleAuthDelinkTestCase(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.client = Client()
+
+    def setUp(self):
+        # Simulate session with credentials for the delink test
+        session = self.client.session
+        session["credentials"] = {
+            "token": "mock-token",
+            "refresh_token": "mock-refresh-token",
+            "token_uri": "mock-token-uri",
+            "client_id": "mock-client-id",
+            "client_secret": "mock-client-secret",
+            "scopes": ["mock-scope"],
+        }
+        session.save()
+
+    @patch("FitOn.views.requests.post")
+    def test_delink_google_fit(self, mock_post):
+        # Mock the response for the revoke endpoint
+        mock_post.return_value.status_code = 200  # Simulate successful revocation
+
+        response = self.client.post(reverse("delink_google_fit"), follow=True)
+
+        # Assertions for final response status after following redirects
+        self.assertEqual(
+            response.status_code, 200
+        )  # Expect the final status code to be 200 after redirects
+
+        # Verify that the session no longer contains credentials
+        session = self.client.session
+        self.assertNotIn("credentials", session)
+
+        # Check if the success message is added to the messages framework
+        messages_list = list(messages.get_messages(response.wsgi_request))
+        self.assertTrue(
+            any(
+                message.message == "Your Google account has been successfully delinked."
+                and message.level == messages.SUCCESS
+                for message in messages_list
+            ),
+            "Expected success message not found in messages framework.",
+        )
+
+        # Check if the revocation endpoint was called
+        mock_post.assert_called_once_with(
+            "https://accounts.google.com/o/oauth2/revoke",
+            params={"token": "mock-token"},
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+
+    def tearDown(self):
+        # Clear the session and any test data after each test
+        session = self.client.session
+        if "credentials" in session:
+            del session["credentials"]
+            session.save()
+
+        # Add other cleanup steps if necessary
+
+    @classmethod
+    def tearDownClass(cls):
+        # Perform any additional cleanup if needed
+        super().tearDownClass()

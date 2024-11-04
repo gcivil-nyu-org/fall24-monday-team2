@@ -6,13 +6,9 @@ from .dynamodb import (
     create_thread,
     create_user,
     delete_user_by_username,
-    # fetch_all_threads,
     fetch_posts_for_thread,
-    # fetch_thread,
     get_fitness_trainer_applications,
     get_last_reset_request_time,
-    # get_replies,
-    # get_thread_details,
     get_user,
     get_user_by_email,
     get_user_by_uid,
@@ -24,6 +20,8 @@ from .dynamodb import (
     upload_profile_picture,
     fetch_filtered_threads,
     fetch_all_users,
+    get_fitness_data,
+    dynamodb,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -35,8 +33,11 @@ from .forms import (
 )
 
 # from .models import PasswordResetRequest
+import datetime
+import pytz
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
+import pandas as pd
 
 # from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
@@ -57,18 +58,36 @@ from django.utils import timezone
 # from django.utils.html import strip_tags
 # from django.utils.http import urlsafe_base64_encode
 # import os
+from asgiref.sync import sync_to_async
 import uuid
 import ssl
-import pytz
 import boto3
 from google_auth_oauthlib.flow import Flow
+import requests
 
 # from django.contrib.auth.decorators import login_required
 from .dynamodb import threads_table, delete_post
 import json
-from datetime import datetime
 
-# from django.http import HttpResponse
+# from google import Things
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+import asyncio
+from collections import defaultdict
+
+# Define metric data types
+dataTypes = {
+    "heart_rate": "com.google.heart_rate.bpm",
+    "resting_heart_rate": "com.google.heart_rate.bpm",
+    "steps": "com.google.step_count.delta",
+    "sleep": "com.google.sleep.segment",
+    "oxygen": "com.google.oxygen_saturation",
+    "activity": "com.google.activity.segment",
+    "glucose": "com.google.blood_glucose",
+    "pressure": "com.google.blood_pressure",
+}
+
+df = pd.read_csv("google_fit_activity_types.csv")
 
 SCOPES = [
     "https://www.googleapis.com/auth/fitness.activity.read",
@@ -88,6 +107,20 @@ SCOPES = [
 def homepage(request):
     username = request.session.get("username", "Guest")
     return render(request, "home.html", {"username": username})
+
+
+def list_metrics(request):
+    return render(request, "metric_list.html")
+
+
+@sync_to_async
+def add_message(request, level, message):
+    messages.add_message(request, level, message)
+
+
+@sync_to_async
+def perform_redirect(url_name):
+    return redirect(url_name)
 
 
 def login(request):
@@ -395,6 +428,7 @@ def authorize_google_fit(request):
 
 def callback_google_fit(request):
     user_id = request.session.get("user_id")
+    print("Inside Callback")
 
     # Fetch user details from DynamoDB
     user = get_user(user_id)
@@ -450,6 +484,35 @@ def callback_google_fit(request):
     # Handle invalid state
     messages.error(request, "Sign-in failed. Please try again.")
     return redirect("homepage")
+
+
+def delink_google_fit(request):
+    if "credentials" in request.session:
+        credentials = Credentials(**request.session["credentials"])
+
+        # Revoke the token on Google's side (optional but recommended)
+        revoke_endpoint = "https://accounts.google.com/o/oauth2/revoke"
+        token = credentials.token
+        revoke_response = requests.post(
+            revoke_endpoint,
+            params={"token": token},
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+
+        if revoke_response.status_code == 200:
+            print("Google account successfully revoked.")
+        else:
+            print("Failed to revoke Google account.")
+
+        # Remove credentials from the session
+        del request.session["credentials"]
+
+        # Display a message to the user (optional)
+        messages.success(request, "Your Google account has been successfully delinked.")
+    else:
+        messages.error(request, "No linked Google account found.")
+
+    return redirect("profile")
 
 
 def fitness_trainer_application_view(request):
@@ -670,6 +733,571 @@ def forum_view(request):
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
 
+    return render(request, "forums.html", {"threads": threads, "users": users})
+
+
+######################################
+#       Fetching data using API     #
+######################################
+
+
+async def format_bod_fitness_data(total_data):
+    list1 = total_data["glucose"]["glucose_data_json"]
+    list2 = total_data["pressure"]["pressure_data_json"]
+
+    def parse_date(date_str):
+        return datetime.datetime.strptime(date_str, "%b %d, %I %p")
+
+    # Extract all unique start dates from both lists
+    all_dates = set()
+    for item in list1 + list2:
+        all_dates.add(item["start"])
+
+    # Update list1
+    for date in all_dates:
+        found = False
+        for item in list1:
+            if item["start"] == date:
+                found = True
+                break
+        if not found:
+            list1.append({"start": date, "end": date, "count": 0})
+
+    # Update list2
+    for date in all_dates:
+        found = False
+        for item in list2:
+            if item["start"] == date:
+                found = True
+                break
+        if not found:
+            list2.append({"start": date, "end": date, "count": 0})
+
+    # Sort lists by start date
+    list1.sort(key=lambda x: parse_date(x["start"]))
+    list2.sort(key=lambda x: parse_date(x["start"]))
+
+    total_data["glucose"]["glucose_data_json"] = list1
+    total_data["pressure"]["pressure_data_json"] = list2
+
+    return total_data
+
+
+def process_dynamo_data(items, frequency):
+    # Dictionary to hold the data grouped by date
+    print("Items in dictionary", items)
+    date_groups = defaultdict(list)
+
+    # Process each item
+    for item in items:
+        time = datetime.datetime.strptime(item["time"], "%Y-%m-%dT%H:%M")
+        start, end = get_group_key(time, frequency)
+        start_key = start.strftime("%b %d, %I %p")
+        end_key = end.strftime("%b %d, %I %p")
+        value = float(item["value"])
+        date_groups[(start_key, end_key)].append(value)
+
+    # Prepare the final data structure
+    result = []
+
+    for (start_key, end_key), values in date_groups.items():
+        avg_count = sum(values) / len(values) if values else 0
+        result.append(
+            {
+                "start": start_key,
+                "end": end_key,
+                "count": avg_count,
+            }
+        )
+
+    return {"Items": result}
+
+
+# function to convert miliseconds to Day
+def parse_millis(millis):
+    return datetime.datetime.fromtimestamp(int(millis) / 1000).strftime("%b %d, %I %p")
+
+
+def get_group_key(time, frequency):
+    """Adjusts start and end times based on frequency."""
+    if frequency == "hourly":
+        start = time.replace(minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(hours=1)
+    elif frequency == "daily":
+        start = time.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=1)
+    elif frequency == "weekly":
+        start = time - datetime.timedelta(days=time.weekday())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(days=7)
+    elif frequency == "monthly":
+        start = time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(
+            days=(time.replace(month=time.month % 12 + 1, day=1) - time).days
+        )
+    else:
+        start = time  # Fallback to the exact time if frequency is unrecognized
+        end = time
+
+    return start, end
+
+
+def merge_data(existing_data, new_data, frequency):
+    """
+    Merges new data into existing data based on overlapping time ranges defined by frequency.
+
+    Parameters:
+    existing_data (list): The existing list of data points for a metric.
+    new_data (list): The new data points to be merged.
+    frequency (str): The frequency of data collection ('hourly', 'daily', 'weekly', 'monthly').
+
+    Returns:
+    list: Updated list of data points after merging.
+    """
+
+    # Helper to parse datetime from string
+    def parse_time(time_str):
+        return datetime.datetime.strptime(time_str, "%b %d, %I %p")
+
+    # Create index of existing data by start time for quick access
+    data_index = {}
+    for item in existing_data:
+        start, end = get_group_key(parse_time(item["start"]), frequency)
+        data_index[start] = item
+        item["end_range"] = end  # Temporarily store the range end to use in comparisons
+
+    # Process each new data point
+    for new_item in new_data:
+        new_start, new_end = get_group_key(parse_time(new_item["start"]), frequency)
+        if new_start in data_index:
+            # There's an overlap, so update the existing entry
+            existing_item = data_index[new_start]
+            # Averaging the counts, updating mins and maxs
+            existing_item["count"] = (existing_item["count"] + new_item["count"]) / 2
+            existing_item["min"] = min(existing_item["min"], new_item["min"])
+            existing_item["max"] = max(existing_item["max"], new_item["max"])
+        else:
+            # No overlap, append this new item
+            new_item["end"] = new_end.strftime(
+                "%b %d, %I %p"
+            )  # Format end time for consistency
+            existing_data.append(new_item)
+
+    # Remove temporary 'end_range' from existing items
+    for item in existing_data:
+        item.pop("end_range", None)
+
+    existing_data.sort(key=lambda x: parse_time(x["start"]))
+
+    combined_data = []
+    for obj in existing_data:
+        if not combined_data or parse_time(combined_data[-1]["start"]) != parse_time(
+            obj["start"]
+        ):
+            combined_data.append(obj)
+        else:
+            combined_data[-1]["count"] += obj["count"]
+
+    return combined_data
+
+
+def steps_barplot(data):
+    # Your steps data
+    print("inside steps function\n")
+    steps_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = record["dataset"][0]["point"][0]["value"][0]["intVal"]
+            steps_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"steps_data_json": steps_data}
+    return context
+
+
+def resting_heartrate_plot(data):
+    print("inside resting heart function\n")
+    resting_heart_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = int(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            resting_heart_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"resting_heart_data_json": resting_heart_data}
+    return context
+
+
+def sleep_plot(data):
+    print("inside sleep function\n")
+    sleep_data = []
+    for record in data["session"]:
+        d = {}
+        d["start"] = parse_millis(record["startTimeMillis"])
+        d["end"] = parse_millis(record["endTimeMillis"])
+        d["count"] = (
+            (int(record["endTimeMillis"]) - int(record["startTimeMillis"]))
+            / 1000
+            / 60
+            / 60
+        )
+        sleep_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"sleep_data_json": sleep_data}
+    return context
+
+
+def heartrate_plot(data):
+    print("inside heart function\n")
+    heart_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = float(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            d["min"] = int(record["dataset"][0]["point"][0]["value"][1]["fpVal"])
+            d["max"] = int(record["dataset"][0]["point"][0]["value"][2]["fpVal"])
+            heart_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"heart_data_json": heart_data}
+    return context
+
+
+def activity_plot(data):
+    print("inside activity function\n")
+    activity_data = {}
+    for record in data["session"]:
+        activity_name = df.loc[df["Integer"] == record["activityType"]][
+            "Activity Type"
+        ].values
+        if len(activity_name) == 0:
+            continue
+        act = activity_name[0]
+        duration = (
+            (int(record["endTimeMillis"]) - int(record["startTimeMillis"])) / 1000 / 60
+        )
+        if act in activity_data:
+            activity_data[act] += int(duration)
+        else:
+            activity_data[act] = int(duration)
+
+    activity_data = sorted(activity_data.items(), key=lambda x: x[1], reverse=True)
+    activity_data = activity_data[:10]
+
+    # Pass the plot path to the template
+    context = {"activity_data_json": activity_data}
+    return context
+
+
+def oxygen_plot(data):
+    print("inside oxygen saturation function\n")
+    oxygen_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = int(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            oxygen_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"oxygen_data_json": oxygen_data}
+    return context
+
+
+def glucose_plot(data):
+    print("inside blood glucose function\n")
+    oxygen_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = int(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            oxygen_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"glucose_data_json": oxygen_data}
+    return context
+
+
+def pressure_plot(data):
+    print("inside blood pressure function\n")
+    oxygen_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = int(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            oxygen_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"pressure_data_json": oxygen_data}
+    return context
+
+
+async def fetch_metric_data(service, metric, total_data, duration, frequency, email):
+
+    end_time = datetime.datetime.now() - datetime.timedelta(minutes=1)
+
+    if duration == "day":
+        start_time = end_time - datetime.timedelta(hours=23, minutes=59)
+    elif duration == "week":
+        start_time = end_time - datetime.timedelta(days=6, hours=23, minutes=59)
+    elif duration == "month":
+        start_time = end_time - datetime.timedelta(days=29, hours=23, minutes=59)
+    elif duration == "quarter":
+        start_time = end_time - datetime.timedelta(days=89, hours=23, minutes=59)
+
+    if frequency == "hourly":
+        bucket = 3600000
+    elif frequency == "daily":
+        bucket = 86400000
+    elif frequency == "weekly":
+        bucket = 604800000
+    elif frequency == "monthly":
+        bucket = 2592000000
+
+    # print(start_time.timestamp())
+    # print(end_time.timestamp())
+
+    start_date = start_time.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    end_date = end_time.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    # print(start_date)
+    # print(end_date)
+
+    if metric == "sleep":
+        data = (
+            service.users()
+            .sessions()
+            .list(
+                userId="me",
+                activityType=72,
+                startTime=f"{start_date}",
+                endTime=f"{end_date}",
+            )
+            .execute()
+        )
+    elif metric == "activity":
+        data = (
+            service.users()
+            .sessions()
+            .list(userId="me", startTime=f"{start_date}", endTime=f"{end_date}")
+            .execute()
+        )
+    else:
+        data = (
+            service.users()
+            .dataset()
+            .aggregate(
+                userId="me",
+                body={
+                    "aggregateBy": [{"dataTypeName": dataTypes[metric]}],
+                    "bucketByTime": {"durationMillis": bucket},
+                    "startTimeMillis": int(start_time.timestamp()) * 1000,
+                    "endTimeMillis": int(end_time.timestamp()) * 1000,
+                },
+            )
+            .execute()
+        )
+
+    if metric == "heart_rate":
+        context = heartrate_plot(data)
+        total_data["heartRate"] = context
+    elif metric == "steps":
+        context = steps_barplot(data)
+        total_data["steps"] = context
+    elif metric == "resting_heart_rate":
+        context = resting_heartrate_plot(data)
+        total_data["restingHeartRate"] = context
+    elif metric == "sleep":
+        context = sleep_plot(data)
+        total_data["sleep"] = context
+    elif metric == "activity":
+        context = activity_plot(data)
+        total_data["activity"] = context
+    elif metric == "oxygen":
+        context = oxygen_plot(data)
+        total_data["oxygen"] = context
+    elif metric == "glucose":
+        context = glucose_plot(data)
+        total_data["glucose"] = context
+    elif metric == "pressure":
+        context = pressure_plot(data)
+        total_data["pressure"] = context
+    response = get_fitness_data(metric, email, start_time, end_time)
+    print(
+        f"Metric : {metric}\nResponse: {response}\n",
+    )
+    print("printing processed data from DynamoDB--------------------------------")
+
+    processed_data = process_dynamo_data(response["Items"], frequency)
+    print("processed data", processed_data)
+
+    # Assuming 'processed_data' is structured similarly for each metric
+    # and 'frequency' is defined appropriately for the context in which this is run
+
+    if metric == "heart_rate":
+        print("heart rate")
+        total_data["heartRate"]["heart_data_json"] = merge_data(
+            total_data["heartRate"]["heart_data_json"],
+            processed_data["Items"],
+            frequency,
+        )
+    elif metric == "steps":
+        print("steps")
+        total_data["steps"]["steps_data_json"] = merge_data(
+            total_data["steps"]["steps_data_json"], processed_data["Items"], frequency
+        )
+    elif metric == "resting_heart_rate":
+        print("resting heart rate")
+        total_data["restingHeartRate"]["resting_heart_data_json"] = merge_data(
+            total_data["restingHeartRate"]["resting_heart_data_json"],
+            processed_data["Items"],
+            frequency,
+        )
+    elif metric == "sleep":
+        print("sleep")
+        total_data["sleep"]["sleep_data_json"] = merge_data(
+            total_data["sleep"]["sleep_data_json"], processed_data["Items"], frequency
+        )
+    elif metric == "activity":
+        print("activity")
+        # final = merge_data(total_data['activity']['activity_data_json'], processed_data['Items'], frequency)
+        # print(final) #
+
+    elif metric == "oxygen":
+        print("oxygen")
+        total_data["oxygen"]["oxygen_data_json"] = merge_data(
+            total_data["oxygen"]["oxygen_data_json"], processed_data["Items"], frequency
+        )
+    else:
+        print("Unknown metric")
+
+
+@sync_to_async
+def get_credentials(request):
+    if "credentials" in request.session:
+        credentials = Credentials(**request.session["credentials"])
+        return credentials, request.user.username
+    return None, None
+
+
+async def fetch_all_metric_data(request, duration, frequency):
+    total_data = {}
+    credentials, email = await get_credentials(request)
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    email = user.get("email")
+    if credentials:
+        # try:
+        service = build("fitness", "v1", credentials=credentials)
+        tasks = []
+        for metric in dataTypes.keys():
+            tasks.append(
+                fetch_metric_data(
+                    service, metric, total_data, duration, frequency, email
+                )
+            )
+
+        await asyncio.gather(*tasks)
+        # total_data = await get_sleep_scores(total_data, email)
+        total_data = await format_bod_fitness_data(total_data)
+
+        # except Exception as e:
+        #     print(e)
+        #     total_data = {}
+
+    else:
+        print("Not Signed in Google")
+    print("total data: ", total_data)
+    return total_data
+
+
+async def get_metric_data(request):
+    credentials = await sync_to_async(lambda: request.session.get("credentials"))()
+    print("Credentials: \n", credentials)
+    if credentials:
+        duration = "week"
+        frequency = "daily"
+
+        if request.GET.get("data_drn"):
+            duration = request.GET.get("data_drn")
+
+        if request.GET.get("data_freq"):
+            frequency = request.GET.get("data_freq")
+
+        total_data = await fetch_all_metric_data(request, duration, frequency)
+
+        context = {"data": total_data}
+        print("Inside get metric:", context)
+        return await sync_to_async(render)(
+            request, "display_metrics_data.html", context
+        )
+    else:
+        await add_message(
+            request,
+            messages.ERROR,
+            "User not logged in. Please sign in to access your data.",
+        )
+        return await perform_redirect("profile")
+
+
+def health_data_view(request):
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    user_email = user.get("email")
+    dynamodb_res = dynamodb
+    table = dynamodb_res.Table("UserFitnessData")
+
+    if request.method == "POST":
+        data = request.POST
+        print(data)
+        table.put_item(
+            Item={
+                "email": user_email,  # Use the default email
+                "metric": data.get("metric"),
+                "time": data.get("time"),
+                "value": data.get("value"),
+            }
+        )
+        return redirect("get_metric_data")
+
+    # Fetch all the metrics data from DynamoDB
+    response = table.scan()
+    metrics_data = {}
+    for item in response["Items"]:
+        metric = item["metric"]
+        if metric not in metrics_data:
+            metrics_data[metric] = []
+        metrics_data[metric].append(item)
+
+    for metric in metrics_data:
+        metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
+
+    return render(request, "display_metric_data.html", {"metrics_data": metrics_data})
     return render(
         request,
         "forums.html",

@@ -17,6 +17,7 @@ s3_client = boto3.client("s3", region_name="us-west-2")
 users_table = dynamodb.Table("Users")
 threads_table = dynamodb.Table("ForumThreads")
 posts_table = dynamodb.Table("ForumPosts")
+fitness_table = dynamodb.Table("UserFitnessData")
 
 password_reset_table = dynamodb.Table("PasswordResetRequests")
 
@@ -106,7 +107,7 @@ def delete_user_by_username(username):
         user_id = users[0]["user_id"]  # Get the user's 'user_id'
 
         # Delete the user by user_id (or username if it's the primary key)
-        delete_response = users_table.delete_item(
+        users_table.delete_item(
             Key={"user_id": user_id}  # Replace with your partition key
         )
 
@@ -583,6 +584,34 @@ def fetch_all_users():
     return [{"username": user} for user in unique_users]
 
 
+############################
+# Fetchng Fitness Data     #
+############################
+
+
+def get_fitness_data(metric, email, start_time, end_time):
+    try:
+        print("Inside Fitness Data Function\n")
+        print("Start Time: \n", start_time)
+        print("End Time: \n", end_time)
+        response = fitness_table.scan(
+            FilterExpression="metric = :m AND #t BETWEEN :start AND :end AND email = :email",
+            ExpressionAttributeNames={"#t": "time"},
+            ExpressionAttributeValues={
+                ":m": metric,
+                ":email": email,
+                ":start": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                ":end": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+        print(
+            f"Metric : {metric}\nResponse: {response}\n",
+        )
+        return response
+    except Exception as e:
+        print(f"Error querying DynamoDB for fitness data. {e}")
+
+
 def delete_threads_by_user(user_id):
     """
     Deletes all threads in the specified DynamoDB table for a given user ID.
@@ -615,7 +644,7 @@ def delete_threads_by_user(user_id):
 def delete_thread_by_id(thread_id):
     try:
         # Delete the forum thread by thread_id (primary key)
-        delete_response = threads_table.delete_item(
+        threads_table.delete_item(
             Key={"ThreadID": thread_id}  # Replace with your actual partition key
         )
 
