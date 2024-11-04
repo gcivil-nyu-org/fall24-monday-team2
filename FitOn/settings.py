@@ -79,7 +79,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "storages",  # Add this line for S3 storage
-    "channels",
 ]
 
 MIDDLEWARE = [
