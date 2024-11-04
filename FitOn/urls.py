@@ -22,6 +22,9 @@ from django.contrib import admin
 
 # from django.contrib.auth import views
 from django.urls import path
+from .views import signup, homepage, login, profile_view, upload_profile_picture
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),
@@ -40,7 +43,7 @@ urlpatterns = [
         "reset-password/", views.password_reset_request, name="password_reset_request"
     ),
     path(
-        "reset-password/<str:user_id>/<str:token>/",
+        "reset-password/<str:uidb64>/<str:token>/",
         views.password_reset_confirm,
         name="password_reset_confirm",
     ),
@@ -70,6 +73,10 @@ urlpatterns = [
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),
     path("delete_post/", views.delete_post_view, name="delete_post"),
+    path("metrics/", views.list_metrics, name="metrics_list"),
+    path("data/", views.get_metric_data, name="get_metric_data"),
+    path("submit-health-data/", views.health_data_view, name="submit_health_data"),
+    path("delink/", views.delink_google_fit, name="delink_google_fit"),
     path("ban_user/", views.toggle_ban_user, name="toggle_ban_user"),
     path("mute_user/", views.toggle_mute_user, name="toggle_mute_user"),
     path("punishments/", views.punishments_view, name="punishments"),

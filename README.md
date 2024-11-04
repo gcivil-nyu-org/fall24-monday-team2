@@ -4,7 +4,6 @@ Buid Status:  [![Build Status](https://app.travis-ci.com/gcivil-nyu-org/fall24-m
 
 Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/fall24-monday-team2/badge.svg?branch=adm_moderation)](https://coveralls.io/github/gcivil-nyu-org/fall24-monday-team2?branch=adm_moderation)
 
-
 ## Team Members:
 1. Rohan Chopra
 2. Karthik Vadlamudi

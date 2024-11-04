@@ -1,13 +1,15 @@
-import boto3
 from boto3.dynamodb.conditions import Attr
+import boto3, uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
+from datetime import datetime, timezone
+from django.conf import settings
+
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.conf import settings
 import uuid
-from datetime import datetime
 
 
 # Connect to DynamoDB
@@ -17,6 +19,7 @@ s3_client = boto3.client("s3", region_name="us-west-2")
 users_table = dynamodb.Table("Users")
 threads_table = dynamodb.Table("ForumThreads")
 posts_table = dynamodb.Table("ForumPosts")
+fitness_table = dynamodb.Table("UserFitnessData")
 
 password_reset_table = dynamodb.Table("PasswordResetRequests")
 
@@ -25,15 +28,33 @@ applications_table = dynamodb.Table("FitnessTrainerApplications")
 
 class MockUser:
     def __init__(self, user_data):
-        self.email = user_data.get("email")
-        self.username = user_data.get("username")
-        self.password = user_data.get("password")
-        self.is_active = True
-        self.last_login = None
-        self.pk = user_data.get("user_id")
+        if isinstance(user_data, dict):
+            self.user_id = user_data.get("user_id", None)
+            self.email = user_data.get("email", "")
+            self.username = user_data.get("username", "")
+            self.password = user_data.get("password", "")
+            self.date_of_birth = user_data.get("date_of_birth", "")
+            self.is_active = user_data.get("is_active", True)
+            self.last_login = user_data.get("last_login", None)
+            self.pk = self.user_id
+        else:
+            self.user_id = None
+            self.email = ""
+            self.username = ""
+            self.password = ""
+            self.date_of_birth = ""
+            self.is_active = True
+            self.last_login = None
+            self.pk = None
 
     def get_email_field_name(self):
         return "email"
+
+    def get_username(self):
+        return self.username
+
+    def is_authenticated(self):
+        return True
 
 
 def get_user_by_username(username):
@@ -106,7 +127,7 @@ def delete_user_by_username(username):
         user_id = users[0]["user_id"]  # Get the user's 'user_id'
 
         # Delete the user by user_id (or username if it's the primary key)
-        delete_response = users_table.delete_item(
+        users_table.delete_item(
             Key={"user_id": user_id}  # Replace with your partition key
         )
 
@@ -120,11 +141,7 @@ def delete_user_by_username(username):
 
 def get_user_by_email(email):
     try:
-        response = users_table.scan(
-            FilterExpression="#e = :email",
-            ExpressionAttributeNames={"#e": "email"},
-            ExpressionAttributeValues={":email": email},
-        )
+        response = users_table.scan(FilterExpression=Attr("email").eq(email))
         users = response.get("Items", [])
         if users:
             return MockUser(users[0])
@@ -136,10 +153,14 @@ def get_user_by_email(email):
 
 def get_user_by_uid(uid):
     try:
+        # Fetch from DynamoDB table
         response = users_table.get_item(Key={"user_id": uid})
-        return response.get("Item", None)
+        user_data = response.get("Item", None)
+
+        if user_data:
+            return MockUser(user_data)
+        return None
     except Exception as e:
-        print(f"Error fetching user by UID: {e}")
         return None
 
 
@@ -171,13 +192,17 @@ def get_last_reset_request_time(user_id):
 
 def update_reset_request_time(user_id):
     try:
+        if not user_id:
+            print("User ID is None. Cannot update reset request time.")
+            return None
+
+        # Insert a new entry or update the existing reset request time
         response = password_reset_table.put_item(
             Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
         )
-        return response
+        print(f"Reset request time updated for user_id '{user_id}'.")
     except Exception as e:
         print(f"Error updating reset request time for user_id '{user_id}': {e}")
-    return None
 
 
 def get_user(user_id):
@@ -583,6 +608,34 @@ def fetch_all_users():
     return [{"username": user} for user in unique_users]
 
 
+############################
+# Fetchng Fitness Data     #
+############################
+
+
+def get_fitness_data(metric, email, start_time, end_time):
+    try:
+        print("Inside Fitness Data Function\n")
+        print("Start Time: \n", start_time)
+        print("End Time: \n", end_time)
+        response = fitness_table.scan(
+            FilterExpression="metric = :m AND #t BETWEEN :start AND :end AND email = :email",
+            ExpressionAttributeNames={"#t": "time"},
+            ExpressionAttributeValues={
+                ":m": metric,
+                ":email": email,
+                ":start": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                ":end": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+        print(
+            f"Metric : {metric}\nResponse: {response}\n",
+        )
+        return response
+    except Exception as e:
+        print(f"Error querying DynamoDB for fitness data. {e}")
+
+
 def delete_threads_by_user(user_id):
     """
     Deletes all threads in the specified DynamoDB table for a given user ID.
@@ -615,7 +668,7 @@ def delete_threads_by_user(user_id):
 def delete_thread_by_id(thread_id):
     try:
         # Delete the forum thread by thread_id (primary key)
-        delete_response = threads_table.delete_item(
+        threads_table.delete_item(
             Key={"ThreadID": thread_id}  # Replace with your actual partition key
         )
 
