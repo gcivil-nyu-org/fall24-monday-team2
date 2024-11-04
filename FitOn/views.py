@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from .dynamodb import (
     add_fitness_trainer_application,
     # create_post,
@@ -6,7 +6,6 @@ from .dynamodb import (
     create_thread,
     create_user,
     delete_user_by_username,
-    fetch_all_threads,
     fetch_posts_for_thread,
     get_fitness_trainer_applications,
     get_last_reset_request_time,
@@ -14,7 +13,6 @@ from .dynamodb import (
     get_user_by_email,
     get_user_by_uid,
     get_user_by_username,
-    MockUser,
     update_reset_request_time,
     update_user,
     update_user_password,
@@ -49,21 +47,13 @@ from django.contrib import messages
 from django.conf import settings
 
 # from django.core.files.storage import FileSystemStorage
-from django.core.mail import send_mail, get_connection
 
 # from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.core.mail import (
-    send_mail,
-    get_connection,
-    EmailMultiAlternatives,
-    EmailMessage,
-)
-from django.core.mail.backends.locmem import EmailBackend
-from django.http import Http404
+from django.core.mail import EmailMessage
 
 # from django.utils.encoding import force_bytes
 # from django.utils.html import strip_tags
@@ -71,17 +61,13 @@ from django.http import Http404
 # import os
 from asgiref.sync import sync_to_async
 from django.utils.encoding import force_bytes, force_str
-from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-import os
 import uuid
-import ssl
 import boto3
 from google_auth_oauthlib.flow import Flow
 import requests
 
 # from django.contrib.auth.decorators import login_required
-from .dynamodb import threads_table, delete_post
 import json
 
 # from google import Things
@@ -444,7 +430,9 @@ def authorize_google_fit(request):
         # else:
         print(settings.GOOGLEFIT_CLIENT_CONFIG)
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
-        flow.redirect_uri = request.build_absolute_uri(reverse("callback_google_fit")).replace("http://","https://")
+        flow.redirect_uri = request.build_absolute_uri(
+            reverse("callback_google_fit")
+        ).replace("http://", "https://")
         print("Redirected URI: ", flow.redirect_uri)
         authorization_url, state = flow.authorization_url(
             access_type="offline", include_granted_scopes="true"

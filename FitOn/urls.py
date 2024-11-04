@@ -16,15 +16,14 @@ Including another URLconf
 """
 
 from . import views
-from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 
 # from django.contrib.auth import views
 from django.urls import path
-from .views import signup, homepage, login, profile_view, upload_profile_picture
+
+# from .views import signup, homepage, login, profile_view, upload_profile_picture
 from django.conf import settings
-from django.conf.urls.static import static
 
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),

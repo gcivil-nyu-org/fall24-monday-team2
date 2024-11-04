@@ -1,30 +1,15 @@
-from datetime import datetime, timedelta
-from django.test import TestCase, Client
+from datetime import datetime
+from django.test import TestCase, Client, override_settings
 from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
 from django.urls import reverse
 import boto3
 import json
-<<<<<<< HEAD
 from django.contrib.auth.models import User
-=======
-import unittest
-from django.test import TestCase, Client, override_settings
-from django.urls import reverse
-import boto3
 
-from django.contrib.auth.models import User
-from django.contrib.auth.tokens import default_token_generator
-from django.contrib.auth.hashers import make_password
-from django.contrib.sessions.models import Session
-from django.utils import timezone
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from django.core import mail
-from unittest.mock import patch
-import time
-import json
->>>>>>> bf3a1f1e84371fa760f26839f1704547912d3a14
+# from django.contrib.auth.hashers import make_password
+# from django.utils.http import urlsafe_base64_encode
+# from django.utils.encoding import force_bytes
 from .views import SCOPES
 from .dynamodb import (
     create_user,
@@ -38,8 +23,6 @@ from .dynamodb import (
     delete_threads_by_user,
     get_thread,
     delete_thread_by_id,
-    MockUser,
-    users_table,
 )
 from django.contrib.auth.hashers import check_password
 from botocore.exceptions import ClientError
@@ -544,107 +527,129 @@ class GoogleAuthDelinkTestCase(TestCase):
 #       TEST CASE FOR Plotting Metrics                    #
 ###########################################################
 
+
 class MetricsPlotTestCase(TestCase):
     def setUp(self):
         self.client = Client()
-        self.user = User.objects.create_user(username='testuser', password='password')
-        self.client.login(username='testuser', password='password')
-        self.user_id = 'test_user'
-        self.client.session['user_id'] = self.user_id
-        self.client.session['credentials'] = {
-            'token': 'test_token',
-            'refresh_token': 'test_refresh_token',
-            'token_uri': 'https://oauth2.googleapis.com/token',
-            'client_id': 'test_client_id',
-            'client_secret': 'test_client_secret',
-            'scopes': SCOPES
+        self.user = User.objects.create_user(username="testuser", password="password")
+        self.client.login(username="testuser", password="password")
+        self.user_id = "test_user"
+        self.client.session["user_id"] = self.user_id
+        self.client.session["credentials"] = {
+            "token": "test_token",
+            "refresh_token": "test_refresh_token",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "client_id": "test_client_id",
+            "client_secret": "test_client_secret",
+            "scopes": SCOPES,
         }
         self.client.session.save()
 
         # Initialize DynamoDB resource for cleanup
-        self.dynamodb = boto3.resource('dynamodb', region_name='us-west-2')
-        self.table = self.dynamodb.Table('UserFitnessData')
+        self.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+        self.table = self.dynamodb.Table("UserFitnessData")
 
     def tearDown(self):
         # Clean up any test data inserted into the DynamoDB table
         response = self.table.scan()
-        items = response.get('Items', [])
+        items = response.get("Items", [])
         for item in items:
-            if item['email'] == 'test_user@example.com':  # Use a unique identifier for test data
-                self.table.delete_item(Key={'email': item['email'], 'metric': item['metric']})
+            if (
+                item["email"] == "test_user@example.com"
+            ):  # Use a unique identifier for test data
+                self.table.delete_item(
+                    Key={"email": item["email"], "metric": item["metric"]}
+                )
 
-
-    @patch('FitOn.views.heartrate_plot')
+    @patch("FitOn.views.heartrate_plot")
     def test_heartrate_plot(self, mock_heartrate_plot):
         mock_heartrate_plot.return_value = {
-            'heart_data_json': [{'start': 'Jan 01, 10 AM', 'end': 'Jan 01, 11 AM', 'count': 80}]
+            "heart_data_json": [
+                {"start": "Jan 01, 10 AM", "end": "Jan 01, 11 AM", "count": 80}
+            ]
         }
-        response = self.client.get(reverse('get_metric_data'))
+        response = self.client.get(reverse("get_metric_data"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('heart_data_json', response.context['data']['heartRate'])
+        self.assertIn("heart_data_json", response.context["data"]["heartRate"])
 
-    @patch('FitOn.views.steps_barplot')
+    @patch("FitOn.views.steps_barplot")
     def test_steps_plot(self, mock_steps_plot):
         mock_steps_plot.return_value = {
-            'steps_data_json': [{'start': 'Jan 01, 10 AM', 'end': 'Jan 01, 11 AM', 'count': 1000}]
+            "steps_data_json": [
+                {"start": "Jan 01, 10 AM", "end": "Jan 01, 11 AM", "count": 1000}
+            ]
         }
-        response = self.client.get(reverse('get_metric_data'))
+        response = self.client.get(reverse("get_metric_data"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('steps_data_json', response.context['data']['steps'])
+        self.assertIn("steps_data_json", response.context["data"]["steps"])
 
-    @patch('FitOn.views.sleep_plot')
+    @patch("FitOn.views.sleep_plot")
     def test_sleep_plot(self, mock_sleep_plot):
         mock_sleep_plot.return_value = {
-            'sleep_data_json': [{'start': 'Jan 01, 11 PM', 'end': 'Jan 02, 7 AM', 'count': 8}]
+            "sleep_data_json": [
+                {"start": "Jan 01, 11 PM", "end": "Jan 02, 7 AM", "count": 8}
+            ]
         }
-        response = self.client.get(reverse('get_metric_data'))
+        response = self.client.get(reverse("get_metric_data"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('sleep_data_json', response.context['data']['sleep'])
+        self.assertIn("sleep_data_json", response.context["data"]["sleep"])
 
-    @patch('FitOn.views.resting_heartrate_plot')
+    @patch("FitOn.views.resting_heartrate_plot")
     def test_resting_heartrate_plot(self, mock_resting_heartrate_plot):
         mock_resting_heartrate_plot.return_value = {
-            'resting_heart_data_json': [{'start': 'Jan 01, 10 AM', 'end': 'Jan 01, 11 AM', 'count': 60}]
+            "resting_heart_data_json": [
+                {"start": "Jan 01, 10 AM", "end": "Jan 01, 11 AM", "count": 60}
+            ]
         }
-        response = self.client.get(reverse('get_metric_data'))
+        response = self.client.get(reverse("get_metric_data"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('resting_heart_data_json', response.context['data']['restingHeartRate'])
+        self.assertIn(
+            "resting_heart_data_json", response.context["data"]["restingHeartRate"]
+        )
 
-    @patch('FitOn.views.activity_plot')
+    @patch("FitOn.views.activity_plot")
     def test_activity_plot(self, mock_activity_plot):
         mock_activity_plot.return_value = {
-            'activity_data_json': [('Running', 30), ('Cycling', 20)]
+            "activity_data_json": [("Running", 30), ("Cycling", 20)]
         }
-        response = self.client.get(reverse('get_metric_data'))
+        response = self.client.get(reverse("get_metric_data"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('activity_data_json', response.context['data']['activity'])
+        self.assertIn("activity_data_json", response.context["data"]["activity"])
 
-    @patch('FitOn.views.oxygen_plot')
+    @patch("FitOn.views.oxygen_plot")
     def test_oxygen_plot(self, mock_oxygen_plot):
         mock_oxygen_plot.return_value = {
-            'oxygen_data_json': [{'start': 'Jan 01, 10 AM', 'end': 'Jan 01, 11 AM', 'count': 98}]
+            "oxygen_data_json": [
+                {"start": "Jan 01, 10 AM", "end": "Jan 01, 11 AM", "count": 98}
+            ]
         }
-        response = self.client.get(reverse('get_metric_data'))
+        response = self.client.get(reverse("get_metric_data"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('oxygen_data_json', response.context['data']['oxygen'])
+        self.assertIn("oxygen_data_json", response.context["data"]["oxygen"])
 
-    @patch('FitOn.views.glucose_plot')
+    @patch("FitOn.views.glucose_plot")
     def test_glucose_plot(self, mock_glucose_plot):
         mock_glucose_plot.return_value = {
-            'glucose_data_json': [{'start': 'Jan 01, 10 AM', 'end': 'Jan 01, 11 AM', 'count': 100}]
+            "glucose_data_json": [
+                {"start": "Jan 01, 10 AM", "end": "Jan 01, 11 AM", "count": 100}
+            ]
         }
-        response = self.client.get(reverse('get_metric_data'))
+        response = self.client.get(reverse("get_metric_data"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('glucose_data_json', response.context['data']['glucose'])
+        self.assertIn("glucose_data_json", response.context["data"]["glucose"])
 
-    @patch('FitOn.views.pressure_plot')
+    @patch("FitOn.views.pressure_plot")
     def test_pressure_plot(self, mock_pressure_plot):
         mock_pressure_plot.return_value = {
-            'pressure_data_json': [{'start': 'Jan 01, 10 AM', 'end': 'Jan 01, 11 AM', 'count': 120}]
+            "pressure_data_json": [
+                {"start": "Jan 01, 10 AM", "end": "Jan 01, 11 AM", "count": 120}
+            ]
         }
-        response = self.client.get(reverse('get_metric_data'))
+        response = self.client.get(reverse("get_metric_data"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('pressure_data_json', response.context['data']['pressure'])
+        self.assertIn("pressure_data_json", response.context["data"]["pressure"])
+
+
 #       TEST CASEs FOR PASSWORD RESET              #
 ###########################################################
 
