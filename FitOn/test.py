@@ -715,23 +715,15 @@ class PasswordResetTests(TestCase):
         )
 
     def test_password_reset_request_inactive_user(self):
-        # Set the 'is_active' attribute of the mock user to False before updating DynamoDB
         self.mock_user.is_active = False
-        self.__class__.users_table.put_item(
-            Item=self.mock_user.__dict__
-        )  # Update the mock user in DynamoDB
-        retrieved_user = get_user_by_uid(self.mock_user.user_id)
-        print(f"User status after setting inactive: {retrieved_user.is_active}")
+        self.__class__.users_table.put_item(Item=self.mock_user.__dict__)
 
-        # Attempt to send a password reset request for the inactive user
         response = self.client.post(
             reverse("password_reset_request"), {"email": self.mock_user.email}
         )
         self.assertContains(
             response, "The email you entered is not registered", status_code=200
         )
-
-        # Ensure no email was sent
         self.assertEqual(
             len(mail.outbox), 0, "No email should be sent for an inactive user."
         )
