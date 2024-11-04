@@ -21,6 +21,8 @@ from .dynamodb import (
     upload_profile_picture,
     fetch_filtered_threads,
     fetch_all_users,
+    get_fitness_data,
+    dynamodb,
     threads_table,
     delete_post,
 )
@@ -34,13 +36,13 @@ from .forms import (
 )
 
 # from .models import PasswordResetRequest
-import datetime
+from datetime import datetime
 import pytz
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
 import pandas as pd
 
-from django.contrib.auth.models import User
+# from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import logout
 from django.contrib import messages
@@ -63,6 +65,10 @@ from django.core.mail import (
 from django.core.mail.backends.locmem import EmailBackend
 from django.http import Http404
 
+# from django.utils.encoding import force_bytes
+# from django.utils.html import strip_tags
+# from django.utils.http import urlsafe_base64_encode
+# import os
 from asgiref.sync import sync_to_async
 from django.utils.encoding import force_bytes, force_str
 from django.utils.html import strip_tags
@@ -98,12 +104,18 @@ dataTypes = {
 
 df = pd.read_csv("google_fit_activity_types.csv")
 
-
-# Scoped Google Fit API
 SCOPES = [
     "https://www.googleapis.com/auth/fitness.activity.read",
     "https://www.googleapis.com/auth/fitness.body.read",
-    # Add remaining scopes as needed
+    "https://www.googleapis.com/auth/fitness.heart_rate.read",
+    "https://www.googleapis.com/auth/fitness.sleep.read",
+    "https://www.googleapis.com/auth/fitness.blood_glucose.read",
+    "https://www.googleapis.com/auth/fitness.blood_pressure.read",
+    "https://www.googleapis.com/auth/fitness.body_temperature.read",
+    "https://www.googleapis.com/auth/fitness.location.read",
+    "https://www.googleapis.com/auth/fitness.nutrition.read",
+    "https://www.googleapis.com/auth/fitness.oxygen_saturation.read",
+    "https://www.googleapis.com/auth/fitness.reproductive_health.read",
 ]
 
 
@@ -128,52 +140,78 @@ def perform_redirect(url_name):
 
 def login(request):
     error_message = None
-    form = LoginForm(request.POST or None)
 
-    if request.method == "POST" and form.is_valid():
-        username = form.cleaned_data["username"]
-        password = form.cleaned_data["password"]
-        user = get_user_by_username(username)
+    if request.method == "POST":
+        form = LoginForm(request.POST)
+        if form.is_valid():
+            username = form.cleaned_data["username"]
+            password = form.cleaned_data["password"]
 
-        if user and check_password(password, user["password"]):
-            request.session["username"] = username
-            request.session["user_id"] = user["user_id"]
-            return redirect("homepage")
-        error_message = "Invalid username or password."
+            # Query DynamoDB for the user by username
+            user = get_user_by_username(username)
+
+            if user:
+                # Get the hashed password from DynamoDB
+                stored_password = user["password"]
+                user_id = user["user_id"]
+
+                # Verify the password using Django's check_password
+                if check_password(password, stored_password):
+                    # Set the session and redirect to the homepage
+                    request.session["username"] = username
+                    request.session["user_id"] = user_id
+                    return redirect("homepage")
+                else:
+                    error_message = "Invalid password. Please try again."
+            else:
+                error_message = "User does not exist."
+
+    else:
+        form = LoginForm()
 
     return render(request, "login.html", {"form": form, "error_message": error_message})
 
 
 def signup(request):
-    form = SignUpForm(request.POST or None)
+    if request.method == "POST":
+        form = SignUpForm(request.POST)
+        if form.is_valid():
+            username = form.cleaned_data["username"]
+            email = form.cleaned_data["email"]
+            name = form.cleaned_data["name"]
+            date_of_birth = form.cleaned_data["date_of_birth"]
+            gender = form.cleaned_data["gender"]
+            password = form.cleaned_data["password"]
 
-    if request.method == "POST" and form.is_valid():
-        username = form.cleaned_data["username"]
-        email = form.cleaned_data["email"]
-        name = form.cleaned_data["name"]
-        date_of_birth = form.cleaned_data["date_of_birth"]
-        gender = form.cleaned_data["gender"]
-        password = make_password(form.cleaned_data["password"])
-        user_id = str(uuid.uuid4())
+            # Hash the password before saving it
+            hashed_password = make_password(password)
 
-        if create_user(user_id, username, email, name, date_of_birth, gender, password):
-            request.session["username"] = username
-            request.session["user_id"] = user_id
-            return redirect("homepage")
+            # Create a unique user ID
+            user_id = str(uuid.uuid4())
 
-        form.add_error(None, "Error creating user in DynamoDB.")
+            # Sync data with DynamoDB
+            if create_user(
+                user_id, username, email, name, date_of_birth, gender, hashed_password
+            ):
+                request.session["username"] = username
+                request.session["user_id"] = user_id
+                return redirect("homepage")
+            else:
+                form.add_error(None, "Error creating user in DynamoDB.")
+    else:
+        form = SignUpForm()  # Return an empty form for the GET request
 
-    return render(request, "signup.html", {"form": form})
+    return render(
+        request, "signup.html", {"form": form}
+    )  # Ensure form is passed for both GET and POST
 
 
 def password_reset_request(request):
     countdown = None
     error_message = None
     form = PasswordResetForm(request.POST or None)
-
     if request.method == "POST" and form.is_valid():
         email = form.cleaned_data["email"]
-
         if not email:
             error_message = "The email you entered is not registered with an account."
             return render(
@@ -181,7 +219,6 @@ def password_reset_request(request):
                 "password_reset_request.html",
                 {"form": form, "error_message": error_message},
             )
-
         user = get_user_by_email(email)
         if user:
             if not user.is_active:
@@ -193,7 +230,6 @@ def password_reset_request(request):
                     "password_reset_request.html",
                     {"form": form, "error_message": error_message},
                 )
-
             last_request_time_str = get_last_reset_request_time(user.user_id)
             if last_request_time_str:
                 last_request_time = timezone.datetime.fromisoformat(
@@ -207,14 +243,12 @@ def password_reset_request(request):
                         "password_reset_request.html",
                         {"form": form, "countdown": countdown},
                     )
-
             update_reset_request_time(user.user_id)
             reset_token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.user_id))
             reset_url = request.build_absolute_uri(
                 reverse("password_reset_confirm", args=[uid, reset_token])
             )
-
             message = render_to_string(
                 "password_reset_email.html",
                 {"username": user.username, "reset_url": reset_url},
@@ -227,16 +261,13 @@ def password_reset_request(request):
             )
             email_message.content_subtype = "html"
             email_message.send()
-
             return redirect("password_reset_done")
-
         error_message = "The email you entered is not registered with an account."
         return render(
             request,
             "password_reset_request.html",
             {"form": form, "error_message": error_message},
         )
-
     return render(
         request,
         "password_reset_request.html",
@@ -251,33 +282,27 @@ def password_reset_confirm(request, uidb64, token):
             "password_reset_invalid.html",
             {"error_message": "The password reset link is invalid or has expired."},
         )
-
     try:
         user_id = force_str(urlsafe_base64_decode(uidb64))
         user = get_user_by_uid(user_id)
-
         if user and default_token_generator.check_token(user, token):
             form = SetNewPasswordForm(request.POST or None)
             if request.method == "POST" and form.is_valid():
                 new_password = form.cleaned_data["new_password"]
                 confirm_password = form.cleaned_data["confirm_password"]
-
                 if new_password == confirm_password:
                     update_user_password(user.user_id, new_password)
                     messages.success(
                         request, "Your password has been successfully reset."
                     )
                     return redirect("password_reset_complete")
-
                 form.add_error("confirm_password", "Passwords do not match.")
             return render(request, "password_reset_confirm.html", {"form": form})
-
         return render(
             request,
             "password_reset_invalid.html",
             {"error_message": "The password reset link is invalid or has expired."},
         )
-
     except Exception:
         return render(
             request,
@@ -309,6 +334,7 @@ def upload_profile_picture_view(request):
             return JsonResponse(
                 {"success": False, "message": "Failed to upload image to S3"}
             )
+
     return JsonResponse({"success": False, "message": "No file uploaded"})
 
 
@@ -363,18 +389,6 @@ def profile_view(request):
         else:
             messages.error(request, "Please correct the errors below")
     else:
-        form = ProfileForm(
-            initial={
-                "name": user.get("name", ""),
-                "date_of_birth": user.get("date_of_birth", ""),
-                "email": user.get("email", ""),
-                "gender": user.get("gender", ""),
-                "phone_number": user.get("phone_number", ""),
-                "address": user.get("address", ""),
-                "bio": user.get("bio", ""),
-                "country_code": user.get("country_code", ""),  # Default country code
-            }
-        )
         form = ProfileForm(
             initial={
                 "name": user.get("name", ""),
@@ -587,9 +601,9 @@ def fitness_trainer_applications_list_view(request):
 # -------------------------------
 
 
-def forum_view(request):
-    threads = fetch_all_threads()
-    return render(request, "forums.html", {"threads": threads})
+# def forum_view(request):
+#     threads = fetch_all_threads()
+#     return render(request, "forums.html", {"threads": threads})
 
 
 # View to display a single thread with its posts
@@ -1519,7 +1533,7 @@ def unmute_user(request):
 
 
 # -------------
-# Punishments
+# Punishmentsx
 # -------------
 
 

@@ -105,6 +105,7 @@ footer {
 .profile-picture-container:hover .edit-icon {
     display: block;
 }
+
 .form-container {
     padding: 20px;
     background-color: #f9f9f9; /* Light background for contrast */
@@ -184,7 +185,8 @@ footer {
 }
 
 /* Common styles for both buttons */
-.submit-button, .deactivate-button {
+.submit-button,
+.deactivate-button {
     flex: 1; /* Make buttons take equal space */
     padding: 10px 20px; /* Padding for the buttons */
     border: none; /* Remove default border */
@@ -200,10 +202,8 @@ footer {
 .submit-button {
     background-color: #6A82FB; /* Primary blue color */
     color: white; /* White text */
-    text-decoration: none; /* Remove underline */
 }
 
-/* Hover effect for the Submit button */
 .submit-button:hover {
     background-color: #5766db; /* Darker blue on hover */
 }
@@ -214,14 +214,18 @@ footer {
     color: white; /* White text */
 }
 
-/* Hover effect for the Deactivate button */
 .deactivate-button:hover {
     background-color: #ff4949; /* Darker red on hover */
 }
 
+.deactivate-button.success {
+    background-color: #5c0303; /* Darker red for success state */
+}
+
 /* Adjust button size for smaller screens */
 @media (max-width: 600px) {
-    .submit-button, .deactivate-button {
+    .submit-button,
+    .deactivate-button {
         flex: none;
         width: 100%; /* Full width for small screens */
         margin-bottom: 10px; /* Space between buttons */
@@ -267,58 +271,6 @@ footer {
     text-align: center;
     font-weight: bold;
     color: red; /* Indicate no applications found */
-/* Button container to align buttons horizontally */
-.button-container {
-    display: flex;
-    justify-content: space-between; /* Space between the buttons */
-    margin-top: 20px; /* Add some space from the form */
-}
-
-/* Common styles for both buttons */
-.submit-button, .deactivate-button {
-    flex: 1; /* Make buttons take equal space */
-    padding: 10px 20px; /* Padding for the buttons */
-    border: none; /* Remove default border */
-    border-radius: 6px; /* Rounded corners */
-    cursor: pointer; /* Pointer cursor on hover */
-    font-size: 16px; /* Font size */
-    margin: 0 10px; /* Add some space between buttons */
-    transition: background-color 0.3s ease; /* Smooth transition for background color */
-}
-
-/* Submit Button styles */
-.submit-button {
-    background-color: #6A82FB; /* Primary blue color */
-    color: white; /* White text */
-}
-
-/* Hover effect for the Submit button */
-.submit-button:hover {
-    background-color: #5766db; /* Darker blue on hover */
-}
-
-/* Deactivate Button styles */
-.deactivate-button {
-    background-color: #FF6B6B; /* Red color for Deactivate */
-    color: white; /* White text */
-}
-
-/* Hover effect for the Deactivate button */
-.deactivate-button:hover {
-    background-color: #ff4949; /* Darker red on hover */
-}
-
-/* Adjust button size for smaller screens */
-@media (max-width: 600px) {
-    .submit-button, .deactivate-button {
-        flex: none;
-        width: 100%; /* Full width for small screens */
-        margin-bottom: 10px; /* Space between buttons */
-    }
-
-    .button-container {
-        flex-direction: column; /* Stack buttons vertically */
-    }
 }
 
 .error {
@@ -407,7 +359,6 @@ footer {
     color: #FFFFFF; /* White */
 }
 
-
 /* Hamburger Menu */
 .hamburger {
     display: none;
@@ -451,7 +402,6 @@ footer {
 .modal-content.show {
     transform: translateY(0); /* Slide down effect */
 }
-
 
 /* Button Styles */
 .modal-buttons {
@@ -514,10 +464,3 @@ footer {
     color: white;
     border: none;
 }
-}
-
-/* Green background for successful login */
-.deactivate-button.success {
-    background-color: #5c0303; /* Green color */
-}
-

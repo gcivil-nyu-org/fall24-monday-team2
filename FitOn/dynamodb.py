@@ -1,4 +1,3 @@
-import boto3
 from boto3.dynamodb.conditions import Attr
 import boto3, uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
@@ -11,7 +10,6 @@ from django.conf import settings
 from django.utils import timezone
 from django.conf import settings
 import uuid
-from datetime import datetime
 
 
 # Connect to DynamoDB
