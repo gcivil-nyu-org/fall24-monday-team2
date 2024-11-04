@@ -643,29 +643,3 @@ def delete_post_view(request):
         except Exception as e:
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
-<<<<<<< HEAD
-=======
-
-
-@login_required(login_url='/login/')
-def chat_room(request, username):
-    # Ensure the logged-in user is accessing the chat
-    if not request.user.is_authenticated:
-        return redirect("login")
-
-    # Fetch the target user from DynamoDB or database
-    other_user = get_user_by_username(username)
-    if not other_user:
-        raise Http404("No User matches the given query.")
-
-    # Proceed with conversation setup
-    conversation, created = Conversation.objects.get_or_create(users__in=[request.user, other_user])
-    messages = Message.objects.filter(conversation=conversation).order_by("timestamp")
-    return render(request, "chat_room.html", {"conversation": conversation, "messages": messages})
-
-def search_users(request):
-    query = request.GET.get("q", "")
-    users = User.objects.filter(username__icontains=query).exclude(id=request.user.id)
-    results = [{"id": user.id, "username": user.username} for user in users]
-    return JsonResponse(results, safe=False)
->>>>>>> bacdd0fcb83b783893538e3124c5a1e4ddbdf392

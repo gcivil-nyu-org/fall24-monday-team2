@@ -134,9 +134,9 @@ DATABASES = {
     }
 }
 
-SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
+SESSION_ENGINE = "django_dynamodb_sessions.backends.dynamodb"
 SESSION_COOKIE_AGE = 1209600
-DYNAMODB_SESSIONS_TABLE_NAME = 'DjangoUserSessions'
+DYNAMODB_SESSIONS_TABLE_NAME = "DjangoUserSessions"
 SESSION_SAVE_EVERY_REQUEST = True
 
 

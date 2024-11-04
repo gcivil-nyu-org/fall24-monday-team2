@@ -159,7 +159,6 @@ def get_user_by_uid(uid):
         return None
 
 
-
 def update_user_password(user_id, new_password):
     try:
         hashed_password = make_password(new_password)
