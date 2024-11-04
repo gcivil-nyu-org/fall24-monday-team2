@@ -67,6 +67,11 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
                 "date_of_birth": str(date_of_birth),
                 "gender": gender,
                 "password": password,  # Hashed password
+                "is_admin": False,
+                "is_fitness_trainer": False,
+                "is_muted": False,
+                "is_banned": False,
+                "punishment_date": "",
             }
         )
 
@@ -105,6 +110,7 @@ def delete_user_by_username(username):
         users_table.delete_item(
             Key={"user_id": user_id}  # Replace with your partition key
         )
+
         print(f"User '{username}' successfully deleted.")
         return True
 
@@ -356,7 +362,7 @@ def get_fitness_trainer_applications():
 
 def create_thread(title, user_id, content):
     thread_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now().isoformat()
 
     thread = {
         "ThreadID": thread_id,
@@ -604,4 +610,80 @@ def get_fitness_data(metric, email, start_time, end_time):
         return response
     except Exception as e:
         print(f"Error querying DynamoDB for fitness data. {e}")
+
+
+def delete_threads_by_user(user_id):
+    """
+    Deletes all threads in the specified DynamoDB table for a given user ID.
+
+    Parameters:
+    - user_id (str): The UserID for which threads should be deleted.
+    """
+    while True:
+        # Scan the table for items where UserID matches the specified user_id
+        response = threads_table.scan(
+            FilterExpression="UserID = :user",
+            ExpressionAttributeValues={":user": user_id},
+            ProjectionExpression="ThreadID",
+        )
+
+        # Extract ThreadIDs from the scan result
+        thread_ids = [item["ThreadID"] for item in response.get("Items", [])]
+
+        # If there are no more items to delete, exit the loop
+        if not thread_ids:
+            print("No more items to delete.")
+            break
+
+        # Loop through each ThreadID and delete the item
+        for thread_id in thread_ids:
+            threads_table.delete_item(Key={"ThreadID": thread_id})
+            print(f"Deleted ThreadID: {thread_id}")
+
+
+def delete_thread_by_id(thread_id):
+    try:
+        # Delete the forum thread by thread_id (primary key)
+        delete_response = threads_table.delete_item(
+            Key={"ThreadID": thread_id}  # Replace with your actual partition key
+        )
+
+        print(f"Forum thread with ID '{thread_id}' successfully deleted.")
+        return True
+
+    except Exception as e:
+        print(f"Error deleting forum thread with ID '{thread_id}': {e}")
+        return False
+
+
+def get_thread(title, user_id, content, created_at):
+    try:
+        response = threads_table.scan(
+            FilterExpression="#title = :title AND #user = :user_id AND #content = :content AND #created = :created_at",
+            ExpressionAttributeNames={
+                "#title": "Title",
+                "#user": "UserID",
+                "#content": "Content",
+                "#created": "CreatedAt",
+            },
+            ExpressionAttributeValues={
+                ":title": title,
+                ":user_id": user_id,
+                ":content": content,
+                ":created_at": created_at,
+            },
+        )
+
+        threads = response.get("Items", [])
+        if threads:
+            print("Thread found:", threads[0])
+            return threads[0]
+        else:
+            print(
+                "No thread found with the specified Title, UserID, Content, and CreatedAt."
+            )
+            return None
+
+    except Exception as e:
+        print(f"Error retrieving thread: {e}")
         return None

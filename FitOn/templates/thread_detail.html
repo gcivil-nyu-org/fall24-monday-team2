@@ -14,17 +14,31 @@
         <p>{{ thread.Content }}</p>
     </div>
 
-    <!-- Like and Report buttons at the bottom -->
     <div style="display: flex; align-items: center; border-top: 1px solid #e0e0e0; padding-top: 10px;">
         <!-- Like Button -->
         <button id="like-btn" data-thread-id="{{ thread.ThreadID }}" style="background-color: {% if liked %}darkgreen{% else %}green{% endif %}; color: white; border: none; padding: 5px 15px; cursor: pointer; margin-right: 10px;">
             ▲ {{ thread.Likes }} Like{% if thread.Likes != 1 %}s{% endif %}
         </button>
 
-        <!-- Report Button (Placeholder) -->
-        <button id="report-btn" style="background-color: red; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+        <!-- Report Button -->
+        <button id="report-btn" style="background-color: gray; color: white; border: none; padding: 5px 15px; cursor: pointer; margin-right: 10px;">
             ⚑ Report
         </button>
+
+        {% if user.is_admin %}
+        <button id="delete-btn" style="background-color: orange; color: white; border: none; padding: 5px 15px; cursor: pointer; margin-right: 10px;">
+             Delete
+        </button>
+
+        <button class="mute-post-btn" data-user-id="{{ thread.UserID }}" style="background-color: blue; color: white; border: none; padding: 5px 15px; cursor: pointer; margin-right: 10px;">
+             Mute
+        </button>
+
+        <button class="ban-post-btn" data-user-id="{{ thread.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
+            Ban
+        </button>
+        {% endif %}
+
     </div>
 
     <!-- Posts section -->
@@ -37,10 +51,30 @@
                 <p style="color: #888; font-size: 12px;">{{ post.CreatedAt|date:"M d, Y H:i" }}</p>
             </div>
             <p>{{ post.Content }}</p>
-            {% if post.UserID == request.session.username %}
-            <button class="delete-post-btn" data-post-id="{{ post.PostID }}" data-thread-id="{{ thread.ThreadID }}" style="background-color: white; color: red; border: 1px solid red; padding: 5px 10px; cursor: pointer; margin-top: 10px;">
-                Delete Post
-            </button>
+
+            <!-- Admin Controls -->
+            <div style="display: flex; gap: 5px; margin-top: 10px;">
+                <button class="report-post-btn" data-post-id="{{ post.PostID }}" style="background-color: gray; color: black; border: 1px solid gray; padding: 5px 10px; cursor: pointer;">
+                    Report
+                </button>
+                {% if user.is_admin %}
+                    <button class="delete-post-btn" data-post-id="{{ post.PostID }}" style="background-color: orange; color: black; border: 1px solid orange; padding: 5px 10px; cursor: pointer;">
+                        Delete
+                    </button>
+                    {% if not post.is_admin %}
+                        <button class="mute-post-btn" data-user-id="{{ post.UserID }}" style="background-color: lightblue; color: black; border: 1px solid blue; padding: 5px 10px; cursor: pointer;">
+                            Mute
+                        </button>
+                        <button class="ban-post-btn" data-user-id="{{ post.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
+                            Ban
+                        </button>
+                    {% endif %}
+                </div>
+            {% elif post.UserID == request.session.username %}
+                <!-- Standard Delete Option for Post Owner -->
+                <button class="delete-post-btn" data-post-id="{{ post.PostID }}" style="background-color: white; color: red; border: 1px solid red; padding: 5px 10px; cursor: pointer; margin-top: 10px;">
+                    Delete Post
+                </button>
             {% endif %}
         </div>
         {% empty %}
@@ -49,88 +83,110 @@
     </div>
 
     <!-- Post form -->
-    <form method="post" style="display: flex; align-items: center; margin-top: 30px;">
-        {% csrf_token %}
-        <textarea name="content" rows="3" placeholder="Write your post" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
-        <button type="submit" style="margin-left: 10px; padding: 8px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Post</button>
-    </form>
+{% if user.is_muted %}
+<div class="ban-message" style="color: red; font-weight: bold; text-align: center; margin-top: 20px; font-size: 24px;">
+    You are muted and are unable to respond on the forums.
+</div>
+{% else %}
+<form method="post" style="display: flex; align-items: center; margin-top: 30px;">
+    {% csrf_token %}
+    <textarea name="content" rows="3" placeholder="Write your post" style="flex-grow: 1; padding: 10px; border-radius: 5px; border: 1px solid #ddd;"></textarea>
+    <button type="submit" style="margin-left: 10px; padding: 8px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Post</button>
+</form>
+{% endif %}
 </div>
 
 <!-- JavaScript to handle Like, Delete Post, and Report buttons via AJAX -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const likeButton = document.getElementById('like-btn');
-    const reportButton = document.getElementById('report-btn');
-    const deletePostButtons = document.querySelectorAll('.delete-post-btn');
-
-    likeButton.addEventListener('click', function(event) {
-        event.preventDefault();
-
-        const threadId = this.dataset.threadId;
-
-        fetch(window.location.href, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-                'Content-Type': 'application/json',
-                'x-requested-with': 'XMLHttpRequest'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.status === 'success') {
-                let likeText = data.likes + ' Like' + (data.likes !== 1 ? 's' : '');
-                likeButton.textContent = `▲ ${likeText}`;
-                likeButton.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
-            } else {
-                alert('Error: ' + data.message);
-            }
-        })
-        .catch(error => console.error('Error:', error));
-    });
-
-    deletePostButtons.forEach(button => {
-        button.addEventListener('click', function(event) {
-            event.preventDefault();
-            
-            const postId = this.dataset.postId;
-            const threadId = this.dataset.threadId;
-
-            if (!postId || !threadId) {
-                alert('Post or Thread ID is missing');
-                return;
-            }
-
-            fetch('/delete_post/', {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'Content-Type': 'application/json',
-                    'x-requested-with': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({ 'post_id': postId, 'thread_id': threadId })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    const postElement = document.getElementById(`post-${postId}`);
-                    if (postElement) {
-                        postElement.remove();
+    document.addEventListener('DOMContentLoaded', function() {
+        const likeButton = document.getElementById('like-btn');
+        const reportButton = document.getElementById('report-btn');
+        const deletePostButtons = document.querySelectorAll('.delete-post-btn');
+        const muteButtons = document.querySelectorAll('.mute-post-btn')
+        const banButtons = document.querySelectorAll('.ban-post-btn'); // Select all ban buttons
+    
+        // Ban/Unban button click event
+        banButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                
+                const userId = this.dataset.userId;  // Get user ID from data attribute
+    
+                fetch('/ban_user/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ 'user_id': userId })  // Send user ID to the backend
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Toggle button text and color based on is_banned status
+                        this.textContent = data.is_banned ? 'Unban' : 'Ban';
+                        this.style.backgroundColor = data.is_banned ? 'green' : 'red';
                     } else {
-                        console.error('Post element not found in DOM');
+                        alert('Error: ' + data.message);
                     }
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            })
-            .catch(error => console.error('Error:', error));
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        });
+        
+        // Mute/Unmute button click event
+        muteButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                
+                const userId = this.dataset.userId;  // Get user ID from data attribute
+    
+                fetch('/mute_user/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ 'user_id': userId })  // Send user ID to the backend
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Toggle button text and color based on is_banned status
+                        this.textContent = data.is_muted? 'Unmute' : 'Mute';
+                        this.style.backgroundColor = data.is_muted ? 'green' : 'blue';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+            });
+        });
+    
+        // Like button functionality (example placeholder)
+        likeButton.addEventListener('click', function(event) {
+            event.preventDefault();
+            // Your like button functionality here...
+            alert('Like functionality coming soon!');
+        });
+    
+        // Delete post button functionality (example placeholder)
+        deletePostButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const postId = this.dataset.postId;
+                // Your delete functionality here...
+                alert('Delete functionality coming soon for post ID: ' + postId);
+            });
+        });
+    
+        // Report button functionality (example placeholder)
+        reportButton.addEventListener('click', function(event) {
+            event.preventDefault();
+            alert('Report functionality coming soon!');
         });
     });
-
-    reportButton.addEventListener('click', function(event) {
-        event.preventDefault();
-        alert('Report functionality coming soon!');
-    });
-});
 </script>
 {% endblock %}
