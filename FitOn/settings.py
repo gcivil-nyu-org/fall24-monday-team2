@@ -122,7 +122,7 @@ DATABASES = {
     }
 }
 
-SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
+# SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
 # DYNAMODB_SESSIONS_TABLE_NAME = 'django-user-sessions'
 # SESSION_SAVE_EVERY_REQUEST = True
 
