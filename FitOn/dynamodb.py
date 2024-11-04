@@ -544,7 +544,7 @@ def fetch_posts_for_thread(thread_id):
     return response.get("Items", [])
 
 
-def create_reply(thread_id, user_id, content):
+def post_comment(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat()
 
@@ -785,3 +785,164 @@ def get_thread(title, user_id, content, created_at):
     except Exception as e:
         print(f"Error retrieving thread: {e}")
         return None
+
+
+# Zejun's Code
+
+
+def create_reply(thread_id, user_id, content):
+    reply_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+
+    reply = {
+        "ReplyID": reply_id,
+        "UserID": user_id,
+        "Content": content,
+        "CreatedAt": created_at,
+    }
+
+    # Append the reply to the post's Replies attribute
+    try:
+        # Update the post by appending the new reply to the Replies list
+        posts_table.update_item(
+            Key={"PostID": post_id},
+            UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
+            ExpressionAttributeValues={
+                ":reply": [reply],  # Append the reply as a list item
+                ":empty_list": [],  # Default to an empty list if Replies doesn't exist
+            },
+        )
+        return {"status": "success", "reply_id": reply_id}
+    except Exception as e:
+        print(f"Error adding reply: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+def like_comment(post_id, user_id):
+    # Fetch the comment by post_id
+    response = posts_table.get_item(Key={"PostID": post_id})
+    post = response.get("Item")
+
+    if not post:
+        raise ValueError("Comment not found")
+
+    liked_by = post.get("LikedBy", [])
+    likes = post.get("Likes", 0)
+
+    # Check if the user has already liked the post
+    if user_id in liked_by:
+        # Unlike the post
+        likes = max(0, likes - 1)
+        liked_by.remove(user_id)
+        liked = False
+    else:
+        # Like the post
+        likes += 1
+        liked_by.append(user_id)
+        liked = True
+
+    # Update the item in DynamoDB
+    posts_table.update_item(
+        Key={"PostID": post_id},
+        UpdateExpression="SET Likes = :likes, LikedBy = :liked_by",
+        ExpressionAttributeValues={":likes": likes, ":liked_by": liked_by},
+    )
+
+    return likes, liked
+
+
+def report_comment(post_id, user_id):
+    # Update the comment as reported by adding user_id to ReportedBy
+    response = posts_table.get_item(Key={"PostID": post_id})
+    post = response.get("Item")
+
+    if not post:
+        raise ValueError("Comment not found")
+
+    reported_by = post.get("ReportedBy", [])
+    if user_id not in reported_by:
+        reported_by.append(user_id)
+
+    # Update the item in DynamoDB
+    posts_table.update_item(
+        Key={"PostID": post_id},
+        UpdateExpression="SET ReportedBy = :reported_by",
+        ExpressionAttributeValues={":reported_by": reported_by},
+    )
+
+
+def delete_reply(post_id, thread_id, reply_id):
+    try:
+        # Fetch the post to get the current list of replies
+        response = posts_table.get_item(Key={"PostID": post_id, "ThreadID": thread_id})
+        post = response.get("Item")
+
+        if not post or "Replies" not in post:
+            return {"status": "error", "message": "Post or replies not found"}
+
+        # Filter out the reply with the specific reply_id
+        updated_replies = [
+            reply for reply in post["Replies"] if reply["ReplyID"] != reply_id
+        ]
+
+        # Update the post in DynamoDB with the new list of replies
+        posts_table.update_item(
+            Key={"PostID": post_id, "ThreadID": thread_id},
+            UpdateExpression="SET Replies = :updated_replies",
+            ExpressionAttributeValues={":updated_replies": updated_replies},
+        )
+
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error deleting reply: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+def fetch_reported_threads_and_comments():
+    reported_threads = []
+    reported_comments = []
+
+    # Fetch reported threads
+    try:
+        response = threads_table.scan(FilterExpression=Attr("ReportedBy").exists())
+        reported_threads = response.get("Items", [])
+        print(f"Fetched {len(reported_threads)} reported threads.")
+    except ClientError as e:
+        print(f"Error fetching reported threads: {e.response['Error']['Message']}")
+
+    # Fetch reported comments
+    try:
+        response = posts_table.scan(FilterExpression=Attr("ReportedBy").exists())
+        reported_comments = response.get("Items", [])
+        print(f"Fetched {len(reported_comments)} reported comments.")
+    except ClientError as e:
+        print(f"Error fetching reported comments: {e.response['Error']['Message']}")
+
+    return {
+        "reported_threads": reported_threads,
+        "reported_comments": reported_comments,
+    }
+
+
+def mark_thread_as_reported(thread_id):
+    try:
+        # Fetch the thread to check if it already has "ReportedBy" attribute
+        response = threads_table.get_item(Key={"ThreadID": thread_id})
+        thread = response.get("Item", {})
+
+        reported_by = thread.get("ReportedBy", [])
+
+        # Mark the thread as reported (or add to the list if already exists)
+        reported_by.append(
+            "admin"
+        )  # Replace "admin" with the reporting user ID if needed
+
+        # Update the thread with the reported status
+        threads_table.update_item(
+            Key={"ThreadID": thread_id},
+            UpdateExpression="SET ReportedBy = :reported_by",
+            ExpressionAttributeValues={":reported_by": reported_by},
+        )
+        print(f"Thread {thread_id} reported.")
+    except Exception as e:
+        print(f"Error reporting thread {thread_id}: {e}")

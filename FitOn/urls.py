@@ -97,4 +97,8 @@ urlpatterns = [
         views.reject_fitness_trainer,
         name="reject_fitness_trainer",
     ),
+    path("add_reply/", views.add_reply, name="add_reply"),
+    path("delete_reply/", views.delete_reply_view, name="delete_reply"),
+    path("delete_thread/", views.delete_thread, name="delete_thread"),
+    path("reports/", views.reports_view, name="reports"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
