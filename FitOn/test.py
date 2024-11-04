@@ -1,15 +1,10 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from django.test import TestCase, Client
 from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
 from django.urls import reverse
-from . import dynamodb
 import boto3
-from django.contrib.auth.models import User
-import time
-import json
 from .views import SCOPES
-from django.test import TestCase
 from .dynamodb import (
     create_user,
     delete_user_by_username,
@@ -23,11 +18,8 @@ from .dynamodb import (
     get_thread,
     delete_thread_by_id,
 )
-import boto3
 from django.contrib.auth.hashers import check_password
 from botocore.exceptions import ClientError
-from datetime import datetime
-import json
 import pytz
 from django.contrib import messages
 
@@ -487,7 +479,9 @@ class GoogleAuthDelinkTestCase(TestCase):
         response = self.client.post(reverse("delink_google_fit"), follow=True)
 
         # Assertions for final response status after following redirects
-        self.assertEqual(response.status_code, 200)  # Expect the final status code to be 200 after redirects
+        self.assertEqual(
+            response.status_code, 200
+        )  # Expect the final status code to be 200 after redirects
 
         # Verify that the session no longer contains credentials
         session = self.client.session

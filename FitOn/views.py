@@ -61,7 +61,6 @@ from django.utils import timezone
 from asgiref.sync import sync_to_async
 import uuid
 import ssl
-import pytz
 import boto3
 from google_auth_oauthlib.flow import Flow
 import requests
@@ -69,7 +68,6 @@ import requests
 # from django.contrib.auth.decorators import login_required
 from .dynamodb import threads_table, delete_post
 import json
-from datetime import datetime
 
 # from google import Things
 from google.oauth2.credentials import Credentials

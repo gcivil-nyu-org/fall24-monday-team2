@@ -644,7 +644,7 @@ def delete_threads_by_user(user_id):
 def delete_thread_by_id(thread_id):
     try:
         # Delete the forum thread by thread_id (primary key)
-        delete_response = threads_table.delete_item(
+        threads_table.delete_item(
             Key={"ThreadID": thread_id}  # Replace with your actual partition key
         )
 
