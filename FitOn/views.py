@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect
 from .dynamodb import (
     add_fitness_trainer_application,
     # create_post,
-    create_reply,
+    post_comment,
     create_thread,
     create_user,
     delete_user_by_username,
@@ -26,7 +26,8 @@ from .dynamodb import (
     fetch_all_users,
     like_comment,
     report_comment,
-    posts_table
+    posts_table,
+    delete_reply,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -510,13 +511,12 @@ def fitness_trainer_applications_list_view(request):
 #     threads = fetch_all_threads()
 #     return render(request, "forums.html", {"threads": threads})
 
-
+'''
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
     thread = threads_table.get_item(Key={"ThreadID": thread_id}).get("Item")
     posts = fetch_posts_for_thread(thread_id)  # Fetch comments related to the thread
-
     if not thread:
         return JsonResponse({"status": "error", "message": "Thread not found"}, status=404)
 
@@ -591,7 +591,7 @@ def thread_detail_view(request, thread_id):
             # Add a new post to the thread
             new_content = request.POST.get("content").strip()
             if new_content:
-                create_reply(thread_id=thread_id, user_id=user_id, content=new_content)
+                create_reply(thread_id=thread_id, user_id=user_id, content=new_content, post_id = post_id)
 
         # Redirect after posting to avoid resubmission on refresh
         return redirect("thread_detail", thread_id=thread_id)
@@ -602,7 +602,72 @@ def thread_detail_view(request, thread_id):
         "posts": posts,
         "liked": user_id in thread.get("LikedBy", []),
     })
+'''
 
+def thread_detail_view(request, thread_id):
+    # Fetch thread details from DynamoDB
+    thread = threads_table.get_item(Key={"ThreadID": thread_id}).get("Item")
+    posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
+    user_id = request.session.get("user_id")
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
+
+    is_banned = user.get("is_banned")
+    if is_banned:
+        return render(request, "forums.html", {"is_banned": is_banned})
+
+    if not thread:
+        return JsonResponse(
+            {"status": "error", "message": "Thread not found"}, status=404
+        )
+
+    user_id = request.session.get("username")  # Assuming user is logged in
+
+    if request.method == "POST":
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            # Get the list of users who have liked the thread
+            liked_by = thread.get("LikedBy", [])
+
+            if user_id in liked_by:
+                # If user has already liked the post, "unlike" (remove the like)
+                likes = max(
+                    0, thread.get("Likes", 0) - 1
+                )  # Ensure likes never go below 0
+                liked_by.remove(user_id)  # Remove the user from the LikedBy list
+            else:
+                # If user hasn't liked the post, add a like
+                likes = thread.get("Likes", 0) + 1
+                liked_by.append(user_id)  # Add the current user to the LikedBy list
+
+            # Update the thread with the new like count and LikedBy list
+            threads_table.update_item(
+                Key={"ThreadID": thread_id},
+                UpdateExpression="set Likes=:l, LikedBy=:lb",
+                ExpressionAttributeValues={":l": likes, ":lb": liked_by},
+            )
+            return JsonResponse(
+                {"status": "success", "likes": likes, "liked": user_id in liked_by}
+            )
+
+        else:
+            # Handle reply submission (non-AJAX form submission)
+            content = request.POST.get("content")
+
+            if content and user_id:
+                post_comment(thread_id=thread_id, user_id=user_id, content=content)
+                return redirect("thread_detail", thread_id=thread_id)
+
+    return render(
+        request,
+        "thread_detail.html",
+        {
+            "user": user,
+            "thread": thread,
+            "posts": posts,
+            "liked": user_id in thread.get("LikedBy", []),
+        },
+    )
 
 
 
@@ -689,8 +754,11 @@ def forum_view(request):
     users = (
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
+    user_id = request.session.get("user_id")
 
-    return render(request, "forums.html", {"threads": threads, "users": users})
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
+    return render(request, "forums.html", {"threads": threads, "users": users, "user": user})
 
 def add_reply(request):
     if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
@@ -699,9 +767,6 @@ def add_reply(request):
         content = data.get("content")
         thread_id = data.get("thread_id")
         
-        print("Received thread_id:", thread_id)  # Debugging line
-
-
         if not post_id or not content:
             return JsonResponse({"status": "error", "message": "Post ID and content are required."}, status=400)
         
@@ -710,20 +775,20 @@ def add_reply(request):
         if not user_id:
             return JsonResponse({"status": "error", "message": "User not authenticated"}, status=403)
         
-         # Create the reply data
+        # Create the reply data
         reply_data = {
             "ReplyID": str(uuid.uuid4()),  # Unique ID for each reply
             "UserID": user_id,
             "Content": content,
-           # "CreatedAt": datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            "CreatedAt": datetime.utcnow().isoformat()  # Timestamp for each reply
         }
 
-         # Save the reply to DynamoDB by appending it to the 'Replies' list for the post
+        # Save the reply to DynamoDB by appending it to the 'Replies' list for the post
         try:
             posts_table.update_item(
                 Key={
                     "PostID": post_id,
-                    "ThreadID": thread_id  # Add ThreadID to match the schema
+                    "ThreadID": thread_id
                 },
                 UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
                 ExpressionAttributeValues={
@@ -735,38 +800,37 @@ def add_reply(request):
         except Exception as e:
             return JsonResponse({"status": "error", "message": f"Failed to save reply: {str(e)}"}, status=500)
         
-        # For now, we'll assume successful addition
-        return JsonResponse({"status": "success", "content": content, "username": user_id})
+        # Return success response with reply details
+        return JsonResponse({
+            "status": "success",
+            "reply_id": reply_data["ReplyID"],
+            "content": content,
+            "username": user_id,
+            "created_at": reply_data["CreatedAt"]
+        })
     
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
+def delete_reply_view(request):
+    if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
+        data = json.loads(request.body.decode("utf-8"))
+        post_id = data.get("post_id")
+        reply_id = data.get("reply_id")
 
-def delete_reply(request):
-    post_id = request.POST.get('post_id')
-    reply_id = request.POST.get('reply_id')
+        if not post_id or not reply_id:
+            return JsonResponse({"status": "error", "message": "Post ID and Reply ID are required."}, status=400)
 
-    if not post_id or not reply_id:
-        return JsonResponse({"status": "error", "message": "Post ID and Reply ID are required."}, status=400)
+        # Call the delete_reply function in dynamodb.py
+        result = delete_reply(post_id, reply_id)
 
-     # Retrieve the post and filter out the reply to delete
-    try:
-        response = posts_table.get_item(Key={"PostID": post_id})
-        post = response.get("Item")
-        if not post:
-            return JsonResponse({"status": "error", "message": "Post not found."}, status=404)
-
-        replies = post.get("Replies", [])
-        updated_replies = [reply for reply in replies if reply["ReplyID"] != reply_id]
-
-         # Update the post with the filtered replies list
-        posts_table.update_item(
-            Key={"PostID": post_id},
-            UpdateExpression="SET Replies = :updated_replies",
-            ExpressionAttributeValues={":updated_replies": updated_replies}
-        )
-        return JsonResponse({"status": "success"})
-    except Exception as e:
-        return JsonResponse({"status": "error", "message": "Failed to delete reply: {str(e)}"}, status=500)
+        if result.get("status") == "success":
+            return JsonResponse({"status": "success"})
+        else:
+            error_message = result.get("message", "An error occurred while deleting the reply.")
+            return JsonResponse({"status": "error", "message": error_message}, status=500)
+    
+    
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 
 def delete_thread(request):

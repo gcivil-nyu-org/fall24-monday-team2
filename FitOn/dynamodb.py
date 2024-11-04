@@ -441,6 +441,33 @@ def fetch_posts_for_thread(thread_id):
 
 
 def create_reply(thread_id, user_id, content):
+    reply_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+
+    reply = {
+        "ReplyID": reply_id,
+        "UserID": user_id,
+        "Content": content,
+        "CreatedAt": created_at,
+    }
+
+    # Append the reply to the post's Replies attribute
+    try:
+        # Update the post by appending the new reply to the Replies list
+        posts_table.update_item(
+            Key={"PostID": post_id},
+            UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
+            ExpressionAttributeValues={
+                ":reply": [reply],  # Append the reply as a list item
+                ":empty_list": []   # Default to an empty list if Replies doesn't exist
+            }
+        )
+        return {"status": "success", "reply": reply}
+    except Exception as e:
+        print(f"Error adding reply: {e}")
+        return {"status": "error", "message": str(e)}
+    
+def post_comment(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat()
 
@@ -649,3 +676,29 @@ def report_comment(post_id, user_id):
             ":reported_by": reported_by
         }
     )
+
+
+
+def delete_reply(post_id, reply_id):
+    try:
+        # Fetch the post to get the current list of replies
+        response = posts_table.get_item(Key={"PostID": post_id})
+        post = response.get("Item")
+
+        if not post or "Replies" not in post:
+            return {"status": "error", "message": "Post or replies not found"}
+
+        # Filter out the reply with the specific reply_id
+        updated_replies = [reply for reply in post["Replies"] if reply["ReplyID"] != reply_id]
+
+        # Update the post in DynamoDB with the new list of replies
+        posts_table.update_item(
+            Key={"PostID": post_id},
+            UpdateExpression="SET Replies = :updated_replies",
+            ExpressionAttributeValues={":updated_replies": updated_replies}
+        )
+
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error deleting reply: {e}")
+        return {"status": "error", "message": str(e)}

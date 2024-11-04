@@ -64,7 +64,7 @@
                     <th>Thread Created</th>
                     <th>Last Post</th>
                     <th>Likes</th>
-                    {% if not user.is_admin %} <!-- Check if the user is an admin -->
+                    {% if user.is_admin %} <!-- Check if the user is an admin -->
                         <th>Delete</th>
                     {% endif %}
                 </tr>
@@ -85,7 +85,7 @@
                         {% endif %}
                     </td>
                     <td>{{ thread.Likes }} Likes</td>
-                    {% if not user.is_admin %}
+                    {% if user.is_admin %}
                     <td>
                         <button class="delete-thread-btn" data-thread-id="{{ thread.ThreadID }}">Delete</button>
                     </td>
