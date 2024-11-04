@@ -36,7 +36,6 @@ from .forms import (
     SignUpForm,
 )
 
-from .models import Conversation, Message
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.decorators import login_required
