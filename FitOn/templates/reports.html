@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Reported Threads</h2>
+
+{% if reported_threads %}
+    <table>
+        <tr>
+            <th>Thread Title</th>
+            <th>Reported By</th>
+            <th>Actions</th>
+        </tr>
+        {% for thread in reported_threads %}
+            <tr>
+                <td>{{ thread.Title }}</td>
+                <td>{{ thread.ReportedBy|join:", " }}</td>
+                <td>
+                    <a href="{% url 'thread_detail' thread.ThreadID %}">View Thread</a>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% else %}
+    <p>No reported threads found.</p>
+{% endif %}
+
+<h2>Reported Comments</h2>
+
+{% if reported_comments %}
+    <table>
+        <tr>
+            <th>Comment Content</th>
+            <th>Reported By</th>
+            <th>Actions</th>
+        </tr>
+        {% for comment in reported_comments %}
+            <tr>
+                <td>{{ comment.Content }}</td>
+                <td>{{ comment.ReportedBy|join:", " }}</td>
+                <td>
+                    <a href="{% url 'thread_detail' comment.ThreadID %}">View Comment</a>
+                </td>
+            </tr>
+        {% endfor %}
+    </table>
+{% else %}
+    <p>No reported comments found.</p>
+{% endif %}
+{% endblock %}
