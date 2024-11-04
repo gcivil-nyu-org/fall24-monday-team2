@@ -273,6 +273,8 @@ def password_reset_request(request):
         "password_reset_request.html",
         {"form": form, "error_message": error_message, "countdown": countdown},
     )
+
+
 def password_reset_confirm(request, uidb64, token):
     if not uidb64 or not token:
         return render(
