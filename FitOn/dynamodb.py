@@ -132,25 +132,19 @@ def delete_user_by_username(username):
         print(f"Error deleting user with username '{username}': {e}")
         return False
 
-
 def get_user_by_email(email):
     try:
-        print(f"Attempting to fetch user with email: {email}")
         response = users_table.scan(
-            FilterExpression="#e = :email",
-            ExpressionAttributeNames={"#e": "email"},
-            ExpressionAttributeValues={":email": email},
+            FilterExpression=Attr("email").eq(email)
         )
         users = response.get("Items", [])
-        print(f"Response from DynamoDB: {response}")  # Debug: Show the full response
         if users:
-            print("User found:", users[0])  # Confirm user found
             return MockUser(users[0])
-        print("No user found with that email.")
         return None
     except Exception as e:
         print(f"Error querying DynamoDB for email '{email}': {e}")
         return None
+
         
 def get_user_by_uid(uid):
     try:

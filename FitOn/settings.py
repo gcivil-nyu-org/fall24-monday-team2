@@ -186,17 +186,24 @@ DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+
 PASSWORD_RESET_TIMEOUT = timedelta(minutes=5).total_seconds()
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "fiton.notifications@gmail.com"
-EMAIL_HOST_PASSWORD = "usfb imrp rhyq npif"
 
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 # For google redirection
 # SECURE_SSL_REDIRECT = True
 # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 TESTING = 'test' in sys.argv
+
+if TESTING:
+    # Use in-memory email backend for tests
+    EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+else:
+    # Use actual email backend for local development and production
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = "smtp.gmail.com"
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = "fiton.notifications@gmail.com"
+    EMAIL_HOST_PASSWORD = "usfb imrp rhyq npif"

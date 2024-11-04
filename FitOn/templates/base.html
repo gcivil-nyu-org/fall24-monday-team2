@@ -20,14 +20,6 @@
             <ul class="navbar-links">
                 {% if request.session.username %}
                     <li><a href="{% url 'forum' %}">Forums</a></li>
-</head>
-<body>
-    {% if request.session.username %}
-        <nav class="navbar">
-            <div class="navbar-container">
-                <a href="{% url 'homepage' %}" class="navbar-logo">FitOn</a>
-                <ul class="navbar-links">
-                    <li><a href="{% url 'homepage' %}">Forums</a></li>
                     <li><a href="{% url 'homepage' %}">Workouts</a></li>
                     <li><a href="{% url 'homepage' %}">Metrics</a></li>
                     <li><a href="{% url 'profile' %}">Profile</a></li>
@@ -47,7 +39,6 @@
                 {% if request.session.username %}
                     <button onclick="location.href=`{% url 'homepage' %}`">Forums</button>
                     <button onclick="location.href=`{% url 'homepage' %}`">Workouts</button>
-                    <button onclick="location.href=`{% url 'homepage' %}`">Metrics</button>
                     <button onclick="location.href=`{% url 'profile' %}`">Profile</button>
                     <button onclick="location.href=`{% url 'logout' %}`">Logout</button>
                 {% else %}
@@ -58,11 +49,6 @@
         </div>
     </div>
 
-                </ul>
-            </div>
-        </nav>
-    {% endif %}
-    
     <div class="content">
         {% block content %}
         {% endblock %}
