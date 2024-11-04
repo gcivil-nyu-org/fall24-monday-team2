@@ -699,6 +699,7 @@ class PasswordResetTests(TestCase):
             len(mail.outbox), 1, "No additional email should be sent due to throttling."
         )
 
+    # check
     def test_password_reset_request_case_sensitive_email(self):
         # Enter a valid email with incorrect casing
         response = self.client.post(
