@@ -22,6 +22,9 @@ from django.contrib import admin
 
 # from django.contrib.auth import views
 from django.urls import path
+from .views import signup, homepage, login, profile_view, upload_profile_picture
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),
@@ -40,7 +43,7 @@ urlpatterns = [
         "reset-password/", views.password_reset_request, name="password_reset_request"
     ),
     path(
-        "reset-password/<str:user_id>/<str:token>/",
+        "reset-password/<str:uidb64>/<str:token>/",
         views.password_reset_confirm,
         name="password_reset_confirm",
     ),
