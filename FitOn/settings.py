@@ -112,18 +112,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "FitOn.wsgi.application"
 
-ASGI_APPLICATION = "FitOn.asgi.application"
-
-# Redis channel layer configuration
-CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [("127.0.0.1", 6379)],
-        },
-    },
-}
-
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
@@ -134,11 +122,9 @@ DATABASES = {
     }
 }
 
-SESSION_ENGINE = "django_dynamodb_sessions.backends.dynamodb"
-SESSION_COOKIE_AGE = 1209600
-DYNAMODB_SESSIONS_TABLE_NAME = "DjangoUserSessions"
-SESSION_SAVE_EVERY_REQUEST = True
-
+# SESSION_ENGINE = "django_dynamodb_sessions.backends.dynamodb"
+# DYNAMODB_SESSIONS_TABLE_NAME = 'django-user-sessions'
+# SESSION_SAVE_EVERY_REQUEST = True
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
