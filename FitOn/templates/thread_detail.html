@@ -11,7 +11,7 @@
     </div>
 
     <div data-thread-id="{{ thread.ThreadID }}"></div>
-    
+
     <div class="thread-content" style="font-size: 16px; line-height: 1.5; margin-bottom: 30px;">
         <p>{{ thread.Content }}</p>
     </div>
@@ -28,6 +28,7 @@
             ⚑ Report
         </button>
     </div>
+
 
     <!-- Posts section -->
     <div class="thread-replies" style="margin-top: 30px;">
@@ -66,14 +67,23 @@
             </div>
 
             <!-- Nested Replies -->
+            <!-- delete button for replies -->
             <div id="replies-{{ post.PostID }}" style="margin-left: 20px; margin-top: 10px;">
                 {% for reply in post.Replies %}
-                <div class="reply" style="border: 1px solid #ddd; padding: 5px; margin-top: 5px;">
+                <div class="reply" id="reply-{{ reply.ReplyID }}" style="border: 1px solid #ddd; padding: 5px; margin-top: 5px;">
                     <p><strong>{{ reply.UserID }}</strong> said: {{ reply.Content }}</p>
                     <p style="color: #888; font-size: 12px;">{{ reply.CreatedAt|date:"M d, Y H:i" }}</p>
+                    
+                    {% if reply.UserID == request.session.username %}
+                    <button class="delete-reply-btn" data-reply-id="{{ reply.ReplyID }}" data-post-id="{{ post.PostID }}" style="background-color: white; color: red; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
+                        Delete Reply
+                    </button>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
+
+            
 
             {% endif %}
     
@@ -104,6 +114,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const likeButton = document.getElementById('like-btn');
     const reportButton = document.getElementById('report-btn');
     const deletePostButtons = document.querySelectorAll('.delete-post-btn');
+    const deleteReplyButtons = document.querySelectorAll('.delete-reply-btn');
     const likeCommentButtons = document.querySelectorAll('.like-comment-btn');
     const reportCommentButtons = document.querySelectorAll('.report-comment-btn');
     const replyCommentButtons = document.querySelectorAll('.reply-comment-btn');
@@ -112,6 +123,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const postSubmitButton = document.getElementById('post-submit');
     const threadElement = document.querySelector('[data-thread-id]');
     const threadId = document.querySelector('[data-thread-id]').getAttribute('data-thread-id');
+    
+   
 
     postForm.addEventListener('submit', function(event) {
         // Disable the submit button to prevent multiple clicks
@@ -319,6 +332,33 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(error => console.error('Error in fetch request:', error));
+        });
+    });
+
+    deleteReplyButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const replyId = this.dataset.replyId;
+            const postId = this.dataset.postId;  // Make sure this attribute is set in the HTML
+
+            fetch('/delete_reply/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ 'post_id': postId, 'reply_id': replyId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                     // Remove the reply from the DOM
+                    document.getElementById(`reply-${replyId}`).remove();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error in deleting reply:', error));
         });
     });
 });

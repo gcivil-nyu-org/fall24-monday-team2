@@ -419,6 +419,7 @@ def create_post(thread_id, user_id, content):
         "UserID": user_id,
         "Content": content,
         "CreatedAt": created_at,
+        "Replies": []  # Initialize an empty list for replies
     }
     print(post)
 
@@ -453,6 +454,21 @@ def create_reply(thread_id, user_id, content):
 
     # Insert the reply into the DynamoDB table
     posts_table.put_item(Item=reply)
+
+
+def fetch_post_with_replies(post_id):
+    try:
+        response = posts_table.get_item(Key={"PostID": post_id})
+        post = response.get("Item")
+        
+        # If the post exists, retrieve Replies
+        if post and "Replies" in post:
+            return post
+        else:
+            return {"error": "Post not found or has no replies"}
+    except Exception as e:
+        print("Error fetching post with replies: {e}")
+        return {"error": str(e)}
 
 
 def get_replies(thread_id):
@@ -492,7 +508,7 @@ def delete_post(post_id, thread_id):
         )
         return True
     except Exception as e:
-        print(f"Error deleting post: {e}")
+        print("Error deleting post: {e}")
         return False
 
 

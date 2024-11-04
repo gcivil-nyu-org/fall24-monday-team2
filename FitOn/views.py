@@ -739,3 +739,48 @@ def add_reply(request):
         return JsonResponse({"status": "success", "content": content, "username": user_id})
     
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def delete_reply(request):
+    post_id = request.POST.get('post_id')
+    reply_id = request.POST.get('reply_id')
+
+    if not post_id or not reply_id:
+        return JsonResponse({"status": "error", "message": "Post ID and Reply ID are required."}, status=400)
+
+     # Retrieve the post and filter out the reply to delete
+    try:
+        response = posts_table.get_item(Key={"PostID": post_id})
+        post = response.get("Item")
+        if not post:
+            return JsonResponse({"status": "error", "message": "Post not found."}, status=404)
+
+        replies = post.get("Replies", [])
+        updated_replies = [reply for reply in replies if reply["ReplyID"] != reply_id]
+
+         # Update the post with the filtered replies list
+        posts_table.update_item(
+            Key={"PostID": post_id},
+            UpdateExpression="SET Replies = :updated_replies",
+            ExpressionAttributeValues={":updated_replies": updated_replies}
+        )
+        return JsonResponse({"status": "success"})
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": "Failed to delete reply: {str(e)}"}, status=500)
+
+
+def delete_thread(request):
+    if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
+        data = json.loads(request.body.decode("utf-8"))
+        thread_id = data.get("thread_id")
+
+        if not thread_id:
+            return JsonResponse({"status": "error", "message": "Thread ID is required."}, status=400)
+
+        try:
+            # Perform the deletion from DynamoDB
+            threads_table.delete_item(Key={"ThreadID": thread_id})
+            return JsonResponse({"status": "success", "message": "Thread deleted successfully."})
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+    return JsonResponse({"status": "error", "message": "Invalid request method."}, status=400)
