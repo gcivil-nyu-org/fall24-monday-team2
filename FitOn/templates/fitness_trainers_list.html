@@ -70,7 +70,7 @@
                         method: 'POST',
                         headers: {
                             'X-CSRFToken': '{{ csrf_token }}',
-                            'Content-Type': 'trainer/json',
+                            'Content-Type': 'application/json',
                             'x-requested-with': 'XMLHttpRequest'
                         },
                         body: JSON.stringify({ 'username': username })
