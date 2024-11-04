@@ -421,8 +421,6 @@ def create_post(thread_id, user_id, content):
         "CreatedAt": created_at,
         "Replies": []  # Initialize an empty list for replies
     }
-    print(post)
-
     posts_table.put_item(Item=post)
     return post
 
@@ -462,7 +460,7 @@ def create_reply(thread_id, user_id, content):
                 ":empty_list": []   # Default to an empty list if Replies doesn't exist
             }
         )
-        return {"status": "success", "reply": reply}
+        return {"status": "success", "reply_id": reply_id}
     except Exception as e:
         print(f"Error adding reply: {e}")
         return {"status": "error", "message": str(e)}
@@ -679,10 +677,10 @@ def report_comment(post_id, user_id):
 
 
 
-def delete_reply(post_id, reply_id):
+def delete_reply(post_id, thread_id, reply_id):
     try:
         # Fetch the post to get the current list of replies
-        response = posts_table.get_item(Key={"PostID": post_id})
+        response = posts_table.get_item(Key={"PostID": post_id, "ThreadID": thread_id})
         post = response.get("Item")
 
         if not post or "Replies" not in post:
@@ -693,7 +691,7 @@ def delete_reply(post_id, reply_id):
 
         # Update the post in DynamoDB with the new list of replies
         posts_table.update_item(
-            Key={"PostID": post_id},
+            Key={"PostID": post_id, "ThreadID": thread_id},
             UpdateExpression="SET Replies = :updated_replies",
             ExpressionAttributeValues={":updated_replies": updated_replies}
         )

@@ -28,6 +28,7 @@ from .dynamodb import (
     report_comment,
     posts_table,
     delete_reply,
+    create_reply,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -511,7 +512,7 @@ def fitness_trainer_applications_list_view(request):
 #     threads = fetch_all_threads()
 #     return render(request, "forums.html", {"threads": threads})
 
-'''
+
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
@@ -523,11 +524,13 @@ def thread_detail_view(request, thread_id):
     user_id = request.session.get("username")  # Assuming user is logged in
 
     if request.method == "POST":
+        print("thread_detail_view called with method:", request.method)  # Confirm if view is reached
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
             # Parse the AJAX request data
             data = json.loads(request.body.decode("utf-8"))
             action = data.get("action")
             post_id = data.get("post_id")
+            print("Action received:", action)  # Print the action value
 
             if action == "like_post":
                 # Handle like/unlike for the main thread post
@@ -575,14 +578,14 @@ def thread_detail_view(request, thread_id):
                 return JsonResponse({"status": "success", "message": "Comment reported successfully!"})
 
             elif action == "add_reply":
+                
                 # Handle adding a reply to a comment
                 reply_content = data.get("content", "").strip()
                 if not reply_content:
                     return JsonResponse({"status": "error", "message": "Reply content cannot be empty!"})
 
-                # Assuming we have a function `add_reply_to_post`
-                reply_id = add_reply_to_post(post_id=post_id, thread_id=thread_id, user_id=user_id, content=reply_content)
-                
+                # create reply
+                reply_id = create_reply(post_id=post_id, thread_id=thread_id, user_id=user_id, content=reply_content)
                 # Return success and the reply content with the username
                 return JsonResponse({"status": "success", "content": reply_content, "username": user_id, "reply_id": reply_id})
         
@@ -591,7 +594,7 @@ def thread_detail_view(request, thread_id):
             # Add a new post to the thread
             new_content = request.POST.get("content").strip()
             if new_content:
-                create_reply(thread_id=thread_id, user_id=user_id, content=new_content, post_id = post_id)
+                post_comment(thread_id=thread_id, user_id=user_id, content=new_content)
 
         # Redirect after posting to avoid resubmission on refresh
         return redirect("thread_detail", thread_id=thread_id)
@@ -602,73 +605,6 @@ def thread_detail_view(request, thread_id):
         "posts": posts,
         "liked": user_id in thread.get("LikedBy", []),
     })
-'''
-
-def thread_detail_view(request, thread_id):
-    # Fetch thread details from DynamoDB
-    thread = threads_table.get_item(Key={"ThreadID": thread_id}).get("Item")
-    posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
-    user_id = request.session.get("user_id")
-
-    # Fetch user details from DynamoDB
-    user = get_user(user_id)
-
-    is_banned = user.get("is_banned")
-    if is_banned:
-        return render(request, "forums.html", {"is_banned": is_banned})
-
-    if not thread:
-        return JsonResponse(
-            {"status": "error", "message": "Thread not found"}, status=404
-        )
-
-    user_id = request.session.get("username")  # Assuming user is logged in
-
-    if request.method == "POST":
-        if request.headers.get("x-requested-with") == "XMLHttpRequest":
-            # Get the list of users who have liked the thread
-            liked_by = thread.get("LikedBy", [])
-
-            if user_id in liked_by:
-                # If user has already liked the post, "unlike" (remove the like)
-                likes = max(
-                    0, thread.get("Likes", 0) - 1
-                )  # Ensure likes never go below 0
-                liked_by.remove(user_id)  # Remove the user from the LikedBy list
-            else:
-                # If user hasn't liked the post, add a like
-                likes = thread.get("Likes", 0) + 1
-                liked_by.append(user_id)  # Add the current user to the LikedBy list
-
-            # Update the thread with the new like count and LikedBy list
-            threads_table.update_item(
-                Key={"ThreadID": thread_id},
-                UpdateExpression="set Likes=:l, LikedBy=:lb",
-                ExpressionAttributeValues={":l": likes, ":lb": liked_by},
-            )
-            return JsonResponse(
-                {"status": "success", "likes": likes, "liked": user_id in liked_by}
-            )
-
-        else:
-            # Handle reply submission (non-AJAX form submission)
-            content = request.POST.get("content")
-
-            if content and user_id:
-                post_comment(thread_id=thread_id, user_id=user_id, content=content)
-                return redirect("thread_detail", thread_id=thread_id)
-
-    return render(
-        request,
-        "thread_detail.html",
-        {
-            "user": user,
-            "thread": thread,
-            "posts": posts,
-            "liked": user_id in thread.get("LikedBy", []),
-        },
-    )
-
 
 
 def new_thread_view(request):
@@ -812,16 +748,20 @@ def add_reply(request):
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 def delete_reply_view(request):
+    print("ReplitID:" )
     if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
         data = json.loads(request.body.decode("utf-8"))
         post_id = data.get("post_id")
         reply_id = data.get("reply_id")
+        thread_id = data.get("thread_id")  # Retrieve thread_id from the request data
+       
+
 
         if not post_id or not reply_id:
-            return JsonResponse({"status": "error", "message": "Post ID and Reply ID are required."}, status=400)
+            return JsonResponse({"status": "error", "message": "Post ID, Reply ID and Thread ID are required."}, status=400)
 
         # Call the delete_reply function in dynamodb.py
-        result = delete_reply(post_id, reply_id)
+        result = delete_reply(post_id, thread_id, reply_id)
 
         if result.get("status") == "success":
             return JsonResponse({"status": "success"})
