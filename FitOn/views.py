@@ -52,20 +52,14 @@ from django.contrib import messages
 from django.conf import settings
 
 # from django.core.files.storage import FileSystemStorage
-from django.core.mail import send_mail, get_connection
+from django.core.mail import send_mail, get_connection, EmailMessage
+from django.core.mail.backends.locmem import EmailBackend
 
 # from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.core.mail import (
-    send_mail,
-    get_connection,
-    EmailMultiAlternatives,
-    EmailMessage,
-)
-from django.core.mail.backends.locmem import EmailBackend
 from django.http import Http404
 
 # from django.utils.encoding import force_bytes
@@ -639,6 +633,22 @@ def approve_fitness_trainer(request):
 
         make_fitness_trainer(user["user_id"])
 
+        subject = "Fitness Trainer Application Approved"
+        message = render_to_string(
+            "fitness_trainer_email.html",
+            {"username": username, "approval": True, "reason": ""},
+        )
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = user.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "html"
+        email_message.send()
+
         return JsonResponse(
             {"status": "success", "message": "Fitness Trainer has been approved"}
         )
@@ -661,6 +671,22 @@ def reject_fitness_trainer(request):
             )
 
         remove_fitness_trainer(user["user_id"])
+
+        subject = "Fitness Trainer Application Rejected"
+        message = render_to_string(
+            "fitness_trainer_email.html",
+            {"username": username, "approval": False, "reason": "We are not accepting fitness trainers right now, please try again later"},
+        )
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = user.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "html"
+        email_message.send()
 
         return JsonResponse(
             {"status": "success", "message": "Fitness Trainer application rejected"}
