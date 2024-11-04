@@ -26,26 +26,27 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 
+
 class MockUser:
     def __init__(self, user_data):
         if isinstance(user_data, dict):
-            self.user_id = user_data.get('user_id', None)
-            self.email = user_data.get('email', '')
-            self.username = user_data.get('username', '')
-            self.password = user_data.get('password', '')
-            self.date_of_birth = user_data.get('date_of_birth', '')
-            self.is_active = user_data.get('is_active', True)
-            self.last_login = user_data.get('last_login', None)
-            self.pk = self.user_id 
+            self.user_id = user_data.get("user_id", None)
+            self.email = user_data.get("email", "")
+            self.username = user_data.get("username", "")
+            self.password = user_data.get("password", "")
+            self.date_of_birth = user_data.get("date_of_birth", "")
+            self.is_active = user_data.get("is_active", True)
+            self.last_login = user_data.get("last_login", None)
+            self.pk = self.user_id
         else:
             self.user_id = None
-            self.email = ''
-            self.username = ''
-            self.password = ''
-            self.date_of_birth = ''
+            self.email = ""
+            self.username = ""
+            self.password = ""
+            self.date_of_birth = ""
             self.is_active = True
             self.last_login = None
-            self.pk = None  
+            self.pk = None
 
     def get_email_field_name(self):
         return "email"
@@ -132,11 +133,10 @@ def delete_user_by_username(username):
         print(f"Error deleting user with username '{username}': {e}")
         return False
 
+
 def get_user_by_email(email):
     try:
-        response = users_table.scan(
-            FilterExpression=Attr("email").eq(email)
-        )
+        response = users_table.scan(FilterExpression=Attr("email").eq(email))
         users = response.get("Items", [])
         if users:
             return MockUser(users[0])
@@ -145,7 +145,7 @@ def get_user_by_email(email):
         print(f"Error querying DynamoDB for email '{email}': {e}")
         return None
 
-        
+
 def get_user_by_uid(uid):
     try:
         # Fetch from DynamoDB table

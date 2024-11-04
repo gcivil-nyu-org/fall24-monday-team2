@@ -24,6 +24,8 @@ from .dynamodb import (
     upload_profile_picture,
     fetch_filtered_threads,
     fetch_all_users,
+    threads_table,
+    delete_post,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -45,9 +47,12 @@ from django.contrib import messages
 from django.conf import settings
 
 # from django.core.files.storage import FileSystemStorage
-from django.core.mail import send_mail, get_connection
-
-from django.core.mail import EmailMultiAlternatives, EmailMessage
+from django.core.mail import (
+    send_mail,
+    get_connection,
+    EmailMultiAlternatives,
+    EmailMessage,
+)
 from django.core.mail.backends.locmem import EmailBackend
 from django.http import JsonResponse
 from django.template.loader import render_to_string
@@ -63,10 +68,10 @@ import ssl
 from google_auth_oauthlib.flow import Flow
 
 # from django.contrib.auth.decorators import login_required
-from .dynamodb import threads_table, delete_post
 import json
 
 # from django.http import HttpResponse
+
 
 # Scoped Google Fit API
 SCOPES = [
@@ -75,15 +80,17 @@ SCOPES = [
     # Add remaining scopes as needed
 ]
 
+
 def homepage(request):
     username = request.session.get("username", "Guest")
     return render(request, "home.html", {"username": username})
+
 
 def login(request):
     error_message = None
     form = LoginForm(request.POST or None)
 
-    if request.method == 'POST' and form.is_valid():
+    if request.method == "POST" and form.is_valid():
         username = form.cleaned_data["username"]
         password = form.cleaned_data["password"]
         user = get_user_by_username(username)
@@ -95,6 +102,7 @@ def login(request):
         error_message = "Invalid username or password."
 
     return render(request, "login.html", {"form": form, "error_message": error_message})
+
 
 def signup(request):
     form = SignUpForm(request.POST or None)
@@ -117,6 +125,7 @@ def signup(request):
 
     return render(request, "signup.html", {"form": form})
 
+
 def password_reset_request(request):
     countdown = None
     error_message = None
@@ -127,48 +136,81 @@ def password_reset_request(request):
 
         if not email:
             error_message = "The email you entered is not registered with an account."
-            return render(request, "password_reset_request.html", {"form": form, "error_message": error_message})
+            return render(
+                request,
+                "password_reset_request.html",
+                {"form": form, "error_message": error_message},
+            )
 
         user = get_user_by_email(email)
         if user:
             if not user.is_active:
-                error_message = "The email you entered is not registered with an account."
-                return render(request, "password_reset_request.html", {"form": form, "error_message": error_message})
+                error_message = (
+                    "The email you entered is not registered with an account."
+                )
+                return render(
+                    request,
+                    "password_reset_request.html",
+                    {"form": form, "error_message": error_message},
+                )
 
             last_request_time_str = get_last_reset_request_time(user.user_id)
             if last_request_time_str:
-                last_request_time = timezone.datetime.fromisoformat(last_request_time_str)
+                last_request_time = timezone.datetime.fromisoformat(
+                    last_request_time_str
+                )
                 time_since_last_request = timezone.now() - last_request_time
                 if time_since_last_request < timedelta(minutes=1):
                     countdown = 60 - time_since_last_request.seconds
-                    return render(request, "password_reset_request.html", {"form": form, "countdown": countdown})
+                    return render(
+                        request,
+                        "password_reset_request.html",
+                        {"form": form, "countdown": countdown},
+                    )
 
             update_reset_request_time(user.user_id)
             reset_token = default_token_generator.make_token(user)
             uid = urlsafe_base64_encode(force_bytes(user.user_id))
-            reset_url = request.build_absolute_uri(reverse("password_reset_confirm", args=[uid, reset_token]))
+            reset_url = request.build_absolute_uri(
+                reverse("password_reset_confirm", args=[uid, reset_token])
+            )
 
-            message = render_to_string("password_reset_email.html", {"username": user.username, "reset_url": reset_url})
+            message = render_to_string(
+                "password_reset_email.html",
+                {"username": user.username, "reset_url": reset_url},
+            )
             email_message = EmailMessage(
                 "Password Reset Requested",
                 message,
                 "fiton.notifications@gmail.com",
-                [email]
+                [email],
             )
             email_message.content_subtype = "html"
             email_message.send()
 
             return redirect("password_reset_done")
-        
-        error_message = "The email you entered is not registered with an account."
-        return render(request, "password_reset_request.html", {"form": form, "error_message": error_message})
 
-    return render(request, "password_reset_request.html", {"form": form, "error_message": error_message, "countdown": countdown})
+        error_message = "The email you entered is not registered with an account."
+        return render(
+            request,
+            "password_reset_request.html",
+            {"form": form, "error_message": error_message},
+        )
+
+    return render(
+        request,
+        "password_reset_request.html",
+        {"form": form, "error_message": error_message, "countdown": countdown},
+    )
 
 
 def password_reset_confirm(request, uidb64, token):
     if not uidb64 or not token:
-        return render(request, "password_reset_invalid.html", {"error_message": "The password reset link is invalid or has expired."})
+        return render(
+            request,
+            "password_reset_invalid.html",
+            {"error_message": "The password reset link is invalid or has expired."},
+        )
 
     try:
         user_id = force_str(urlsafe_base64_decode(uidb64))
@@ -182,16 +224,26 @@ def password_reset_confirm(request, uidb64, token):
 
                 if new_password == confirm_password:
                     update_user_password(user.user_id, new_password)
-                    messages.success(request, "Your password has been successfully reset.")
+                    messages.success(
+                        request, "Your password has been successfully reset."
+                    )
                     return redirect("password_reset_complete")
 
                 form.add_error("confirm_password", "Passwords do not match.")
             return render(request, "password_reset_confirm.html", {"form": form})
-        
-        return render(request, "password_reset_invalid.html", {"error_message": "The password reset link is invalid or has expired."})
+
+        return render(
+            request,
+            "password_reset_invalid.html",
+            {"error_message": "The password reset link is invalid or has expired."},
+        )
 
     except Exception:
-        return render(request, "password_reset_invalid.html", {"error_message": "The password reset link is invalid or has expired."})
+        return render(
+            request,
+            "password_reset_invalid.html",
+            {"error_message": "The password reset link is invalid or has expired."},
+        )
 
 
 def password_reset_complete(request):
@@ -254,17 +306,9 @@ def profile_view(request):
                 "gender": {"Value": form.cleaned_data["gender"]},
                 "bio": {"Value": form.cleaned_data["bio"]},
                 "address": {"Value": form.cleaned_data["address"]},
-                "name": {"Value": form.cleaned_data["name"]},
-                "date_of_birth": {"Value": form.cleaned_data["date_of_birth"]},
-                "gender": {"Value": form.cleaned_data["gender"]},
-                "bio": {"Value": form.cleaned_data["bio"]},
-                "address": {"Value": form.cleaned_data["address"]},
             }
 
             # Only add phone number and country code if provided
-            country_code = form.cleaned_data["country_code"]
-            phone_number = form.cleaned_data["phone_number"]
-
             country_code = form.cleaned_data["country_code"]
             phone_number = form.cleaned_data["phone_number"]
 
@@ -311,6 +355,7 @@ def deactivate_account(request):
     # This simply shows the confirmation page
     return render(request, "deactivate.html")
 
+
 def confirm_deactivation(request):
     if request.method == "POST":
         username = request.session.get("username")
@@ -321,13 +366,7 @@ def confirm_deactivation(request):
                 # Log the user out and redirect to the homepage
                 logout(request)
                 return redirect("homepage")  # Redirect to homepage after deactivation
-                return redirect("homepage")  # Redirect to homepage after deactivation
             else:
-                return render(
-                    request,
-                    "deactivate.html",
-                    {"error_message": "Error deleting the account."},
-                )
                 return render(
                     request,
                     "deactivate.html",
@@ -336,11 +375,8 @@ def confirm_deactivation(request):
         else:
             # Redirect to login if there's no username in session
             return redirect("login")
-            return redirect("login")
     else:
         # Redirect to the deactivate page if the request method is not POST
-        return redirect("deactivate_account")
-
         return redirect("deactivate_account")
 
 
@@ -483,7 +519,8 @@ def fitness_trainer_applications_list_view(request):
 
 def forum_view(request):
     threads = fetch_all_threads()
-    return render(request, 'forums.html', {'threads': threads})
+    return render(request, "forums.html", {"threads": threads})
+
 
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
@@ -601,6 +638,5 @@ def delete_post_view(request):
                 )
 
         except Exception as e:
-            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-    return JsonResponse({'status': 'error', 'message': 'Invalid request'}, status=400)
-
+            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)

@@ -194,7 +194,7 @@ os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 # SECURE_SSL_REDIRECT = True
 # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-TESTING = 'test' in sys.argv
+TESTING = "test" in sys.argv
 
 if TESTING:
     # Use in-memory email backend for tests
