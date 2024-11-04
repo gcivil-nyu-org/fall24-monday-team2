@@ -193,12 +193,14 @@ footer {
     font-size: 16px; /* Font size */
     margin: 0 10px; /* Add some space between buttons */
     transition: background-color 0.3s ease; /* Smooth transition for background color */
+    text-decoration: none; /* Remove underline */
 }
 
 /* Submit Button styles */
 .submit-button {
     background-color: #6A82FB; /* Primary blue color */
     color: white; /* White text */
+    text-decoration: none; /* Remove underline */
 }
 
 /* Hover effect for the Submit button */
@@ -265,21 +267,6 @@ footer {
     text-align: center;
     font-weight: bold;
     color: red; /* Indicate no applications found */
-/* Additional styles for buttons */
-.submit-button {
-    background-color: #6A82FB; /* Button background color */
-    color: white; /* Text color */
-    padding: 10px 20px; /* Padding for the button */
-    border: none; /* Remove default border */
-    border-radius: 6px; /* Rounded corners for the button */
-    cursor: pointer; /* Pointer cursor on hover */
-    font-size: 16px; /* Font size */
-    transition: background-color 0.3s ease; /* Transition for background color */
-}
-
-/* Hover effect for button */
-.submit-button:hover {
-    background-color: #5766db; /* Darker shade on hover */
 }
 
 .error {
@@ -474,4 +461,14 @@ footer {
     background-color: blue;
     color: white;
     border: none;
+}
+
+/* Green background for successful login */
+.submit-button.success {
+    background-color: #28a745; /* Green color */
+}
+
+/* Green background for successful login */
+.deactivate-button.success {
+    background-color: #5c0303; /* Green color */
 }
