@@ -39,6 +39,7 @@
                 {% if request.session.username %}
                     <button onclick="location.href=`{% url 'homepage' %}`">Forums</button>
                     <button onclick="location.href=`{% url 'homepage' %}`">Workouts</button>
+                    <button onclick="location.href=`{% url 'homepage' %}`">Metrics</button>
                     <button onclick="location.href=`{% url 'profile' %}`">Profile</button>
                     <button onclick="location.href=`{% url 'logout' %}`">Logout</button>
                 {% else %}

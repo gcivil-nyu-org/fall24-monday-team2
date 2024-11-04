@@ -22,6 +22,9 @@ from django.contrib import admin
 
 # from django.contrib.auth import views
 from django.urls import path
+from .views import signup, homepage, login, profile_view, upload_profile_picture
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),
@@ -31,6 +34,7 @@ urlpatterns = [
     path("signup/", views.signup, name="signup"),
     path("home/", views.homepage, name="homepage"),
     path("login/", views.login, name="login"),
+    path("accounts/login/", views.login, name="login"),
     path("deactivate/", views.deactivate_account, name="deactivate_account"),
     path(
         "deactivate/confirm/", views.confirm_deactivation, name="confirm_deactivation"

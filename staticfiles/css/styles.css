@@ -475,28 +475,3 @@ footer {
     color: white;
     border: none;
 }
-<<<<<<< HEAD
-
-/* Green background for successful login */
-.submit-button.success {
-    background-color: #28a745; /* Green color */
-}
-
-/* .google-sign-in-button {
-    display: inline-block;
-    background-color: #6A82FB;
-    color: white;
-    text-align: center;
-    padding: 10px 20px;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 16px;
-    transition: background-color 0.3s ease;
-}
-
-.google-sign-in-button:hover {
-    background-color: #5766db;
-} */
-=======
-}
->>>>>>> 5e20de8 (update password testing)

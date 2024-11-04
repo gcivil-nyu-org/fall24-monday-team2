@@ -32,9 +32,4 @@ FitOn/credentials.json
 # Elastic Beanstalk Files
 .elasticbeanstalk/*
 !.elasticbeanstalk/*.cfg.yml
-<<<<<<< HEAD
 !.elasticbeanstalk/*.global.yml
-=======
-!.elasticbeanstalk/*.global.yml
-
-README.md

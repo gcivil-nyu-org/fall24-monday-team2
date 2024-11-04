@@ -79,6 +79,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "storages",  # Add this line for S3 storage
+    "channels",
 ]
 
 MIDDLEWARE = [
@@ -111,6 +112,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "FitOn.wsgi.application"
 
+ASGI_APPLICATION = "FitOn.asgi.application"
+
+# Redis channel layer configuration
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -122,9 +134,10 @@ DATABASES = {
     }
 }
 
-# SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
-# DYNAMODB_SESSIONS_TABLE_NAME = 'django-user-sessions'
-# SESSION_SAVE_EVERY_REQUEST = True
+SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
+SESSION_COOKIE_AGE = 1209600
+DYNAMODB_SESSIONS_TABLE_NAME = 'DjangoUserSessions'
+SESSION_SAVE_EVERY_REQUEST = True
 
 
 # Password validation
@@ -185,7 +198,6 @@ DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
 
 PASSWORD_RESET_TIMEOUT = timedelta(minutes=5).total_seconds()
 
