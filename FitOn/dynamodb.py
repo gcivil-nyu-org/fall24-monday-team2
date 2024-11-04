@@ -22,6 +22,7 @@ fitness_table = dynamodb.Table("UserFitnessData")
 password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
+fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
 
 class MockUser:
@@ -352,6 +353,38 @@ def get_fitness_trainer_applications():
         return []
     except Exception as e:
         print(f"Unexpected error retrieving applications: {e}")
+        return []
+
+
+def make_fitness_trainer(user_id):
+    try:
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_fitness_trainer = :ft",
+            ExpressionAttributeValues={":ft": True},
+        )
+
+        response = applications_table.get_item(Key={"user_id": user_id})
+        application_item = response["Item"]
+
+        fitness_trainers_table.put_item(Item=application_item)
+        applications_table.delete_item(Key={"user_id": user_id})
+    except Exception as e:
+        print(f"Unexpected error making updates: {e}")
+        return []
+
+
+def revoke_fitness_trainer(user_id):
+    try:
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_fitness_trainer = :ft, is_revoked = :r",
+            ExpressionAttributeValues={":ft": False, ":r": True},
+        )
+
+        applications_table.delete_item(Key={"user_id": user_id})
+    except Exception as e:
+        print(f"Unexpected error making updates: {e}")
         return []
 
 

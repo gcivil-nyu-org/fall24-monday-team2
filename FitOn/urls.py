@@ -79,4 +79,14 @@ urlpatterns = [
     path("punishments/", views.punishments_view, name="punishments"),
     path("unban_user/", views.unban_user, name="unban_user"),
     path("unmute_user/", views.unmute_user, name="unmute_user"),
+    path(
+        "approve_fitness_trainer/",
+        views.approve_fitness_trainer,
+        name="approve_fitness_trainer",
+    ),
+    path(
+        "reject_fitness_trainer/",
+        views.reject_fitness_trainer,
+        name="reject_fitness_trainer",
+    ),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

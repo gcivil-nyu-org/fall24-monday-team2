@@ -22,6 +22,8 @@ from .dynamodb import (
     fetch_all_users,
     get_fitness_data,
     dynamodb,
+    make_fitness_trainer,
+    revoke_fitness_trainer,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -568,6 +570,52 @@ def fitness_trainer_applications_list_view(request):
         "fitness_trainer_applications_list.html",
         {"applications": applications},
     )
+
+
+def approve_fitness_trainer(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get("username")
+        user = get_user_by_username(username)
+
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        make_fitness_trainer(user["user_id"])
+
+        return JsonResponse(
+            {"status": "success", "message": "Fitness Trainer has been approved"}
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def reject_fitness_trainer(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get("username")
+        user = get_user_by_username(username)
+
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        revoke_fitness_trainer(user["user_id"])
+
+        return JsonResponse(
+            {"status": "success", "message": "Fitness Trainer application rejected"}
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 
 # -------------------------------

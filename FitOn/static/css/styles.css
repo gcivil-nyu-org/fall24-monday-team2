@@ -276,6 +276,22 @@ footer {
     color: #999999; /* Indicates no applications found */
 }
 
+.notification {
+    padding: 10px;
+    margin-bottom: 20px;
+    background-color: #4caf50; /* Green background for success */
+    color: white;
+    border-radius: 5px;
+    display: none; /* Hidden by default */
+    transition: opacity 0.5s ease; /* Smooth transition */
+    opacity: 0; /* Start hidden */
+}
+
+.notification.show {
+    display: block; /* Show the notification */
+    opacity: 1; /* Fade in effect */
+}
+
 .error {
     color: red;
     font-size: 12px;

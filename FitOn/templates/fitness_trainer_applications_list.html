@@ -4,16 +4,17 @@
     <!-- Table for Applications -->
     <div class="table-container">
         <h2 class="page-title">Fitness Trainer Applications</h2>
+        <div id="notification" class="notification" style="display:none;"></div>
         <table class="applications-table">
             <thead>
                 <tr>
-                    <th>User</th>
+                    <th>Username</th>
                     <th>Past Experience as Trainer</th>
                     <th>Past Experience as Dietician</th>
-                    <th>Reference Name</th>
-                    <th>Reference Contact</th>
+                    <th>Reference</th>
                     <th>Resume</th>
                     <th>Certifications</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -22,8 +23,7 @@
                         <td>{{ application.username }}</td>
                         <td>{{ application.past_experience_trainer }}</td>
                         <td>{{ application.past_experience_dietician }}</td>
-                        <td>{{ application.reference_name }}</td>
-                        <td>{{ application.reference_contact }}</td>
+                        <td>{{ application.reference_name }} <br/> <a href="">{{ application.reference_contact }}</a></td>
                         <td><a href="{{ application.resume_url }}" class="file-link" target="_blank">View Resume</a></td>
                         <td>
                             {% if application.certifications_url %}
@@ -31,6 +31,10 @@
                             {% else %}
                                 N/A
                             {% endif %}
+                        </td>
+                        <td>
+                            <button class="submit-button" data-username="{{ application.username }}">Approve</button>
+                            <button class="deactivate-button" data-username="{{ application.username }}">Reject</button>
                         </td>
                     </tr>
                 {% empty %}
@@ -41,4 +45,76 @@
             </tbody>
         </table>
     </div>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const approveButtons = document.querySelectorAll('.submit-button');
+            const rejectButtons = document.querySelectorAll('.deactivate-button');
+            const notification = document.getElementById('notification');
+
+            const showNotification = (message) => {
+                notification.textContent = message;
+                notification.classList.add('show');
+                notification.style.display = 'block';
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                    notification.style.display = 'none';
+                }, 3000);
+            };
+
+            approveButtons.forEach(button => {
+                button.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    const username = this.dataset.username;
+                    const row = this.closest('tr');
+
+                    fetch('/approve_fitness_trainer/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token }}',
+                            'Content-Type': 'application/json',
+                            'x-requested-with': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ 'username': username })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            row.remove();
+                            showNotification('Success: The application has been APPROVED and removed from the list');
+                        } else {
+                            alert('Error: ' + data.message);
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+                });
+            });
+
+            rejectButtons.forEach(button => {
+                button.addEventListener('click', function(event) {
+                    event.preventDefault();
+                    const username = this.dataset.username;
+
+                    fetch('/reject_fitness_trainer/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token }}',
+                            'Content-Type': 'application/json',
+                            'x-requested-with': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ 'username': username })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            row.remove();
+                            showNotification('Success: The application has been REJECTED and removed from the list');
+                        } else {
+                            alert('Error: ' + data.message);
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+                });
+            });
+        });
+    </script>
 {% endblock %}
