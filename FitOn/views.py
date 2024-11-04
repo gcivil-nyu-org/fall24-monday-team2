@@ -689,7 +689,11 @@ def reject_fitness_trainer(request):
         subject = "Fitness Trainer Application Rejected"
         message = render_to_string(
             "fitness_trainer_email.html",
-            {"username": username, "approval": False, "reason": "We are not accepting fitness trainers right now, please try again later"},
+            {
+                "username": username,
+                "approval": False,
+                "reason": "We are not accepting fitness trainers right now, please try again later",
+            },
         )
         senderEmail = "fiton.notifications@gmail.com"
         userEmail = user.get("email")
