@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
 from django.urls import reverse
 import boto3
+import json
 from .views import SCOPES
 from .dynamodb import (
     create_user,
