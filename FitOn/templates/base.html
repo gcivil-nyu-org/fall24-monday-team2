@@ -20,6 +20,7 @@
             <ul class="navbar-links">
                 {% if request.session.username %}
                     {% if is_admin %}
+                        <li><a href="{% url 'fitness_trainers_list' %}">Fitness Trainers</a></li>
                         <li><a href="{% url 'fitness_trainer_applications_list' %}">Review Applications</a></li>
                         <li><a href="{% url 'punishments' %}">Manage Punishments</a></li>
                     {% endif %}
@@ -47,6 +48,7 @@
                     <button onclick="location.href=`{% url 'profile' %}`">Profile</button>
                     <button onclick="location.href=`{% url 'logout' %}`">Logout</button>
                     {% if is_admin %}
+                        <button onclick="location.href=`{% url 'fitness_trainers_list' %}`">Fitness Trainers</button>
                         <button onclick="location.href=`{% url 'fitness_trainer_applications_list' %}`">Review Applications</button>
                         <button onclick="location.href=`{% url 'punishments' %}`">Manage Punishments</button>
                     {% endif %}

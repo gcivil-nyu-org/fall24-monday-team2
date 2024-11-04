@@ -22,8 +22,9 @@ from .dynamodb import (
     fetch_all_users,
     get_fitness_data,
     dynamodb,
+    get_fitness_trainers,
     make_fitness_trainer,
-    revoke_fitness_trainer,
+    remove_fitness_trainer,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -572,6 +573,24 @@ def fitness_trainer_applications_list_view(request):
     )
 
 
+def fitness_trainers_list_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of trainers from DynamoDB
+    trainers = get_fitness_trainers()
+
+    # Render the list of trainers
+    return render(
+        request,
+        "fitness_trainers_list.html",
+        {"trainers": trainers},
+    )
+
+
 def approve_fitness_trainer(request):
     if (
         request.method == "POST"
@@ -609,7 +628,7 @@ def reject_fitness_trainer(request):
                 {"status": "error", "message": "User not found"}, status=404
             )
 
-        revoke_fitness_trainer(user["user_id"])
+        remove_fitness_trainer(user["user_id"])
 
         return JsonResponse(
             {"status": "success", "message": "Fitness Trainer application rejected"}

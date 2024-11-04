@@ -1,9 +1,8 @@
 {% extends 'base.html' %}
 
 {% block content %}
-    <!-- Table for Applications -->
     <div class="table-container">
-        <h2 class="page-title">Fitness Trainer Applications</h2>
+        <h2 class="page-title">Fitness Trainers</h2>
         <div id="notification" class="notification" style="display:none;"></div>
         <table class="trainers-table">
             <thead>
@@ -18,32 +17,29 @@
                 </tr>
             </thead>
             <tbody>
-                {% for application in applications %}
+                {% for trainer in trainers %}
                     <tr>
-                        <td>{{ application.username }}</td>
-                        <td>{{ application.past_experience_trainer }}</td>
-                        <td>{{ application.past_experience_dietician }}</td>
-                        <td>{{ application.reference_name }} <br/> <a href="">{{ application.reference_contact }}</a></td>
-                        <td><a href="{{ application.resume_url }}" class="file-link" target="_blank">View Resume</a></td>
+                        <td>{{ trainer.username }}</td>
+                        <td>{{ trainer.past_experience_trainer }}</td>
+                        <td>{{ trainer.past_experience_dietician }}</td>
+                        <td>{{ trainer.reference_name }} <br/> <a href="">{{ trainer.reference_contact }}</a></td>
+                        <td><a href="{{ trainer.resume_url }}" class="file-link" target="_blank">View Resume</a></td>
                         <td>
-                            {% if application.certifications_url %}
-                                <a href="{{ application.certifications_url }}" class="file-link" target="_blank">View Certifications</a>
+                            {% if trainer.certifications_url %}
+                                <a href="{{ trainer.certifications_url }}" class="file-link" target="_blank">View Certifications</a>
                             {% else %}
                                 N/A
                             {% endif %}
                         </td>
                         <td>
                             <div class="button-container" style="margin-top: 0px;">
-                                <button class="submit-button" data-username="{{ application.username }}">Approve</button>
-                            </div>
-                            <div class="button-container" style="margin-top: 5px;">
-                                <button class="deactivate-button" data-username="{{ application.username }}">Reject</button>
+                                <button class="deactivate-button" data-username="{{ trainer.username }}">Remove</button>
                             </div>
                         </td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="7" class="no-trainers">No applications found</td>
+                        <td colspan="7" class="no-trainers">No Fitness Trainers found</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -51,7 +47,6 @@
     </div>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            const approveButtons = document.querySelectorAll('.submit-button');
             const rejectButtons = document.querySelectorAll('.deactivate-button');
             const notification = document.getElementById('notification');
 
@@ -65,34 +60,6 @@
                 }, 3000);
             };
 
-            approveButtons.forEach(button => {
-                button.addEventListener('click', function(event) {
-                    event.preventDefault();
-                    const username = this.dataset.username;
-                    const row = this.closest('tr');
-
-                    fetch('/approve_fitness_trainer/', {
-                        method: 'POST',
-                        headers: {
-                            'X-CSRFToken': '{{ csrf_token }}',
-                            'Content-Type': 'application/json',
-                            'x-requested-with': 'XMLHttpRequest'
-                        },
-                        body: JSON.stringify({ 'username': username })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === 'success') {
-                            row.remove();
-                            showNotification('Success: The application has been APPROVED and removed from the list');
-                        } else {
-                            alert('Error: ' + data.message);
-                        }
-                    })
-                    .catch(error => console.error('Error:', error));
-                });
-            });
-
             rejectButtons.forEach(button => {
                 button.addEventListener('click', function(event) {
                     event.preventDefault();
@@ -103,7 +70,7 @@
                         method: 'POST',
                         headers: {
                             'X-CSRFToken': '{{ csrf_token }}',
-                            'Content-Type': 'application/json',
+                            'Content-Type': 'trainer/json',
                             'x-requested-with': 'XMLHttpRequest'
                         },
                         body: JSON.stringify({ 'username': username })
@@ -112,7 +79,7 @@
                     .then(data => {
                         if (data.status === 'success') {
                             row.remove();
-                            showNotification('Success: The application has been REJECTED and removed from the list');
+                            showNotification('Success: Removed as Fitness Trainer');
                         } else {
                             alert('Error: ' + data.message);
                         }

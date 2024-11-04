@@ -66,6 +66,11 @@ urlpatterns = [
         views.fitness_trainer_applications_list_view,
         name="fitness_trainer_applications_list",
     ),
+    path(
+        "fitness_trainers_list/",
+        views.fitness_trainers_list_view,
+        name="fitness_trainers_list",
+    ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),

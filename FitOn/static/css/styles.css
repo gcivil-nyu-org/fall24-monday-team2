@@ -241,10 +241,10 @@ footer {
     width: 80%;
     margin: 20px auto;
     font-family: Arial, sans-serif;
-    overflow-x: auto; /* Enables horizontal scrolling */
+    overflow-x: auto;
 }
 
-.applications-table {
+.trainers-table {
     width: 100%;
     border-collapse: collapse;
     margin: 20px 0;
@@ -253,43 +253,44 @@ footer {
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
-.applications-table th,
-.applications-table td {
+.trainers-table th,
+.trainers-table td {
     padding: 10px;
-    border: 1px solid #ddd; /* Add border to cells */
-    text-align: left; /* Align text to the left */
+    border: 1px solid #ddd;
+    text-align: left;
 }
 
-.applications-table th {
-    background-color: #333333; /* Light gray background for header */
+.trainers-table th {
+    background-color: #333333;
     color: white;
+    text-align: center;
 }
 
-.applications-table tr:nth-child(even) {
-    background-color: #f9f9f9; /* Zebra striping for even rows */
+.trainers-table tr:nth-child(even) {
+    background-color: #f9f9f9;
 }
 
-.no-applications {
+.no-trainers {
     text-align-last: center;
     text-align: center;
     font-weight: bold;
-    color: #999999; /* Indicates no applications found */
+    color: #999999;
 }
 
 .notification {
     padding: 10px;
     margin-bottom: 20px;
-    background-color: #4caf50; /* Green background for success */
+    background-color: #4caf50;
     color: white;
     border-radius: 5px;
-    display: none; /* Hidden by default */
-    transition: opacity 0.5s ease; /* Smooth transition */
-    opacity: 0; /* Start hidden */
+    display: none;
+    transition: opacity 0.5s ease;
+    opacity: 0;
 }
 
 .notification.show {
-    display: block; /* Show the notification */
-    opacity: 1; /* Fade in effect */
+    display: block;
+    opacity: 1;
 }
 
 .error {
@@ -324,9 +325,9 @@ footer {
 }
 
 .navbar {
-    background-color: #007bff; /* Dark blue */
-    padding: 15px 30px; /* Increased padding */
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); /* Enhanced shadow */
+    background-color: #007bff;
+    padding: 15px 30px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
 
 .navbar-container {
