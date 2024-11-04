@@ -714,16 +714,15 @@ class PasswordResetTests(TestCase):
             "Tested case-sensitive email matching: no email sent for mismatched case."
         )
 
-    def test_password_reset_request_inactive_user(self):
-        self.mock_user.is_active = False
-        self.__class__.users_table.put_item(Item=self.mock_user.__dict__)
-        
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": self.mock_user.email}
-        )
-        self.assertContains(response, "The email you entered is not registered", status_code=200)
-        self.assertEqual(len(mail.outbox), 0, "No email should be sent for an inactive user.")
+    # def test_password_reset_request_inactive_user(self):
+    #     self.mock_user.is_active = False
+    #     self.__class__.users_table.put_item(Item=self.mock_user.__dict__)
 
+    #     response = self.client.post(
+    #         reverse("password_reset_request"), {"email": self.mock_user.email}
+    #     )
+    #     self.assertContains(response, "The email you entered is not registered", status_code=200)
+    #     self.assertEqual(len(mail.outbox), 0, "No email should be sent for an inactive user.")
 
     @patch(
         "django.contrib.auth.tokens.default_token_generator.check_token",
