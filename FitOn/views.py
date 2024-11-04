@@ -1,18 +1,18 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from .dynamodb import (
     add_fitness_trainer_application,
-    create_post,
+    # create_post,
     create_reply,
     create_thread,
     create_user,
     delete_user_by_username,
     fetch_all_threads,
     fetch_posts_for_thread,
-    fetch_thread,
+    # fetch_thread,
     get_fitness_trainer_applications,
     get_last_reset_request_time,
-    get_replies,
-    get_thread_details,
+    # get_replies,
+    # get_thread_details,
     get_user,
     get_user_by_email,
     get_user_by_uid,
@@ -22,6 +22,8 @@ from .dynamodb import (
     update_user,
     update_user_password,
     upload_profile_picture,
+    fetch_filtered_threads,
+    fetch_all_users,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -31,180 +33,168 @@ from .forms import (
     SetNewPasswordForm,
     SignUpForm,
 )
-from .models import PasswordResetRequest
+
+from .models import Conversation, Message
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.decorators import login_required
+
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth import logout
 from django.contrib import messages
 from django.conf import settings
-from django.core.mail import send_mail
-from django.core import mail
+
+# from django.core.files.storage import FileSystemStorage
+from django.core.mail import send_mail, get_connection
+
+from django.core.mail import EmailMultiAlternatives, EmailMessage
+from django.core.mail.backends.locmem import EmailBackend
+from django.http import JsonResponse
+from django.http import Http404
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.encoding import force_str, force_bytes
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.utils.encoding import force_str, force_bytes
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.db.models import Q
+
+from django.utils.encoding import force_bytes, force_str
+from django.utils.html import strip_tags
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 import os
 import uuid
+import ssl
+from google_auth_oauthlib.flow import Flow
 
+# from django.contrib.auth.decorators import login_required
+from .dynamodb import threads_table, delete_post
+import json
+
+# from django.http import HttpResponse
+
+# Scoped Google Fit API
+SCOPES = [
+    "https://www.googleapis.com/auth/fitness.activity.read",
+    "https://www.googleapis.com/auth/fitness.body.read",
+    # Add remaining scopes as needed
+]
 
 def homepage(request):
     username = request.session.get("username", "Guest")
     return render(request, "home.html", {"username": username})
 
-
 def login(request):
     error_message = None
-    if request.method == "POST":
-        form = LoginForm(request.POST)
-        if form.is_valid():
-            username = form.cleaned_data["username"]
-            password = form.cleaned_data["password"]
-            user = get_user_by_username(username)
-            if user:
-                stored_password = user["password"]
-                user_id = user["user_id"]
-                if check_password(password, stored_password):
-                    request.session["username"] = username
-                    request.session["user_id"] = user_id
-                    return redirect("homepage")
-                else:
-                    error_message = "Invalid password. Please try again."
-            else:
-                error_message = "User does not exist."
-    else:
-        form = LoginForm()
+    form = LoginForm(request.POST or None)
+
+    if request.method == 'POST' and form.is_valid():
+        username = form.cleaned_data["username"]
+        password = form.cleaned_data["password"]
+        user = get_user_by_username(username)
+
+        if user and check_password(password, user["password"]):
+            request.session["username"] = username
+            request.session["user_id"] = user["user_id"]
+            return redirect("homepage")
+        error_message = "Invalid username or password."
+
     return render(request, "login.html", {"form": form, "error_message": error_message})
 
-
 def signup(request):
-    if request.method == "POST":
-        form = SignUpForm(request.POST)
-        if form.is_valid():
-            username = form.cleaned_data["username"]
-            email = form.cleaned_data["email"]
-            name = form.cleaned_data["name"]
-            date_of_birth = form.cleaned_data["date_of_birth"]
-            gender = form.cleaned_data["gender"]
-            password = form.cleaned_data["password"]
-            hashed_password = make_password(password)
-            user_id = str(uuid.uuid4())
-            if create_user(
-                user_id, username, email, name, date_of_birth, gender, hashed_password
-            ):
-                request.session["username"] = username
-                request.session["user_id"] = user_id
-                return redirect("homepage")
-            else:
-                form.add_error(None, "Error creating user in DynamoDB.")
-    else:
-        form = SignUpForm()
+    form = SignUpForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        username = form.cleaned_data["username"]
+        email = form.cleaned_data["email"]
+        name = form.cleaned_data["name"]
+        date_of_birth = form.cleaned_data["date_of_birth"]
+        gender = form.cleaned_data["gender"]
+        password = make_password(form.cleaned_data["password"])
+        user_id = str(uuid.uuid4())
+
+        if create_user(user_id, username, email, name, date_of_birth, gender, password):
+            request.session["username"] = username
+            request.session["user_id"] = user_id
+            return redirect("homepage")
+
+        form.add_error(None, "Error creating user in DynamoDB.")
+
     return render(request, "signup.html", {"form": form})
 
-
 def password_reset_request(request):
+    countdown = None
     error_message = None
+    form = PasswordResetForm(request.POST or None)
 
-    if request.method == "POST":
-        form = PasswordResetForm(request.POST)
-        if form.is_valid():
-            email = form.cleaned_data["email"]
-            user = get_user_by_email(email)
+    if request.method == "POST" and form.is_valid():
+        email = form.cleaned_data["email"]
 
-            if user:
-                reset_token = default_token_generator.make_token(user)
-                reset_url = request.build_absolute_uri(
-                    reverse(
-                        "password_reset_confirm",
-                        args=[urlsafe_base64_encode(force_bytes(user.pk)), reset_token],
-                    )
-                )
+        if not email:
+            error_message = "The email you entered is not registered with an account."
+            return render(request, "password_reset_request.html", {"form": form, "error_message": error_message})
 
-                subject = "Password Reset Requested"
-                email_context = {"username": user.username, "reset_url": reset_url}
-                html_message = render_to_string(
-                    "password_reset_email.html", email_context
-                )
+        user = get_user_by_email(email)
+        if user:
+            if not user.is_active:
+                error_message = "The email you entered is not registered with an account."
+                return render(request, "password_reset_request.html", {"form": form, "error_message": error_message})
 
-                try:
-                    send_mail(
-                        subject,
-                        "",
-                        "fiton.notifications@gmail.com",
-                        [email],
-                        html_message=html_message,
-                    )
-                except Exception as e:
-                    error_message = f"There was an issue sending the email: {e}"
-                    return render(
-                        request,
-                        "password_reset_request.html",
-                        {"form": form, "error_message": error_message},
-                    )
+            last_request_time_str = get_last_reset_request_time(user.user_id)
+            if last_request_time_str:
+                last_request_time = timezone.datetime.fromisoformat(last_request_time_str)
+                time_since_last_request = timezone.now() - last_request_time
+                if time_since_last_request < timedelta(minutes=1):
+                    countdown = 60 - time_since_last_request.seconds
+                    return render(request, "password_reset_request.html", {"form": form, "countdown": countdown})
 
-                update_reset_request_time(user.pk)
-                return redirect("password_reset_done")
-            else:
-                error_message = (
-                    "The email you entered is not registered with an account."
-                )
+            update_reset_request_time(user.user_id)
+            reset_token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.user_id))
+            reset_url = request.build_absolute_uri(reverse("password_reset_confirm", args=[uid, reset_token]))
 
-    else:
-        form = PasswordResetForm()
-
-    return render(
-        request,
-        "password_reset_request.html",
-        {"form": form, "error_message": error_message},
-    )
-
-
-def password_reset_confirm(request, user_id, token):
-    try:
-        user_id = force_str(urlsafe_base64_decode(user_id))  # Decode the user_id
-        user = get_user_by_uid(user_id)  # Fetch user by UID
-    except Exception as e:
-        user = None
-
-    if user:
-        is_token_valid = default_token_generator.check_token(user, token)
-
-        if is_token_valid:
-            # Token is valid, proceed with password reset
-            if request.method == "POST":
-                form = SetNewPasswordForm(request.POST)
-                if form.is_valid():
-                    new_password = form.cleaned_data["new_password"]
-                    confirm_password = form.cleaned_data["confirm_password"]
-
-                    if new_password == confirm_password:
-                        update_user_password(user.pk, new_password)
-                        messages.success(
-                            request, "Your password has been successfully reset."
-                        )
-                        return redirect("password_reset_complete")
-                    else:
-                        form.add_error("confirm_password", "Passwords do not match.")
-            else:
-                form = SetNewPasswordForm()
-
-            return render(request, "password_reset_confirm.html", {"form": form})
-
-        else:
-            # If token is invalid or expired, render error message
-            return render(
-                request,
-                "password_reset_invalid.html",
-                {"error_message": "The password reset link is invalid or has expired."},
+            message = render_to_string("password_reset_email.html", {"username": user.username, "reset_url": reset_url})
+            email_message = EmailMessage(
+                "Password Reset Requested",
+                message,
+                "fiton.notifications@gmail.com",
+                [email]
             )
+            email_message.content_subtype = "html"
+            email_message.send()
 
-    return render(request, 'password_reset_invalid.html', {
-        'error_message': 'The password reset link is invalid or has expired.'
-    })
+            return redirect("password_reset_done")
+        
+        error_message = "The email you entered is not registered with an account."
+        return render(request, "password_reset_request.html", {"form": form, "error_message": error_message})
+
+    return render(request, "password_reset_request.html", {"form": form, "error_message": error_message, "countdown": countdown})
+
+
+def password_reset_confirm(request, uidb64, token):
+    if not uidb64 or not token:
+        return render(request, "password_reset_invalid.html", {"error_message": "The password reset link is invalid or has expired."})
+
+    try:
+        user_id = force_str(urlsafe_base64_decode(uidb64))
+        user = get_user_by_uid(user_id)
+
+        if user and default_token_generator.check_token(user, token):
+            form = SetNewPasswordForm(request.POST or None)
+            if request.method == "POST" and form.is_valid():
+                new_password = form.cleaned_data["new_password"]
+                confirm_password = form.cleaned_data["confirm_password"]
+
+                if new_password == confirm_password:
+                    update_user_password(user.user_id, new_password)
+                    messages.success(request, "Your password has been successfully reset.")
+                    return redirect("password_reset_complete")
+
+                form.add_error("confirm_password", "Passwords do not match.")
+            return render(request, "password_reset_confirm.html", {"form": form})
+        
+        return render(request, "password_reset_invalid.html", {"error_message": "The password reset link is invalid or has expired."})
+
+    except Exception:
+        return render(request, "password_reset_invalid.html", {"error_message": "The password reset link is invalid or has expired."})
 
 
 def password_reset_complete(request):
@@ -230,7 +220,6 @@ def upload_profile_picture_view(request):
             return JsonResponse(
                 {"success": False, "message": "Failed to upload image to S3"}
             )
-
     return JsonResponse({"success": False, "message": "No file uploaded"})
 
 
@@ -297,6 +286,18 @@ def profile_view(request):
                 "country_code": user.get("country_code", ""),  # Default country code
             }
         )
+        form = ProfileForm(
+            initial={
+                "name": user.get("name", ""),
+                "date_of_birth": user.get("date_of_birth", ""),
+                "email": user.get("email", ""),
+                "gender": user.get("gender", ""),
+                "phone_number": user.get("phone_number", ""),
+                "address": user.get("address", ""),
+                "bio": user.get("bio", ""),
+                "country_code": user.get("country_code", ""),  # Default country code
+            }
+        )
 
     return render(request, "profile.html", {"form": form, "user": user})
 
@@ -304,7 +305,6 @@ def profile_view(request):
 def deactivate_account(request):
     # This simply shows the confirmation page
     return render(request, "deactivate.html")
-
 
 def confirm_deactivation(request):
     if request.method == "POST":
@@ -328,6 +328,89 @@ def confirm_deactivation(request):
     else:
         # Redirect to the deactivate page if the request method is not POST
         return redirect("deactivate_account")
+
+
+def authorize_google_fit(request):
+    credentials = request.session.get("google_fit_credentials")
+    print("inside auth")
+
+    if not credentials or credentials.expired:
+        # if settings.DEBUG == True:
+        #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES)
+        # else:
+        print(settings.GOOGLEFIT_CLIENT_CONFIG)
+        flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
+        flow.redirect_uri = request.build_absolute_uri(reverse("callback_google_fit"))
+        print("Redirected URI: ", flow.redirect_uri)
+        authorization_url, state = flow.authorization_url(
+            access_type="offline", include_granted_scopes="true"
+        )
+        # Debugging print statements
+        print("Authorization URL:", authorization_url)
+        print("State:", state)
+
+        request.session["google_fit_state"] = state
+        return redirect(authorization_url)
+    return redirect("profile")
+
+
+def callback_google_fit(request):
+    user_id = request.session.get("user_id")
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
+    state = request.session.get("google_fit_state")
+    if state:
+        # if settings.DEBUG:
+        #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES, state=state)
+        # else:
+        print("inside calback")
+
+        flow = Flow.from_client_config(
+            settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES, state=state
+        )
+        print("flow=", flow)
+        flow.redirect_uri = request.build_absolute_uri(reverse("callback_google_fit"))
+        flow.fetch_token(authorization_response=request.build_absolute_uri())
+
+        credentials = flow.credentials
+        request.session["credentials"] = {
+            "token": credentials.token,
+            "refresh_token": credentials.refresh_token,
+            "token_uri": credentials.token_uri,
+            "client_id": credentials.client_id,
+            "client_secret": credentials.client_secret,
+            "scopes": credentials.scopes,
+        }
+
+        form = ProfileForm(
+            initial={
+                "name": user.get("name", ""),
+                "date_of_birth": user.get("date_of_birth", ""),
+                "email": user.get("email", ""),
+                "gender": user.get("gender", ""),
+                "phone_number": user.get("phone_number", ""),
+                "address": user.get("address", ""),
+                "bio": user.get("bio", ""),
+                "country_code": user.get("country_code", ""),  # Default country code
+            }
+        )
+
+        # Set a success message
+        messages.success(request, "Signed in Successfully")
+
+        # Set login_success to True for successful login
+        login_success = True
+        return render(
+            request,
+            "profile.html",
+            {"login_success": login_success, "form": form, "user": user},
+        )
+
+    # In case of failure or missing state, redirect to a fallback page or profile without login_success
+    # Handle invalid state
+    messages.error(request, "Sign-in failed. Please try again.")
+    return redirect("homepage")
 
 
 def fitness_trainer_application_view(request):
@@ -507,3 +590,26 @@ def delete_post_view(request):
         except Exception as e:
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+@login_required(login_url='/login/')
+def chat_room(request, username):
+    # Ensure the logged-in user is accessing the chat
+    if not request.user.is_authenticated:
+        return redirect("login")
+
+    # Fetch the target user from DynamoDB or database
+    other_user = get_user_by_username(username)
+    if not other_user:
+        raise Http404("No User matches the given query.")
+
+    # Proceed with conversation setup
+    conversation, created = Conversation.objects.get_or_create(users__in=[request.user, other_user])
+    messages = Message.objects.filter(conversation=conversation).order_by("timestamp")
+    return render(request, "chat_room.html", {"conversation": conversation, "messages": messages})
+
+def search_users(request):
+    query = request.GET.get("q", "")
+    users = User.objects.filter(username__icontains=query).exclude(id=request.user.id)
+    results = [{"id": user.id, "username": user.username} for user in users]
+    return JsonResponse(results, safe=False)

@@ -97,25 +97,63 @@
                     {% endif %}
                 </div>
 
-                    <!-- Bio -->
-                    <div class="form-group">
-                        <label for="bio">Bio</label>
-                        {{ form.bio }}
-                        {% if form.bio.errors %}
-                            <span class="error">{{ form.bio.errors }}</span>
-                        {% endif %}
-                    </div>
-                    
-                    <!-- Submit and Deactivate Buttons -->
-                    <div class="button-container">
-                        <button type="submit" class="submit-button">
-                            Update Profile
-                        </button>
-                        <button type="button" class="deactivate-button">
-                            Deactivate Account
-                        </button>
-                    </div>
-                </form>
+                <!-- Bio -->
+                <div class="form-group">
+                    <label for="bio">Bio</label>
+                    {{ form.bio }}
+                    {% if form.bio.errors %}
+                        <span class="error">{{ form.bio.errors }}</span>
+                    {% endif %}
+                </div>
+                
+                <!-- Submit and Deactivate Buttons -->
+                <div class="button-container">
+                    <button type="submit" class="submit-button">
+                        Update Profile
+                    </button>
+                </div>
+
+                <div class="button-container">
+                    <a href="{% url 'authorize_google_fit' %}" class="submit-button">Sign In using Google</a>
+                </div>
+            </form>
+        </div>
+
+
+        <div class="button-container">
+
+            {% if user.is_admin %}
+                <button type="button" class="submit-button" onclick="redirectToFitnessTrainerApplicationsList()">Review Fitness Trainer Applications</button>
+            {% elif not user.is_fitness_trainer %}
+                <button type="button" class="submit-button" onclick="redirectToFitnessTrainerApplication()">Become a Fitness Trainer</button>
+            {% endif %}
+        
+            <!-- Button to trigger the modal -->
+            {% if not user.is_admin %}
+                <button id="deactivateBtn" class="deactivate-button" type="button">Deactivate Account</button>
+            {% endif %}
+
+            <!-- Confirmation Modal -->
+            <div id="myModal" class="modal">
+                <div class="modal-content">
+                    <h3>Are you sure you want to deactivate your account?</h3>
+                    <p>This action cannot be undone.</p>
+
+                    <!-- Confirm and Cancel buttons inside the modal -->
+                    <form method="POST" action="{% url 'confirm_deactivation' %}">
+                        {% csrf_token %}
+                        <button type="submit" class="button-confirm">Yes, Deactivate</button>
+                    </form>
+                    <button id="cancelBtn" class="button-cancel">Cancel</button>
+                </div>
+            </div>
+
+            <!-- Success Modal -->
+            <div id="successModal" class="modal">
+                <div class="modal-content">
+                    <h3>Your account has been successfully deactivated.</h3>
+                    <button id="okBtn" class="button-ok-btn">OK</button>
+                </div>
             </div>
 
             <!-- Check if the deactivation was successful and display the success modal if true -->
@@ -139,7 +177,6 @@
             }
             return cookieValue;
         }
-        
 
         // Function to redirect to the fitness trainer application view
         function redirectToFitnessTrainerApplication() {
@@ -185,6 +222,8 @@
             });
         });
 
+        
+
         // Get the modal elements
         var modal = document.getElementById("myModal");
         var successModal = document.getElementById("successModal");
@@ -222,4 +261,3 @@
     </script>
 
 {% endblock %}
-

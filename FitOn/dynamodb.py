@@ -1,13 +1,11 @@
+import boto3
+from boto3.dynamodb.conditions import Attr
 import boto3, uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import make_password, check_password
 from datetime import datetime, timezone
 from django.conf import settings
 
-import boto3
-from boto3.dynamodb.conditions import Attr
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password, check_password
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
@@ -17,8 +15,8 @@ from datetime import datetime
 
 
 # Connect to DynamoDB
-dynamodb = boto3.resource("dynamodb", region_name=settings.AWS_S3_REGION_NAME)
-s3_client = boto3.client("s3", region_name=settings.AWS_S3_REGION_NAME)
+dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+s3_client = boto3.client("s3", region_name="us-west-2")
 
 users_table = dynamodb.Table("Users")
 threads_table = dynamodb.Table("ForumThreads")
@@ -28,21 +26,26 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 
-
 class MockUser:
     def __init__(self, user_data):
         if isinstance(user_data, dict):
-            self.email = user_data.get("email")
-            self.username = user_data.get("username")
-            self.password = user_data.get("password")
+            self.user_id = user_data.get('user_id', None)
+            self.email = user_data.get('email', '')
+            self.username = user_data.get('username', '')
+            self.password = user_data.get('password', '')
+            self.date_of_birth = user_data.get('date_of_birth', '')
+            self.is_active = user_data.get('is_active', True)
+            self.last_login = user_data.get('last_login', None)
+            self.pk = self.user_id 
+        else:
+            self.user_id = None
+            self.email = ''
+            self.username = ''
+            self.password = ''
+            self.date_of_birth = ''
             self.is_active = True
             self.last_login = None
-            self.pk = user_data.get("user_id")
-        else:
-            self.email = None
-            self.username = None
-            self.password = None
-            self.pk = None
+            self.pk = None  
 
     def get_email_field_name(self):
         return "email"
@@ -119,7 +122,7 @@ def delete_user_by_username(username):
         user_id = users[0]["user_id"]  # Get the user's 'user_id'
 
         # Delete the user by user_id (or username if it's the primary key)
-        users_table.delete_item(
+        delete_response = users_table.delete_item(
             Key={"user_id": user_id}  # Replace with your partition key
         )
         print(f"User '{username}' successfully deleted.")
@@ -133,9 +136,7 @@ def delete_user_by_username(username):
 def get_user_by_email(email):
     try:
         response = users_table.scan(
-            FilterExpression="#e = :email",
-            ExpressionAttributeNames={"#e": "email"},
-            ExpressionAttributeValues={":email": email},
+            FilterExpression=Attr("email").eq(email)
         )
         users = response.get("Items", [])
         if users:
@@ -145,21 +146,19 @@ def get_user_by_email(email):
         print(f"Error querying DynamoDB for email '{email}': {e}")
         return None
 
-
+        
 def get_user_by_uid(uid):
     try:
         # Fetch from DynamoDB table
         response = users_table.get_item(Key={"user_id": uid})
         user_data = response.get("Item", None)
 
-        print(f"[DEBUG] get_user_by_uid - Retrieved user: {user_data}")
-
         if user_data:
             return MockUser(user_data)
         return None
     except Exception as e:
-        print(f"Error fetching user by UID: {e}")
         return None
+
 
 
 def update_user_password(user_id, new_password):
@@ -185,61 +184,6 @@ def get_last_reset_request_time(user_id):
         return None
     except Exception as e:
         print(f"Error fetching reset request for user_id '{user_id}': {e}")
-        return None
-
-
-def update_reset_request_time(user_id):
-    try:
-        if not user_id:
-            print("User ID is None. Cannot update reset request time.")
-            return None
-
-        # Insert a new entry or update the existing reset request time
-        response = password_reset_table.put_item(
-            Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
-        )
-        print(f"Reset request time updated for user_id '{user_id}'.")
-    except Exception as e:
-        print(f"Error updating reset request time for user_id '{user_id}': {e}")
-
-
-def get_user(user_id):
-    try:
-        response = users_table.get_item(Key={"user_id": user_id})
-        return response.get("Item")
-    except ClientError as e:
-        print(e.response["Error"]["Message"])
-        return None
-
-
-def update_user(user_id, update_data):
-    try:
-        # Create a mapping for reserved keywords
-        expression_attribute_names = {}
-        expression_attribute_values = {}
-
-        # Build the update expression components
-        update_expression_parts = []
-
-        for key, value in update_data.items():
-            placeholder_name = f"#{key}"
-            placeholder_value = f":{key}"
-            expression_attribute_names[placeholder_name] = key  # For reserved keywords
-            expression_attribute_values[placeholder_value] = value["Value"]
-            update_expression_parts.append(f"{placeholder_name} = {placeholder_value}")
-    except Exception as e:
-        print(f"Error updating user {user_id}: {e}")
-        return None
-
-
-def get_last_reset_request_time(user_id):
-    try:
-        response = password_reset_table.get_item(Key={"user_id": user_id})
-        if "Item" in response:
-            return response["Item"].get("last_request_time", None)
-        return None
-    except Exception as e:
-        print(f"Error retrieving last reset request time: {e}")
         return None
 
 
@@ -295,7 +239,7 @@ def update_user(user_id, update_data):
         expression_attribute_names = {}
         expression_attribute_values = {}
 
-        # Build the update expression components$
+        # Build the update expression components
         update_expression_parts = []
 
         for key, value in update_data.items():
@@ -568,7 +512,7 @@ def delete_post(post_id, thread_id):
     Deletes a post from the DynamoDB posts table based on the post ID and thread ID.
     """
     try:
-        response = posts_table.delete_item(
+        posts_table.delete_item(
             Key={
                 "ThreadID": thread_id,  # Adjust this according to your table schema
                 "PostID": post_id,
@@ -576,5 +520,86 @@ def delete_post(post_id, thread_id):
         )
         return True
     except Exception as e:
-        print("Error deleting post: {e}")
+        print(f"Error deleting post: {e}")
         return False
+
+
+def fetch_filtered_threads(
+    username="", thread_type="all", start_date="", end_date="", search_text=""
+):
+    # Start building the filter expression
+    filter_expression = Attr(
+        "ThreadID"
+    ).exists()  # A base filter that always evaluates to true (returns all)
+
+    # Apply username filter if provided
+    if username:
+        filter_expression &= Attr("UserID").eq(username)
+
+    # Apply date range filter if provided
+    if start_date:
+        start_date_dt = datetime.strptime(start_date, "%Y-%m-%d").isoformat()
+        filter_expression &= Attr("CreatedAt").gte(start_date_dt)
+
+    if end_date:
+        end_date_dt = datetime.strptime(end_date, "%Y-%m-%d").isoformat()
+        filter_expression &= Attr("CreatedAt").lte(end_date_dt)
+
+    # Apply search text filter if provided (checks both thread titles and content)
+    if search_text:
+        filter_expression &= Attr("Title").contains(search_text) | Attr(
+            "Content"
+        ).contains(search_text)
+
+    # Apply type filter (thread/reply) if provided
+    if thread_type == "thread":
+        filter_expression &= Attr("ReplyCount").eq(
+            0
+        )  # Assuming threads with 0 replies are initial posts
+    elif thread_type == "reply":
+        filter_expression &= Attr("ReplyCount").gt(0)  # Show threads with replies
+
+    # Scan the DynamoDB table with the filter expression
+    response = threads_table.scan(FilterExpression=filter_expression)
+
+    threads = response.get("Items", [])
+
+    # Process each thread (e.g., add reply count and last post info)
+    for thread in threads:
+        thread_created_at_str = thread.get("CreatedAt")
+        if thread_created_at_str:
+            thread["CreatedAt"] = datetime.fromisoformat(thread_created_at_str)
+
+        replies = fetch_posts_for_thread(thread["ThreadID"])
+        thread["ReplyCount"] = len(replies)
+
+        if replies:
+            latest_post = max(replies, key=lambda x: x["CreatedAt"])
+            last_post_time_str = latest_post["CreatedAt"]
+            thread["LastPostUser"] = latest_post["UserID"]
+            thread["LastPostTime"] = datetime.fromisoformat(last_post_time_str)
+        else:
+            thread["LastPostUser"] = "No replies yet"
+            thread["LastPostTime"] = None
+
+    return threads
+
+
+def fetch_all_users():
+    # This will scan the threads table to get all unique users
+    response = threads_table.scan(
+        ProjectionExpression="UserID"  # Only fetch the UserID attribute
+    )
+
+    threads = response.get("Items", [])
+
+    # Set to store unique user IDs
+    unique_users = set()
+
+    for thread in threads:
+        user_id = thread.get("UserID")
+        if user_id:
+            unique_users.add(user_id)
+
+    # Return the list of unique user IDs
+    return [{"username": user} for user in unique_users]

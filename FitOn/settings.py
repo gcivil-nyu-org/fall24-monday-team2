@@ -1,9 +1,20 @@
 import os, sys
 from pathlib import Path
 from datetime import timedelta
+import boto3
+import json
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def get_secrets():
+    client = boto3.client("secretsmanager", region_name="us-west-2")
+    response = client.get_secret_value(SecretId="googleFit_credentials")
+    response = json.loads(response["SecretString"])
+    GOOGLEFIT_CLIENT_ID = response.get("GOOGLEFIT_CLIENT_ID")
+    GOOGLEFIT_CLIENT_SECRET = response.get("GOOGLEFIT_CLIENT_SECRET")
+    return (GOOGLEFIT_CLIENT_ID, GOOGLEFIT_CLIENT_SECRET)
 
 
 # Quick-start development settings - unsuitable for production
@@ -14,6 +25,45 @@ SECRET_KEY = "django-insecure-iqw@@a4osoerv=_))5ipw&kthcyr@v55xwz#=sse!13()+s#l_
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+
+SCOPES = [
+    "https://www.googleapis.com/auth/fitness.activity.read",
+    "https://www.googleapis.com/auth/fitness.body.read",
+    "https://www.googleapis.com/auth/fitness.heart_rate.read",
+    "https://www.googleapis.com/auth/fitness.sleep.read",
+    "https://www.googleapis.com/auth/fitness.blood_glucose.read",
+    "https://www.googleapis.com/auth/fitness.blood_pressure.read",
+    "https://www.googleapis.com/auth/fitness.body_temperature.read",
+    "https://www.googleapis.com/auth/fitness.location.read",
+    "https://www.googleapis.com/auth/fitness.nutrition.read",
+    "https://www.googleapis.com/auth/fitness.oxygen_saturation.read",
+    "https://www.googleapis.com/auth/fitness.reproductive_health.read",
+]
+
+GOOGLEFIT_PROJECT_ID = "dulcet-coast-387705"
+GOOGLEFIT_TOKEN_URI = "https://accounts.google.com/o/oauth2/token"
+GOOGLEFIT_CLIENT_ID = get_secrets()[0]
+GOOGLEFIT_CLIENT_SECRET = get_secrets()[1]
+
+BASE_URL = (
+    "http://127.0.0.1:8000"
+    if DEBUG
+    else "http://fiton-dev-without-template.us-west-2.elasticbeanstalk.com"
+)
+# BASE_URL = "fiton-dev-without-template.us-west-2.elasticbeanstalk.com"
+
+REDIRECT_URI = os.getenv("REDIRECT_URL", BASE_URL + "/callback/")
+
+GOOGLEFIT_CLIENT_CONFIG = {
+    "web": {
+        "client_id": GOOGLEFIT_CLIENT_ID,
+        "project_id": GOOGLEFIT_PROJECT_ID,
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "client_secret": GOOGLEFIT_CLIENT_SECRET,
+        "redirect_uris": [REDIRECT_URI],
+    }
+}
 
 ALLOWED_HOSTS = ["*"]
 
@@ -29,6 +79,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "storages",  # Add this line for S3 storage
+    "channels",
 ]
 
 MIDDLEWARE = [
@@ -61,6 +112,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "FitOn.wsgi.application"
 
+ASGI_APPLICATION = "FitOn.asgi.application"
+
+# Redis channel layer configuration
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [("127.0.0.1", 6379)],
+        },
+    },
+}
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -71,6 +133,11 @@ DATABASES = {
         "NAME": BASE_DIR / "db.sqlite3",
     }
 }
+
+SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
+SESSION_COOKIE_AGE = 1209600
+DYNAMODB_SESSIONS_TABLE_NAME = 'DjangoUserSessions'
+SESSION_SAVE_EVERY_REQUEST = True
 
 
 # Password validation
@@ -133,12 +200,22 @@ DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 PASSWORD_RESET_TIMEOUT = timedelta(minutes=5).total_seconds()
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "fiton.notifications@gmail.com"
-EMAIL_HOST_PASSWORD = "usfb imrp rhyq npif"
 
-TESTING = "test" in sys.argv
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+# For google redirection
+# SECURE_SSL_REDIRECT = True
+# SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+TESTING = 'test' in sys.argv
+
+if TESTING:
+    # Use in-memory email backend for tests
+    EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+else:
+    # Use actual email backend for local development and production
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = "smtp.gmail.com"
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = "fiton.notifications@gmail.com"
+    EMAIL_HOST_PASSWORD = "usfb imrp rhyq npif"
