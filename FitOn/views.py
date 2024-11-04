@@ -553,6 +553,12 @@ def fitness_trainer_application_view(request):
 
 
 def fitness_trainer_applications_list_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page.")
+
     # Retrieve applications from DynamoDB
     applications = get_fitness_trainer_applications()
 

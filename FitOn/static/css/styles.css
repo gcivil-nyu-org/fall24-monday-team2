@@ -238,6 +238,9 @@ footer {
 }
 
 .table-container {
+    width: 80%;
+    margin: 20px auto;
+    font-family: Arial, sans-serif;
     overflow-x: auto; /* Enables horizontal scrolling */
 }
 
@@ -246,6 +249,8 @@ footer {
     border-collapse: collapse;
     margin: 20px 0;
     font-size: 16px;
+    background-color: #f9f9f9;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 .applications-table th,
@@ -256,7 +261,8 @@ footer {
 }
 
 .applications-table th {
-    background-color: #f4f4f4; /* Light gray background for header */
+    background-color: #333333; /* Light gray background for header */
+    color: white;
 }
 
 .applications-table tr:nth-child(even) {
@@ -264,9 +270,10 @@ footer {
 }
 
 .no-applications {
+    text-align-last: center;
     text-align: center;
     font-weight: bold;
-    color: red; /* Indicate no applications found */
+    color: #999999; /* Indicates no applications found */
 }
 
 .error {
