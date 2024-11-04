@@ -16,6 +16,9 @@
     <div class="forum-header">
         <h2>Forum Threads</h2>
         <a href="{% url 'new_thread' %}" class="new-thread-btn">New Thread</a>
+        {% if user.is_admin %}
+            <a href="{% url 'reports' %}" class="reports-btn">Reports</a>  <!-- Add Reports button for admin -->
+        {% endif %}
     </div>
 
     <!-- Filters Section -->

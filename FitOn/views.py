@@ -29,6 +29,7 @@ from .dynamodb import (
     posts_table,
     delete_reply,
     create_reply,
+    fetch_reported_threads_and_comments,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -788,3 +789,19 @@ def delete_thread(request):
         except Exception as e:
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
     return JsonResponse({"status": "error", "message": "Invalid request method."}, status=400)
+
+
+def reports_view(request):
+    # Get user details to check if they are admin
+    user = get_user(request.session.get("user_id"))
+
+    if not user.get("is_admin"):
+        return redirect("forum")  # Redirect non-admins to the main forum page
+
+    # Fetch reported threads and comments from DynamoDB
+    reported_threads, reported_comments = fetch_reported_threads_and_comments()
+
+    return render(request, "reports.html", {
+        "reported_threads": reported_threads,
+        "reported_comments": reported_comments,
+    })

@@ -700,3 +700,33 @@ def delete_reply(post_id, thread_id, reply_id):
     except Exception as e:
         print(f"Error deleting reply: {e}")
         return {"status": "error", "message": str(e)}
+    
+    
+def fetch_reported_threads_and_comments():
+    reported_threads = []
+    reported_comments = []
+
+    # Fetch reported threads
+    try:
+        response = threads_table.scan(
+            FilterExpression=Attr("ReportedBy").exists()
+        )
+        reported_threads = response.get("Items", [])
+        print(f"Fetched {len(reported_threads)} reported threads.")
+    except ClientError as e:
+        print(f"Error fetching reported threads: {e.response['Error']['Message']}")
+
+    # Fetch reported comments
+    try:
+        response = posts_table.scan(
+            FilterExpression=Attr("ReportedBy").exists()
+        )
+        reported_comments = response.get("Items", [])
+        print(f"Fetched {len(reported_comments)} reported comments.")
+    except ClientError as e:
+        print(f"Error fetching reported comments: {e.response['Error']['Message']}")
+
+    return {
+        "reported_threads": reported_threads,
+        "reported_comments": reported_comments
+    }

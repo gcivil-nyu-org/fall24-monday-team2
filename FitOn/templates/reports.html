@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Reported Threads and Comments</title>
+</head>
+<body>
+    <h1>Reported Threads</h1>
+    <table>
+        <tr>
+            <th>Title</th>
+            <th>Content</th>
+            <th>Reported By</th>
+        </tr>
+        {% for thread in reported_threads %}
+        <tr>
+            <td>{{ thread.Title }}</td>
+            <td>{{ thread.Content }}</td>
+            <td>{{ thread.ReportedBy|join:", " }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3">No reported threads.</td></tr>
+        {% endfor %}
+    </table>
+
+    <h1>Reported Comments</h1>
+    <table>
+        <tr>
+            <th>Post ID</th>
+            <th>Content</th>
+            <th>Reported By</th>
+        </tr>
+        {% for comment in reported_comments %}
+        <tr>
+            <td>{{ comment.PostID }}</td>
+            <td>{{ comment.Content }}</td>
+            <td>{{ comment.ReportedBy|join:", " }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3">No reported comments.</td></tr>
+        {% endfor %}
+    </table>
+</body>
+</html>
