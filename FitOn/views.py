@@ -1032,7 +1032,7 @@ def process_dynamo_data(items, frequency):
 
     # Process each item
     for item in items:
-        time = datetime.datetime.strptime(item["time"], "%Y-%m-%dT%H:%M")
+        time = dt.datetime.strptime(item["time"], "%Y-%m-%dT%H:%M")
         start, end = get_group_key(time, frequency)
         start_key = start.strftime("%b %d, %I %p")
         end_key = end.strftime("%b %d, %I %p")
