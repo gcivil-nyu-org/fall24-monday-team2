@@ -26,7 +26,7 @@ def get_secrets():
 SECRET_KEY = "django-insecure-iqw@@a4osoerv=_))5ipw&kthcyr@v55xwz#=sse!13()+s#l_"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 # For static files
 IS_PRODUCTION = not DEBUG
@@ -110,6 +110,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "FitOn.context_processors.user_context",
             ],
         },
     },
@@ -179,12 +180,12 @@ AWS_LOCATION = "static"
 # Static files (CSS, JavaScript, Images)
 
 if IS_PRODUCTION:
-    STATIC_ROOT = os.path.join(BASE_DIR, "static")
+    # STATIC_ROOT = os.path.join(BASE_DIR, "static")
     STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{AWS_LOCATION}/"
     STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 else:
     STATIC_URL = "/static/"
-    STATICFILES_DIRS = [BASE_DIR / "static"]
+    STATICFILES_DIRS = [BASE_DIR / "FitOn/static"]
 
 # Media files
 MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"

@@ -2,13 +2,17 @@ from django.shortcuts import render, redirect
 from .dynamodb import (
     add_fitness_trainer_application,
     # create_post,
-    create_reply,
+    post_comment,
     create_thread,
+    create_reply,
     create_user,
     delete_user_by_username,
     fetch_posts_for_thread,
+    # fetch_thread,
     get_fitness_trainer_applications,
     get_last_reset_request_time,
+    # get_replies,
+    # get_thread_details,
     get_user,
     get_user_by_email,
     get_user_by_uid,
@@ -23,6 +27,13 @@ from .dynamodb import (
     dynamodb,
     threads_table,
     delete_post,
+    get_fitness_trainers,
+    make_fitness_trainer,
+    remove_fitness_trainer,
+    delete_reply,
+    fetch_reported_threads_and_comments,
+    mark_thread_as_reported,
+    posts_table,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -34,6 +45,7 @@ from .forms import (
 )
 
 # from .models import PasswordResetRequest
+import datetime as dt
 from datetime import datetime
 import pytz
 from datetime import timedelta
@@ -47,13 +59,17 @@ from django.contrib import messages
 from django.conf import settings
 
 # from django.core.files.storage import FileSystemStorage
+from django.core.mail import EmailMessage
+
+# from django.core.mail.backends.locmem import EmailBackend
 
 # from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.core.mail import EmailMessage
+
+# from django.http import Http404
 
 # from django.utils.encoding import force_bytes
 # from django.utils.html import strip_tags
@@ -63,6 +79,8 @@ from asgiref.sync import sync_to_async
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 import uuid
+
+# import ssl
 import boto3
 from google_auth_oauthlib.flow import Flow
 import requests
@@ -573,6 +591,12 @@ def fitness_trainer_application_view(request):
 
 
 def fitness_trainer_applications_list_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page.")
+
     # Retrieve applications from DynamoDB
     applications = get_fitness_trainer_applications()
 
@@ -582,6 +606,106 @@ def fitness_trainer_applications_list_view(request):
         "fitness_trainer_applications_list.html",
         {"applications": applications},
     )
+
+
+def fitness_trainers_list_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of trainers from DynamoDB
+    trainers = get_fitness_trainers()
+
+    # Render the list of trainers
+    return render(
+        request,
+        "fitness_trainers_list.html",
+        {"trainers": trainers},
+    )
+
+
+def approve_fitness_trainer(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get("username")
+        user = get_user_by_username(username)
+
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        make_fitness_trainer(user["user_id"])
+
+        subject = "Fitness Trainer Application Approved"
+        message = render_to_string(
+            "fitness_trainer_email.html",
+            {"username": username, "approval": True, "reason": ""},
+        )
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = user.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "html"
+        email_message.send()
+
+        return JsonResponse(
+            {"status": "success", "message": "Fitness Trainer has been approved"}
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def reject_fitness_trainer(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get("username")
+        user = get_user_by_username(username)
+
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        remove_fitness_trainer(user["user_id"])
+
+        subject = "Fitness Trainer Application Rejected"
+        message = render_to_string(
+            "fitness_trainer_email.html",
+            {
+                "username": username,
+                "approval": False,
+                "reason": "We are not accepting fitness trainers right now, please try again later",
+            },
+        )
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = user.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "html"
+        email_message.send()
+
+        return JsonResponse(
+            {"status": "success", "message": "Fitness Trainer application rejected"}
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 
 # -------------------------------
@@ -599,24 +723,112 @@ def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
     thread = threads_table.get_item(Key={"ThreadID": thread_id}).get("Item")
     posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
+    if not thread:
+        return JsonResponse(
+            {"status": "error", "message": "Thread not found"}, status=404
+        )
+
     user_id = request.session.get("user_id")
 
-    # Fetch user details from DynamoDB
     user = get_user(user_id)
 
     is_banned = user.get("is_banned")
     if is_banned:
         return render(request, "forums.html", {"is_banned": is_banned})
 
-    if not thread:
-        return JsonResponse(
-            {"status": "error", "message": "Thread not found"}, status=404
-        )
-
     user_id = request.session.get("username")  # Assuming user is logged in
 
     if request.method == "POST":
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
+
+            # Parse the AJAX request data
+            data = json.loads(request.body.decode("utf-8"))
+            action = data.get("action")
+            post_id = data.get("post_id")
+            print("Action received:", action)  # Print the action value
+
+            if action == "like_post":
+                # Handle like/unlike for the main thread post
+                liked_by = thread.get("LikedBy", [])
+                if user_id in liked_by:
+                    # Unlike logic
+                    likes = max(0, thread.get("Likes", 0) - 1)
+                    liked_by.remove(user_id)
+                else:
+                    # Like logic
+                    likes = thread.get("Likes", 0) + 1
+                    liked_by.append(user_id)
+                threads_table.update_item(
+                    Key={"ThreadID": thread_id},
+                    UpdateExpression="SET Likes=:l, LikedBy=:lb",
+                    ExpressionAttributeValues={":l": likes, ":lb": liked_by},
+                )
+                return JsonResponse(
+                    {"status": "success", "likes": likes, "liked": user_id in liked_by}
+                )
+
+            elif action == "like_comment":
+                # Handle like/unlike for a comment
+                post = posts_table.get_item(
+                    Key={"PostID": post_id, "ThreadID": thread_id}
+                ).get("Item")
+                if not post:
+                    return JsonResponse(
+                        {"status": "error", "message": "Comment not found"}, status=404
+                    )
+
+                liked_by = post.get("LikedBy", [])
+                if user_id in liked_by:
+                    # Unlike logic
+                    likes = max(0, post.get("Likes", 0) - 1)
+                    liked_by.remove(user_id)
+                else:
+                    # Like logic
+                    likes = post.get("Likes", 0) + 1
+                    liked_by.append(user_id)
+                posts_table.update_item(
+                    Key={"PostID": post_id, "ThreadID": thread_id},
+                    UpdateExpression="SET Likes=:l, LikedBy=:lb",
+                    ExpressionAttributeValues={":l": likes, ":lb": liked_by},
+                )
+                return JsonResponse(
+                    {"status": "success", "likes": likes, "liked": user_id in liked_by}
+                )
+
+            elif action == "report_comment":
+                # Handle report for a comment (you can define reporting logic here)
+                # For simplicity, let's say reporting just returns a success message
+                return JsonResponse(
+                    {"status": "success", "message": "Comment reported successfully!"}
+                )
+
+            elif action == "add_reply":
+                print("add reply")
+
+                # Handle adding a reply to a comment
+                reply_content = data.get("content", "").strip()
+                if not reply_content:
+                    return JsonResponse(
+                        {"status": "error", "message": "Reply content cannot be empty!"}
+                    )
+
+                # create reply
+                reply_id = create_reply(
+                    post_id=post_id,
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    content=reply_content,
+                )
+                # Return success and the reply content with the username
+                return JsonResponse(
+                    {
+                        "status": "success",
+                        "content": reply_content,
+                        "username": user_id,
+                        "reply_id": reply_id,
+                    }
+                )
+
             # Get the list of users who have liked the thread
             liked_by = thread.get("LikedBy", [])
 
@@ -641,12 +853,22 @@ def thread_detail_view(request, thread_id):
                 {"status": "success", "likes": likes, "liked": user_id in liked_by}
             )
 
+        # Handle non-AJAX post submission for creating a new comment
+        elif "content" in request.POST:
+            # Add a new post to the thread
+            new_content = request.POST.get("content").strip()
+            if new_content:
+                post_comment(thread_id=thread_id, user_id=user_id, content=new_content)
+
+            # Redirect after posting to avoid resubmission on refresh
+            return redirect("thread_detail", thread_id=thread_id)
+
         else:
             # Handle reply submission (non-AJAX form submission)
             content = request.POST.get("content")
 
             if content and user_id:
-                create_reply(thread_id=thread_id, user_id=user_id, content=content)
+                post_comment(thread_id=thread_id, user_id=user_id, content=content)
                 return redirect("thread_detail", thread_id=thread_id)
 
     return render(
@@ -835,24 +1057,24 @@ def process_dynamo_data(items, frequency):
 
 # function to convert miliseconds to Day
 def parse_millis(millis):
-    return datetime.datetime.fromtimestamp(int(millis) / 1000).strftime("%b %d, %I %p")
+    return dt.datetime.fromtimestamp(int(millis) / 1000).strftime("%b %d, %I %p")
 
 
 def get_group_key(time, frequency):
     """Adjusts start and end times based on frequency."""
     if frequency == "hourly":
         start = time.replace(minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(hours=1)
+        end = start + dt.timedelta(hours=1)
     elif frequency == "daily":
         start = time.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(days=1)
+        end = start + dt.timedelta(days=1)
     elif frequency == "weekly":
-        start = time - datetime.timedelta(days=time.weekday())
+        start = time - dt.timedelta(days=time.weekday())
         start = start.replace(hour=0, minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(days=7)
+        end = start + dt.timedelta(days=7)
     elif frequency == "monthly":
         start = time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end = start + datetime.timedelta(
+        end = start + dt.timedelta(
             days=(time.replace(month=time.month % 12 + 1, day=1) - time).days
         )
     else:
@@ -877,7 +1099,7 @@ def merge_data(existing_data, new_data, frequency):
 
     # Helper to parse datetime from string
     def parse_time(time_str):
-        return datetime.datetime.strptime(time_str, "%b %d, %I %p")
+        return dt.datetime.strptime(time_str, "%b %d, %I %p")
 
     # Create index of existing data by start time for quick access
     data_index = {}
@@ -1080,16 +1302,16 @@ def pressure_plot(data):
 
 async def fetch_metric_data(service, metric, total_data, duration, frequency, email):
 
-    end_time = datetime.datetime.now() - datetime.timedelta(minutes=1)
+    end_time = dt.datetime.now() - dt.timedelta(minutes=1)
 
     if duration == "day":
-        start_time = end_time - datetime.timedelta(hours=23, minutes=59)
+        start_time = end_time - dt.timedelta(hours=23, minutes=59)
     elif duration == "week":
-        start_time = end_time - datetime.timedelta(days=6, hours=23, minutes=59)
+        start_time = end_time - dt.timedelta(days=6, hours=23, minutes=59)
     elif duration == "month":
-        start_time = end_time - datetime.timedelta(days=29, hours=23, minutes=59)
+        start_time = end_time - dt.timedelta(days=29, hours=23, minutes=59)
     elif duration == "quarter":
-        start_time = end_time - datetime.timedelta(days=89, hours=23, minutes=59)
+        start_time = end_time - dt.timedelta(days=89, hours=23, minutes=59)
 
     if frequency == "hourly":
         bucket = 3600000
@@ -1322,11 +1544,161 @@ def health_data_view(request):
         request,
         "forums.html",
         {
+            "user": user,
             "threads": threads,
             "users": users,
             "is_banned": is_banned,
         },
     )
+
+
+def add_reply(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body.decode("utf-8"))
+        post_id = data.get("post_id")
+        content = data.get("content")
+        thread_id = data.get("thread_id")
+
+        if not post_id or not content:
+            return JsonResponse(
+                {"status": "error", "message": "Post ID and content are required."},
+                status=400,
+            )
+
+        # Get the user info from the session
+        user_id = request.session.get("username")
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User not authenticated"}, status=403
+            )
+
+        # Create the reply data
+        reply_data = {
+            "ReplyID": str(uuid.uuid4()),  # Unique ID for each reply
+            "UserID": user_id,
+            "Content": content,
+            "CreatedAt": datetime.utcnow().isoformat(),  # Timestamp for each reply
+        }
+
+        # Save the reply to DynamoDB by appending it to the 'Replies' list for the post
+        try:
+            posts_table.update_item(
+                Key={"PostID": post_id, "ThreadID": thread_id},
+                UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
+                ExpressionAttributeValues={":reply": [reply_data], ":empty_list": []},
+                ReturnValues="UPDATED_NEW",
+            )
+        except Exception as e:
+            return JsonResponse(
+                {"status": "error", "message": f"Failed to save reply: {str(e)}"},
+                status=500,
+            )
+
+        # Return success response with reply details
+        return JsonResponse(
+            {
+                "status": "success",
+                "reply_id": reply_data["ReplyID"],
+                "content": content,
+                "username": user_id,
+                "created_at": reply_data["CreatedAt"],
+            }
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def delete_reply_view(request):
+    print("ReplitID:")
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body.decode("utf-8"))
+        post_id = data.get("post_id")
+        reply_id = data.get("reply_id")
+        thread_id = data.get("thread_id")  # Retrieve thread_id from the request data
+
+        if not post_id or not reply_id:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "Post ID, Reply ID and Thread ID are required.",
+                },
+                status=400,
+            )
+
+        # Call the delete_reply function in dynamodb.py
+        result = delete_reply(post_id, thread_id, reply_id)
+
+        if result.get("status") == "success":
+            return JsonResponse({"status": "success"})
+        else:
+            error_message = result.get(
+                "message", "An error occurred while deleting the reply."
+            )
+            return JsonResponse(
+                {"status": "error", "message": error_message}, status=500
+            )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def delete_thread(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body.decode("utf-8"))
+        thread_id = data.get("thread_id")
+
+        if not thread_id:
+            return JsonResponse(
+                {"status": "error", "message": "Thread ID is required."}, status=400
+            )
+
+        try:
+            # Perform the deletion from DynamoDB
+            threads_table.delete_item(Key={"ThreadID": thread_id})
+            return JsonResponse(
+                {"status": "success", "message": "Thread deleted successfully."}
+            )
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+    return JsonResponse(
+        {"status": "error", "message": "Invalid request method."}, status=400
+    )
+
+
+def reports_view(request):
+    # Get user details to check if they are an admin
+    user = get_user(request.session.get("user_id"))
+
+    # Only allow access if the user is an admin
+    if not user.get("is_admin"):
+        return redirect("forum")  # Redirect non-admins to the main forum page
+
+    if request.method == "POST":
+        data = json.loads(request.body.decode("utf-8"))
+        action = data.get("action")
+        thread_id = data.get("thread_id")
+
+        # Check if the action is to report a thread
+        if action == "report_thread" and thread_id:
+            # Mark the thread as reported in DynamoDB
+            mark_thread_as_reported(thread_id)
+            return JsonResponse({"status": "success"})
+        else:
+            return JsonResponse(
+                {"status": "error", "message": "Invalid request"}, status=400
+            )
+
+    # If it's a GET request, retrieve reported threads and comments
+    reported_data = fetch_reported_threads_and_comments()
+    return render(request, "reports.html", reported_data)
 
 
 # -----------------
