@@ -22,6 +22,9 @@ from django.contrib import admin
 
 # from django.contrib.auth import views
 from django.urls import path
+from .views import signup, homepage, login, profile_view, upload_profile_picture
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),
@@ -40,7 +43,7 @@ urlpatterns = [
         "reset-password/", views.password_reset_request, name="password_reset_request"
     ),
     path(
-        "reset-password/<str:user_id>/<str:token>/",
+        "reset-password/<str:uidb64>/<str:token>/",
         views.password_reset_confirm,
         name="password_reset_confirm",
     ),
@@ -66,8 +69,36 @@ urlpatterns = [
         views.fitness_trainer_applications_list_view,
         name="fitness_trainer_applications_list",
     ),
+    path(
+        "fitness_trainers_list/",
+        views.fitness_trainers_list_view,
+        name="fitness_trainers_list",
+    ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),
     path("delete_post/", views.delete_post_view, name="delete_post"),
+    path("metrics/", views.list_metrics, name="metrics_list"),
+    path("data/", views.get_metric_data, name="get_metric_data"),
+    path("submit-health-data/", views.health_data_view, name="submit_health_data"),
+    path("delink/", views.delink_google_fit, name="delink_google_fit"),
+    path("ban_user/", views.toggle_ban_user, name="toggle_ban_user"),
+    path("mute_user/", views.toggle_mute_user, name="toggle_mute_user"),
+    path("punishments/", views.punishments_view, name="punishments"),
+    path("unban_user/", views.unban_user, name="unban_user"),
+    path("unmute_user/", views.unmute_user, name="unmute_user"),
+    path(
+        "approve_fitness_trainer/",
+        views.approve_fitness_trainer,
+        name="approve_fitness_trainer",
+    ),
+    path(
+        "reject_fitness_trainer/",
+        views.reject_fitness_trainer,
+        name="reject_fitness_trainer",
+    ),
+    path("add_reply/", views.add_reply, name="add_reply"),
+    path("delete_reply/", views.delete_reply_view, name="delete_reply"),
+    path("delete_thread/", views.delete_thread, name="delete_thread"),
+    path("reports/", views.reports_view, name="reports"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

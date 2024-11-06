@@ -1,8 +1,9 @@
-import os
+import os, sys
 from pathlib import Path
 from datetime import timedelta
 import boto3
 import json
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -24,7 +25,11 @@ def get_secrets():
 SECRET_KEY = "django-insecure-iqw@@a4osoerv=_))5ipw&kthcyr@v55xwz#=sse!13()+s#l_"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
+
+# For static files
+IS_PRODUCTION = not DEBUG
+
 
 SCOPES = [
     "https://www.googleapis.com/auth/fitness.activity.read",
@@ -104,13 +109,13 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "FitOn.context_processors.user_context",
             ],
         },
     },
 ]
 
 WSGI_APPLICATION = "FitOn.wsgi.application"
-
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
@@ -122,10 +127,9 @@ DATABASES = {
     }
 }
 
-# SESSION_ENGINE = 'django_dynamodb_sessions.backends.dynamodb'
+# SESSION_ENGINE = "django_dynamodb_sessions.backends.dynamodb"
 # DYNAMODB_SESSIONS_TABLE_NAME = 'django-user-sessions'
 # SESSION_SAVE_EVERY_REQUEST = True
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -173,9 +177,14 @@ AWS_S3_OBJECT_PARAMETERS = {
 AWS_LOCATION = "static"
 
 # Static files (CSS, JavaScript, Images)
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
-STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{AWS_LOCATION}/"
-STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+
+if IS_PRODUCTION:
+    # STATIC_ROOT = os.path.join(BASE_DIR, "static")
+    STATIC_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{AWS_LOCATION}/"
+    STATICFILES_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+else:
+    STATIC_URL = "/static/"
+    STATICFILES_DIRS = [BASE_DIR / "FitOn/static"]
 
 # Media files
 MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/media/"
@@ -187,14 +196,22 @@ DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 PASSWORD_RESET_TIMEOUT = timedelta(minutes=5).total_seconds()
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "fiton.notifications@gmail.com"
-EMAIL_HOST_PASSWORD = "usfb imrp rhyq npif"
 
 os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 # For google redirection
 # SECURE_SSL_REDIRECT = True
 # SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+TESTING = "test" in sys.argv
+
+if TESTING:
+    # Use in-memory email backend for tests
+    EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+else:
+    # Use actual email backend for local development and production
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = "smtp.gmail.com"
+    EMAIL_PORT = 587
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_USER = "fiton.notifications@gmail.com"
+    EMAIL_HOST_PASSWORD = "usfb imrp rhyq npif"

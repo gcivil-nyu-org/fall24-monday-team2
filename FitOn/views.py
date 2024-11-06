@@ -1,12 +1,13 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from .dynamodb import (
     add_fitness_trainer_application,
     # create_post,
-    create_reply,
+    post_comment,
     create_thread,
+    create_reply,
     create_user,
     delete_user_by_username,
-    # fetch_all_threads,
+    fetch_all_threads,
     fetch_posts_for_thread,
     # fetch_thread,
     get_fitness_trainer_applications,
@@ -24,6 +25,19 @@ from .dynamodb import (
     upload_profile_picture,
     fetch_filtered_threads,
     fetch_all_users,
+    get_fitness_data,
+    dynamodb,
+    threads_table,
+    delete_post,
+    get_fitness_trainers,
+    make_fitness_trainer,
+    remove_fitness_trainer,
+    like_comment,
+    report_comment,
+    delete_reply,
+    fetch_reported_threads_and_comments,
+    mark_thread_as_reported,
+    posts_table,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -35,8 +49,12 @@ from .forms import (
 )
 
 # from .models import PasswordResetRequest
+import datetime as dt
+from datetime import datetime
+import pytz
 from datetime import timedelta
 from django.contrib.auth.hashers import make_password, check_password
+import pandas as pd
 
 # from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
@@ -45,27 +63,55 @@ from django.contrib import messages
 from django.conf import settings
 
 # from django.core.files.storage import FileSystemStorage
-from django.core.mail import send_mail, get_connection
+from django.core.mail import send_mail, get_connection, EmailMessage
+from django.core.mail.backends.locmem import EmailBackend
 
 # from django.core.mail import EmailMultiAlternatives
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
+from django.http import Http404
 
 # from django.utils.encoding import force_bytes
 # from django.utils.html import strip_tags
 # from django.utils.http import urlsafe_base64_encode
 # import os
+from asgiref.sync import sync_to_async
+from django.utils.encoding import force_bytes, force_str
+from django.utils.html import strip_tags
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+import os
 import uuid
 import ssl
+import pytz
+import boto3
 from google_auth_oauthlib.flow import Flow
+import requests
 
 # from django.contrib.auth.decorators import login_required
 from .dynamodb import threads_table, delete_post
 import json
 
-# from django.http import HttpResponse
+# from google import Things
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+import asyncio
+from collections import defaultdict
+
+# Define metric data types
+dataTypes = {
+    "heart_rate": "com.google.heart_rate.bpm",
+    "resting_heart_rate": "com.google.heart_rate.bpm",
+    "steps": "com.google.step_count.delta",
+    "sleep": "com.google.sleep.segment",
+    "oxygen": "com.google.oxygen_saturation",
+    "activity": "com.google.activity.segment",
+    "glucose": "com.google.blood_glucose",
+    "pressure": "com.google.blood_pressure",
+}
+
+df = pd.read_csv("google_fit_activity_types.csv")
 
 SCOPES = [
     "https://www.googleapis.com/auth/fitness.activity.read",
@@ -85,6 +131,20 @@ SCOPES = [
 def homepage(request):
     username = request.session.get("username", "Guest")
     return render(request, "home.html", {"username": username})
+
+
+def list_metrics(request):
+    return render(request, "metric_list.html")
+
+
+@sync_to_async
+def add_message(request, level, message):
+    messages.add_message(request, level, message)
+
+
+@sync_to_async
+def perform_redirect(url_name):
+    return redirect(url_name)
 
 
 def login(request):
@@ -157,90 +217,107 @@ def signup(request):
 
 def password_reset_request(request):
     countdown = None
-
-    if request.method == "POST":
-        form = PasswordResetForm(request.POST)
-        if form.is_valid():
-            email = form.cleaned_data["email"]
-            user = get_user_by_email(email)
-
-            if user:
-                # Get last reset request time
-                last_request_time = get_last_reset_request_time(user.pk)
-                if last_request_time:
-                    last_request_dt = timezone.datetime.fromisoformat(last_request_time)
-                    if timezone.is_naive(last_request_dt):
-                        last_request_dt = timezone.make_aware(last_request_dt)
-
-                    time_since_last_request = timezone.now() - last_request_dt
-
-                    if time_since_last_request < timedelta(minutes=2):
-                        countdown = 120 - time_since_last_request.seconds
-                        return render(
-                            request,
-                            "password_reset_request.html",
-                            {"form": form, "countdown": countdown},
-                        )
-
-                    # Update reset request time if time has passed
-                    update_reset_request_time(user.pk)
-                else:
-                    update_reset_request_time(user.pk)
-
-                # Send reset email
-                reset_token = default_token_generator.make_token(user)
-                reset_url = request.build_absolute_uri(
-                    reverse("password_reset_confirm", args=[user.pk, reset_token])
+    error_message = None
+    form = PasswordResetForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        email = form.cleaned_data["email"]
+        if not email:
+            error_message = "The email you entered is not registered with an account."
+            return render(
+                request,
+                "password_reset_request.html",
+                {"form": form, "error_message": error_message},
+            )
+        user = get_user_by_email(email)
+        if user:
+            if not user.is_active:
+                error_message = (
+                    "The email you entered is not registered with an account."
                 )
-                subject = "Password Reset Requested"
-                email_context = {"username": user.username, "reset_url": reset_url}
-                html_message = render_to_string(
-                    "password_reset_email.html", email_context
+                return render(
+                    request,
+                    "password_reset_request.html",
+                    {"form": form, "error_message": error_message},
                 )
-
-                # Create an unverified SSL context
-                unverified_ssl_context = ssl._create_unverified_context()
-
-                # Send the email with the unverified context
-                connection = get_connection(ssl_context=unverified_ssl_context)
-                send_mail(
-                    subject,
-                    "",
-                    "fiton.notifications@gmail.com",
-                    [email],
-                    html_message=html_message,
-                    connection=connection,
+            last_request_time_str = get_last_reset_request_time(user.user_id)
+            if last_request_time_str:
+                last_request_time = timezone.datetime.fromisoformat(
+                    last_request_time_str
                 )
-
-                return redirect("password_reset_done")
-            # else:
-            #     error_message = (
-            #         "The email you entered is not registered with an account."
-            #     )
-    else:
-        form = PasswordResetForm()
+                time_since_last_request = timezone.now() - last_request_time
+                if time_since_last_request < timedelta(minutes=1):
+                    countdown = 60 - time_since_last_request.seconds
+                    return render(
+                        request,
+                        "password_reset_request.html",
+                        {"form": form, "countdown": countdown},
+                    )
+            update_reset_request_time(user.user_id)
+            reset_token = default_token_generator.make_token(user)
+            uid = urlsafe_base64_encode(force_bytes(user.user_id))
+            reset_url = request.build_absolute_uri(
+                reverse("password_reset_confirm", args=[uid, reset_token])
+            )
+            message = render_to_string(
+                "password_reset_email.html",
+                {"username": user.username, "reset_url": reset_url},
+            )
+            email_message = EmailMessage(
+                "Password Reset Requested",
+                message,
+                "fiton.notifications@gmail.com",
+                [email],
+            )
+            email_message.content_subtype = "html"
+            email_message.send()
+            return redirect("password_reset_done")
+        error_message = "The email you entered is not registered with an account."
+        return render(
+            request,
+            "password_reset_request.html",
+            {"form": form, "error_message": error_message},
+        )
     return render(
-        request, "password_reset_request.html", {"form": form, "countdown": countdown}
+        request,
+        "password_reset_request.html",
+        {"form": form, "error_message": error_message, "countdown": countdown},
     )
 
 
-def password_reset_confirm(request, user_id, token):
-    user = MockUser(get_user_by_uid(user_id))
-
-    if user and default_token_generator.check_token(user, token):
-        if request.method == "POST":
-            form = SetNewPasswordForm(request.POST)
-            if form.is_valid():
+def password_reset_confirm(request, uidb64, token):
+    if not uidb64 or not token:
+        return render(
+            request,
+            "password_reset_invalid.html",
+            {"error_message": "The password reset link is invalid or has expired."},
+        )
+    try:
+        user_id = force_str(urlsafe_base64_decode(uidb64))
+        user = get_user_by_uid(user_id)
+        if user and default_token_generator.check_token(user, token):
+            form = SetNewPasswordForm(request.POST or None)
+            if request.method == "POST" and form.is_valid():
                 new_password = form.cleaned_data["new_password"]
-
-                # Update the user's password in DynamoDB
-                update_user_password(user.pk, new_password)
-                return redirect("password_reset_complete")
-        else:
-            form = SetNewPasswordForm()
-        return render(request, "password_reset_confirm.html", {"form": form})
-    else:
-        return render(request, "password_reset_invalid.html")
+                confirm_password = form.cleaned_data["confirm_password"]
+                if new_password == confirm_password:
+                    update_user_password(user.user_id, new_password)
+                    messages.success(
+                        request, "Your password has been successfully reset."
+                    )
+                    return redirect("password_reset_complete")
+                form.add_error("confirm_password", "Passwords do not match.")
+            return render(request, "password_reset_confirm.html", {"form": form})
+        return render(
+            request,
+            "password_reset_invalid.html",
+            {"error_message": "The password reset link is invalid or has expired."},
+        )
+    except Exception:
+        return render(
+            request,
+            "password_reset_invalid.html",
+            {"error_message": "The password reset link is invalid or has expired."},
+        )
 
 
 def password_reset_complete(request):
@@ -376,7 +453,9 @@ def authorize_google_fit(request):
         # else:
         print(settings.GOOGLEFIT_CLIENT_CONFIG)
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
-        flow.redirect_uri = request.build_absolute_uri(reverse("callback_google_fit"))
+        flow.redirect_uri = request.build_absolute_uri(
+            reverse("callback_google_fit")
+        ).replace("http://", "https://")
         print("Redirected URI: ", flow.redirect_uri)
         authorization_url, state = flow.authorization_url(
             access_type="offline", include_granted_scopes="true"
@@ -392,6 +471,7 @@ def authorize_google_fit(request):
 
 def callback_google_fit(request):
     user_id = request.session.get("user_id")
+    print("Inside Callback")
 
     # Fetch user details from DynamoDB
     user = get_user(user_id)
@@ -449,6 +529,35 @@ def callback_google_fit(request):
     return redirect("homepage")
 
 
+def delink_google_fit(request):
+    if "credentials" in request.session:
+        credentials = Credentials(**request.session["credentials"])
+
+        # Revoke the token on Google's side (optional but recommended)
+        revoke_endpoint = "https://accounts.google.com/o/oauth2/revoke"
+        token = credentials.token
+        revoke_response = requests.post(
+            revoke_endpoint,
+            params={"token": token},
+            headers={"content-type": "application/x-www-form-urlencoded"},
+        )
+
+        if revoke_response.status_code == 200:
+            print("Google account successfully revoked.")
+        else:
+            print("Failed to revoke Google account.")
+
+        # Remove credentials from the session
+        del request.session["credentials"]
+
+        # Display a message to the user (optional)
+        messages.success(request, "Your Google account has been successfully delinked.")
+    else:
+        messages.error(request, "No linked Google account found.")
+
+    return redirect("profile")
+
+
 def fitness_trainer_application_view(request):
     user_id = request.session.get("user_id")
     if request.method == "POST":
@@ -487,6 +596,12 @@ def fitness_trainer_application_view(request):
 
 
 def fitness_trainer_applications_list_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page.")
+
     # Retrieve applications from DynamoDB
     applications = get_fitness_trainer_applications()
 
@@ -496,6 +611,106 @@ def fitness_trainer_applications_list_view(request):
         "fitness_trainer_applications_list.html",
         {"applications": applications},
     )
+
+
+def fitness_trainers_list_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of trainers from DynamoDB
+    trainers = get_fitness_trainers()
+
+    # Render the list of trainers
+    return render(
+        request,
+        "fitness_trainers_list.html",
+        {"trainers": trainers},
+    )
+
+
+def approve_fitness_trainer(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get("username")
+        user = get_user_by_username(username)
+
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        make_fitness_trainer(user["user_id"])
+
+        subject = "Fitness Trainer Application Approved"
+        message = render_to_string(
+            "fitness_trainer_email.html",
+            {"username": username, "approval": True, "reason": ""},
+        )
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = user.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "html"
+        email_message.send()
+
+        return JsonResponse(
+            {"status": "success", "message": "Fitness Trainer has been approved"}
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def reject_fitness_trainer(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get("username")
+        user = get_user_by_username(username)
+
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        remove_fitness_trainer(user["user_id"])
+
+        subject = "Fitness Trainer Application Rejected"
+        message = render_to_string(
+            "fitness_trainer_email.html",
+            {
+                "username": username,
+                "approval": False,
+                "reason": "We are not accepting fitness trainers right now, please try again later",
+            },
+        )
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = user.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "html"
+        email_message.send()
+
+        return JsonResponse(
+            {"status": "success", "message": "Fitness Trainer application rejected"}
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 
 # -------------------------------
@@ -513,16 +728,112 @@ def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
     thread = threads_table.get_item(Key={"ThreadID": thread_id}).get("Item")
     posts = fetch_posts_for_thread(thread_id)  # Fetch replies related to the thread
-
     if not thread:
         return JsonResponse(
             {"status": "error", "message": "Thread not found"}, status=404
         )
 
+    user_id = request.session.get("user_id")
+
+    user = get_user(user_id)
+
+    is_banned = user.get("is_banned")
+    if is_banned:
+        return render(request, "forums.html", {"is_banned": is_banned})
+
     user_id = request.session.get("username")  # Assuming user is logged in
 
     if request.method == "POST":
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
+
+            # Parse the AJAX request data
+            data = json.loads(request.body.decode("utf-8"))
+            action = data.get("action")
+            post_id = data.get("post_id")
+            print("Action received:", action)  # Print the action value
+
+            if action == "like_post":
+                # Handle like/unlike for the main thread post
+                liked_by = thread.get("LikedBy", [])
+                if user_id in liked_by:
+                    # Unlike logic
+                    likes = max(0, thread.get("Likes", 0) - 1)
+                    liked_by.remove(user_id)
+                else:
+                    # Like logic
+                    likes = thread.get("Likes", 0) + 1
+                    liked_by.append(user_id)
+                threads_table.update_item(
+                    Key={"ThreadID": thread_id},
+                    UpdateExpression="SET Likes=:l, LikedBy=:lb",
+                    ExpressionAttributeValues={":l": likes, ":lb": liked_by},
+                )
+                return JsonResponse(
+                    {"status": "success", "likes": likes, "liked": user_id in liked_by}
+                )
+
+            elif action == "like_comment":
+                # Handle like/unlike for a comment
+                post = posts_table.get_item(
+                    Key={"PostID": post_id, "ThreadID": thread_id}
+                ).get("Item")
+                if not post:
+                    return JsonResponse(
+                        {"status": "error", "message": "Comment not found"}, status=404
+                    )
+
+                liked_by = post.get("LikedBy", [])
+                if user_id in liked_by:
+                    # Unlike logic
+                    likes = max(0, post.get("Likes", 0) - 1)
+                    liked_by.remove(user_id)
+                else:
+                    # Like logic
+                    likes = post.get("Likes", 0) + 1
+                    liked_by.append(user_id)
+                posts_table.update_item(
+                    Key={"PostID": post_id, "ThreadID": thread_id},
+                    UpdateExpression="SET Likes=:l, LikedBy=:lb",
+                    ExpressionAttributeValues={":l": likes, ":lb": liked_by},
+                )
+                return JsonResponse(
+                    {"status": "success", "likes": likes, "liked": user_id in liked_by}
+                )
+
+            elif action == "report_comment":
+                # Handle report for a comment (you can define reporting logic here)
+                # For simplicity, let's say reporting just returns a success message
+                return JsonResponse(
+                    {"status": "success", "message": "Comment reported successfully!"}
+                )
+
+            elif action == "add_reply":
+                print("add reply")
+
+                # Handle adding a reply to a comment
+                reply_content = data.get("content", "").strip()
+                if not reply_content:
+                    return JsonResponse(
+                        {"status": "error", "message": "Reply content cannot be empty!"}
+                    )
+
+                # create reply
+                reply_id = create_reply(
+                    post_id=post_id,
+                    thread_id=thread_id,
+                    user_id=user_id,
+                    content=reply_content,
+                )
+                # Return success and the reply content with the username
+                return JsonResponse(
+                    {
+                        "status": "success",
+                        "content": reply_content,
+                        "username": user_id,
+                        "reply_id": reply_id,
+                    }
+                )
+
             # Get the list of users who have liked the thread
             liked_by = thread.get("LikedBy", [])
 
@@ -547,18 +858,29 @@ def thread_detail_view(request, thread_id):
                 {"status": "success", "likes": likes, "liked": user_id in liked_by}
             )
 
+        # Handle non-AJAX post submission for creating a new comment
+        elif "content" in request.POST:
+            # Add a new post to the thread
+            new_content = request.POST.get("content").strip()
+            if new_content:
+                post_comment(thread_id=thread_id, user_id=user_id, content=new_content)
+
+            # Redirect after posting to avoid resubmission on refresh
+            return redirect("thread_detail", thread_id=thread_id)
+
         else:
             # Handle reply submission (non-AJAX form submission)
             content = request.POST.get("content")
 
             if content and user_id:
-                create_reply(thread_id=thread_id, user_id=user_id, content=content)
+                post_comment(thread_id=thread_id, user_id=user_id, content=content)
                 return redirect("thread_detail", thread_id=thread_id)
 
     return render(
         request,
         "thread_detail.html",
         {
+            "user": user,
             "thread": thread,
             "posts": posts,
             "liked": user_id in thread.get("LikedBy", []),
@@ -629,6 +951,14 @@ def delete_post_view(request):
 
 
 def forum_view(request):
+    user_id = request.session.get("username")
+    user = get_user_by_username(user_id)
+    is_banned = user.get("is_banned")
+    print(user)
+    print(is_banned)
+    if is_banned:
+        return render(request, "forums.html", {"is_banned": is_banned})
+
     # Get filter inputs from the request's GET parameters
     username = request.GET.get("username", "")  # Username filter
     thread_type = request.GET.get("type", "all")  # Thread or Reply filter
@@ -651,3 +981,943 @@ def forum_view(request):
     )  # Assuming you have a function to fetch users who posted threads/replies
 
     return render(request, "forums.html", {"threads": threads, "users": users})
+
+
+######################################
+#       Fetching data using API     #
+######################################
+
+
+async def format_bod_fitness_data(total_data):
+    list1 = total_data["glucose"]["glucose_data_json"]
+    list2 = total_data["pressure"]["pressure_data_json"]
+
+    def parse_date(date_str):
+        return dt.datetime.strptime(date_str, "%b %d, %I %p")
+
+    # Extract all unique start dates from both lists
+    all_dates = set()
+    for item in list1 + list2:
+        all_dates.add(item["start"])
+
+    # Update list1
+    for date in all_dates:
+        found = False
+        for item in list1:
+            if item["start"] == date:
+                found = True
+                break
+        if not found:
+            list1.append({"start": date, "end": date, "count": 0})
+
+    # Update list2
+    for date in all_dates:
+        found = False
+        for item in list2:
+            if item["start"] == date:
+                found = True
+                break
+        if not found:
+            list2.append({"start": date, "end": date, "count": 0})
+
+    # Sort lists by start date
+    list1.sort(key=lambda x: parse_date(x["start"]))
+    list2.sort(key=lambda x: parse_date(x["start"]))
+
+    total_data["glucose"]["glucose_data_json"] = list1
+    total_data["pressure"]["pressure_data_json"] = list2
+
+    return total_data
+
+
+def process_dynamo_data(items, frequency):
+    # Dictionary to hold the data grouped by date
+    print("Items in dictionary", items)
+    date_groups = defaultdict(list)
+
+    # Process each item
+    for item in items:
+        time = dt.datetime.strptime(item["time"], "%Y-%m-%dT%H:%M")
+        start, end = get_group_key(time, frequency)
+        start_key = start.strftime("%b %d, %I %p")
+        end_key = end.strftime("%b %d, %I %p")
+        value = float(item["value"])
+        date_groups[(start_key, end_key)].append(value)
+
+    # Prepare the final data structure
+    result = []
+
+    for (start_key, end_key), values in date_groups.items():
+        avg_count = sum(values) / len(values) if values else 0
+        result.append(
+            {
+                "start": start_key,
+                "end": end_key,
+                "count": avg_count,
+            }
+        )
+
+    return {"Items": result}
+
+
+# function to convert miliseconds to Day
+def parse_millis(millis):
+    return dt.datetime.fromtimestamp(int(millis) / 1000).strftime("%b %d, %I %p")
+
+
+def get_group_key(time, frequency):
+    """Adjusts start and end times based on frequency."""
+    if frequency == "hourly":
+        start = time.replace(minute=0, second=0, microsecond=0)
+        end = start + dt.timedelta(hours=1)
+    elif frequency == "daily":
+        start = time.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + dt.timedelta(days=1)
+    elif frequency == "weekly":
+        start = time - dt.timedelta(days=time.weekday())
+        start = start.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + dt.timedelta(days=7)
+    elif frequency == "monthly":
+        start = time.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        end = start + dt.timedelta(
+            days=(time.replace(month=time.month % 12 + 1, day=1) - time).days
+        )
+    else:
+        start = time  # Fallback to the exact time if frequency is unrecognized
+        end = time
+
+    return start, end
+
+
+def merge_data(existing_data, new_data, frequency):
+    """
+    Merges new data into existing data based on overlapping time ranges defined by frequency.
+
+    Parameters:
+    existing_data (list): The existing list of data points for a metric.
+    new_data (list): The new data points to be merged.
+    frequency (str): The frequency of data collection ('hourly', 'daily', 'weekly', 'monthly').
+
+    Returns:
+    list: Updated list of data points after merging.
+    """
+
+    # Helper to parse datetime from string
+    def parse_time(time_str):
+        return dt.datetime.strptime(time_str, "%b %d, %I %p")
+
+    # Create index of existing data by start time for quick access
+    data_index = {}
+    for item in existing_data:
+        start, end = get_group_key(parse_time(item["start"]), frequency)
+        data_index[start] = item
+        item["end_range"] = end  # Temporarily store the range end to use in comparisons
+
+    # Process each new data point
+    for new_item in new_data:
+        new_start, new_end = get_group_key(parse_time(new_item["start"]), frequency)
+        if new_start in data_index:
+            # There's an overlap, so update the existing entry
+            existing_item = data_index[new_start]
+            # Averaging the counts, updating mins and maxs
+            existing_item["count"] = (existing_item["count"] + new_item["count"]) / 2
+            existing_item["min"] = min(existing_item["min"], new_item["min"])
+            existing_item["max"] = max(existing_item["max"], new_item["max"])
+        else:
+            # No overlap, append this new item
+            new_item["end"] = new_end.strftime(
+                "%b %d, %I %p"
+            )  # Format end time for consistency
+            existing_data.append(new_item)
+
+    # Remove temporary 'end_range' from existing items
+    for item in existing_data:
+        item.pop("end_range", None)
+
+    existing_data.sort(key=lambda x: parse_time(x["start"]))
+
+    combined_data = []
+    for obj in existing_data:
+        if not combined_data or parse_time(combined_data[-1]["start"]) != parse_time(
+            obj["start"]
+        ):
+            combined_data.append(obj)
+        else:
+            combined_data[-1]["count"] += obj["count"]
+
+    return combined_data
+
+
+def steps_barplot(data):
+    # Your steps data
+    print("inside steps function\n")
+    steps_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = record["dataset"][0]["point"][0]["value"][0]["intVal"]
+            steps_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"steps_data_json": steps_data}
+    return context
+
+
+def resting_heartrate_plot(data):
+    print("inside resting heart function\n")
+    resting_heart_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = int(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            resting_heart_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"resting_heart_data_json": resting_heart_data}
+    return context
+
+
+def sleep_plot(data):
+    print("inside sleep function\n")
+    sleep_data = []
+    for record in data["session"]:
+        d = {}
+        d["start"] = parse_millis(record["startTimeMillis"])
+        d["end"] = parse_millis(record["endTimeMillis"])
+        d["count"] = (
+            (int(record["endTimeMillis"]) - int(record["startTimeMillis"]))
+            / 1000
+            / 60
+            / 60
+        )
+        sleep_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"sleep_data_json": sleep_data}
+    return context
+
+
+def heartrate_plot(data):
+    print("inside heart function\n")
+    heart_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = float(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            d["min"] = int(record["dataset"][0]["point"][0]["value"][1]["fpVal"])
+            d["max"] = int(record["dataset"][0]["point"][0]["value"][2]["fpVal"])
+            heart_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"heart_data_json": heart_data}
+    return context
+
+
+def activity_plot(data):
+    print("inside activity function\n")
+    activity_data = {}
+    for record in data["session"]:
+        activity_name = df.loc[df["Integer"] == record["activityType"]][
+            "Activity Type"
+        ].values
+        if len(activity_name) == 0:
+            continue
+        act = activity_name[0]
+        duration = (
+            (int(record["endTimeMillis"]) - int(record["startTimeMillis"])) / 1000 / 60
+        )
+        if act in activity_data:
+            activity_data[act] += int(duration)
+        else:
+            activity_data[act] = int(duration)
+
+    activity_data = sorted(activity_data.items(), key=lambda x: x[1], reverse=True)
+    activity_data = activity_data[:10]
+
+    # Pass the plot path to the template
+    context = {"activity_data_json": activity_data}
+    return context
+
+
+def oxygen_plot(data):
+    print("inside oxygen saturation function\n")
+    oxygen_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = int(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            oxygen_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"oxygen_data_json": oxygen_data}
+    return context
+
+
+def glucose_plot(data):
+    print("inside blood glucose function\n")
+    oxygen_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = int(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            oxygen_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"glucose_data_json": oxygen_data}
+    return context
+
+
+def pressure_plot(data):
+    print("inside blood pressure function\n")
+    oxygen_data = []
+    for record in data["bucket"]:
+        if len(record["dataset"][0]["point"]) == 0:
+            continue
+        else:
+            d = {}
+            d["start"] = parse_millis(record["startTimeMillis"])
+            d["end"] = parse_millis(record["endTimeMillis"])
+            d["count"] = int(record["dataset"][0]["point"][0]["value"][0]["fpVal"])
+            oxygen_data.append(d)
+
+    # Pass the plot path to the template
+    context = {"pressure_data_json": oxygen_data}
+    return context
+
+
+async def fetch_metric_data(service, metric, total_data, duration, frequency, email):
+
+    end_time = dt.datetime.now() - dt.timedelta(minutes=1)
+
+    if duration == "day":
+        start_time = end_time - dt.timedelta(hours=23, minutes=59)
+    elif duration == "week":
+        start_time = end_time - dt.timedelta(days=6, hours=23, minutes=59)
+    elif duration == "month":
+        start_time = end_time - dt.timedelta(days=29, hours=23, minutes=59)
+    elif duration == "quarter":
+        start_time = end_time - dt.timedelta(days=89, hours=23, minutes=59)
+
+    if frequency == "hourly":
+        bucket = 3600000
+    elif frequency == "daily":
+        bucket = 86400000
+    elif frequency == "weekly":
+        bucket = 604800000
+    elif frequency == "monthly":
+        bucket = 2592000000
+
+    # print(start_time.timestamp())
+    # print(end_time.timestamp())
+
+    start_date = start_time.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    end_date = end_time.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    # print(start_date)
+    # print(end_date)
+
+    if metric == "sleep":
+        data = (
+            service.users()
+            .sessions()
+            .list(
+                userId="me",
+                activityType=72,
+                startTime=f"{start_date}",
+                endTime=f"{end_date}",
+            )
+            .execute()
+        )
+    elif metric == "activity":
+        data = (
+            service.users()
+            .sessions()
+            .list(userId="me", startTime=f"{start_date}", endTime=f"{end_date}")
+            .execute()
+        )
+    else:
+        data = (
+            service.users()
+            .dataset()
+            .aggregate(
+                userId="me",
+                body={
+                    "aggregateBy": [{"dataTypeName": dataTypes[metric]}],
+                    "bucketByTime": {"durationMillis": bucket},
+                    "startTimeMillis": int(start_time.timestamp()) * 1000,
+                    "endTimeMillis": int(end_time.timestamp()) * 1000,
+                },
+            )
+            .execute()
+        )
+
+    if metric == "heart_rate":
+        context = heartrate_plot(data)
+        total_data["heartRate"] = context
+    elif metric == "steps":
+        context = steps_barplot(data)
+        total_data["steps"] = context
+    elif metric == "resting_heart_rate":
+        context = resting_heartrate_plot(data)
+        total_data["restingHeartRate"] = context
+    elif metric == "sleep":
+        context = sleep_plot(data)
+        total_data["sleep"] = context
+    elif metric == "activity":
+        context = activity_plot(data)
+        total_data["activity"] = context
+    elif metric == "oxygen":
+        context = oxygen_plot(data)
+        total_data["oxygen"] = context
+    elif metric == "glucose":
+        context = glucose_plot(data)
+        total_data["glucose"] = context
+    elif metric == "pressure":
+        context = pressure_plot(data)
+        total_data["pressure"] = context
+    response = get_fitness_data(metric, email, start_time, end_time)
+    print(
+        f"Metric : {metric}\nResponse: {response}\n",
+    )
+    print("printing processed data from DynamoDB--------------------------------")
+
+    processed_data = process_dynamo_data(response["Items"], frequency)
+    print("processed data", processed_data)
+
+    # Assuming 'processed_data' is structured similarly for each metric
+    # and 'frequency' is defined appropriately for the context in which this is run
+
+    if metric == "heart_rate":
+        print("heart rate")
+        total_data["heartRate"]["heart_data_json"] = merge_data(
+            total_data["heartRate"]["heart_data_json"],
+            processed_data["Items"],
+            frequency,
+        )
+    elif metric == "steps":
+        print("steps")
+        total_data["steps"]["steps_data_json"] = merge_data(
+            total_data["steps"]["steps_data_json"], processed_data["Items"], frequency
+        )
+    elif metric == "resting_heart_rate":
+        print("resting heart rate")
+        total_data["restingHeartRate"]["resting_heart_data_json"] = merge_data(
+            total_data["restingHeartRate"]["resting_heart_data_json"],
+            processed_data["Items"],
+            frequency,
+        )
+    elif metric == "sleep":
+        print("sleep")
+        total_data["sleep"]["sleep_data_json"] = merge_data(
+            total_data["sleep"]["sleep_data_json"], processed_data["Items"], frequency
+        )
+    elif metric == "activity":
+        print("activity")
+        # final = merge_data(total_data['activity']['activity_data_json'], processed_data['Items'], frequency)
+        # print(final) #
+
+    elif metric == "oxygen":
+        print("oxygen")
+        total_data["oxygen"]["oxygen_data_json"] = merge_data(
+            total_data["oxygen"]["oxygen_data_json"], processed_data["Items"], frequency
+        )
+    else:
+        print("Unknown metric")
+
+
+@sync_to_async
+def get_credentials(request):
+    if "credentials" in request.session:
+        credentials = Credentials(**request.session["credentials"])
+        return credentials, request.user.username
+    return None, None
+
+
+async def fetch_all_metric_data(request, duration, frequency):
+    total_data = {}
+    credentials, email = await get_credentials(request)
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    email = user.get("email")
+    if credentials:
+        # try:
+        service = build("fitness", "v1", credentials=credentials)
+        tasks = []
+        for metric in dataTypes.keys():
+            tasks.append(
+                fetch_metric_data(
+                    service, metric, total_data, duration, frequency, email
+                )
+            )
+
+        await asyncio.gather(*tasks)
+        # total_data = await get_sleep_scores(total_data, email)
+        total_data = await format_bod_fitness_data(total_data)
+
+        # except Exception as e:
+        #     print(e)
+        #     total_data = {}
+
+    else:
+        print("Not Signed in Google")
+    print("total data: ", total_data)
+    return total_data
+
+
+async def get_metric_data(request):
+    credentials = await sync_to_async(lambda: request.session.get("credentials"))()
+    print("Credentials: \n", credentials)
+    if credentials:
+        duration = "week"
+        frequency = "daily"
+
+        if request.GET.get("data_drn"):
+            duration = request.GET.get("data_drn")
+
+        if request.GET.get("data_freq"):
+            frequency = request.GET.get("data_freq")
+
+        total_data = await fetch_all_metric_data(request, duration, frequency)
+
+        context = {"data": total_data}
+        print("Inside get metric:", context)
+        return await sync_to_async(render)(
+            request, "display_metrics_data.html", context
+        )
+    else:
+        await add_message(
+            request,
+            messages.ERROR,
+            "User not logged in. Please sign in to access your data.",
+        )
+        return await perform_redirect("profile")
+
+
+def health_data_view(request):
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    user_email = user.get("email")
+    dynamodb_res = dynamodb
+    table = dynamodb_res.Table("UserFitnessData")
+
+    if request.method == "POST":
+        data = request.POST
+        print(data)
+        table.put_item(
+            Item={
+                "email": user_email,  # Use the default email
+                "metric": data.get("metric"),
+                "time": data.get("time"),
+                "value": data.get("value"),
+            }
+        )
+        return redirect("get_metric_data")
+
+    # Fetch all the metrics data from DynamoDB
+    response = table.scan()
+    metrics_data = {}
+    for item in response["Items"]:
+        metric = item["metric"]
+        if metric not in metrics_data:
+            metrics_data[metric] = []
+        metrics_data[metric].append(item)
+
+    for metric in metrics_data:
+        metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
+
+    return render(request, "display_metric_data.html", {"metrics_data": metrics_data})
+    return render(
+        request,
+        "forums.html",
+        {
+            "user": user,
+            "threads": threads,
+            "users": users,
+            "is_banned": is_banned,
+        },
+    )
+
+
+def add_reply(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body.decode("utf-8"))
+        post_id = data.get("post_id")
+        content = data.get("content")
+        thread_id = data.get("thread_id")
+
+        if not post_id or not content:
+            return JsonResponse(
+                {"status": "error", "message": "Post ID and content are required."},
+                status=400,
+            )
+
+        # Get the user info from the session
+        user_id = request.session.get("username")
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User not authenticated"}, status=403
+            )
+
+        # Create the reply data
+        reply_data = {
+            "ReplyID": str(uuid.uuid4()),  # Unique ID for each reply
+            "UserID": user_id,
+            "Content": content,
+            "CreatedAt": datetime.utcnow().isoformat(),  # Timestamp for each reply
+        }
+
+        # Save the reply to DynamoDB by appending it to the 'Replies' list for the post
+        try:
+            posts_table.update_item(
+                Key={"PostID": post_id, "ThreadID": thread_id},
+                UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
+                ExpressionAttributeValues={":reply": [reply_data], ":empty_list": []},
+                ReturnValues="UPDATED_NEW",
+            )
+        except Exception as e:
+            return JsonResponse(
+                {"status": "error", "message": f"Failed to save reply: {str(e)}"},
+                status=500,
+            )
+
+        # Return success response with reply details
+        return JsonResponse(
+            {
+                "status": "success",
+                "reply_id": reply_data["ReplyID"],
+                "content": content,
+                "username": user_id,
+                "created_at": reply_data["CreatedAt"],
+            }
+        )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def delete_reply_view(request):
+    print("ReplitID:")
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body.decode("utf-8"))
+        post_id = data.get("post_id")
+        reply_id = data.get("reply_id")
+        thread_id = data.get("thread_id")  # Retrieve thread_id from the request data
+
+        if not post_id or not reply_id:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "message": "Post ID, Reply ID and Thread ID are required.",
+                },
+                status=400,
+            )
+
+        # Call the delete_reply function in dynamodb.py
+        result = delete_reply(post_id, thread_id, reply_id)
+
+        if result.get("status") == "success":
+            return JsonResponse({"status": "success"})
+        else:
+            error_message = result.get(
+                "message", "An error occurred while deleting the reply."
+            )
+            return JsonResponse(
+                {"status": "error", "message": error_message}, status=500
+            )
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def delete_thread(request):
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body.decode("utf-8"))
+        thread_id = data.get("thread_id")
+
+        if not thread_id:
+            return JsonResponse(
+                {"status": "error", "message": "Thread ID is required."}, status=400
+            )
+
+        try:
+            # Perform the deletion from DynamoDB
+            threads_table.delete_item(Key={"ThreadID": thread_id})
+            return JsonResponse(
+                {"status": "success", "message": "Thread deleted successfully."}
+            )
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+    return JsonResponse(
+        {"status": "error", "message": "Invalid request method."}, status=400
+    )
+
+
+def reports_view(request):
+    # Get user details to check if they are an admin
+    user = get_user(request.session.get("user_id"))
+
+    # Only allow access if the user is an admin
+    if not user.get("is_admin"):
+        return redirect("forum")  # Redirect non-admins to the main forum page
+
+    if request.method == "POST":
+        data = json.loads(request.body.decode("utf-8"))
+        action = data.get("action")
+        thread_id = data.get("thread_id")
+
+        # Check if the action is to report a thread
+        if action == "report_thread" and thread_id:
+            # Mark the thread as reported in DynamoDB
+            mark_thread_as_reported(thread_id)
+            return JsonResponse({"status": "success"})
+        else:
+            return JsonResponse(
+                {"status": "error", "message": "Invalid request"}, status=400
+            )
+
+    # If it's a GET request, retrieve reported threads and comments
+    reported_data = fetch_reported_threads_and_comments()
+    return render(request, "reports.html", reported_data)
+
+
+# -----------------
+# Ban User Function
+# ------------------
+
+
+def toggle_ban_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(username)
+
+        if not username:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        user = get_user_by_username(username)
+        print(user)
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        uid = user.get("user_id")
+        # Toggle the 'is_banned' attribute
+        is_banned = not user.get("is_banned", False)
+
+        # Define the update expression and attributes
+        update_expression = "set is_banned = :b"
+        expression_values = {":b": is_banned}
+
+        # If banning the user, set 'punishment_date' to the current time
+        if is_banned:
+            est = pytz.timezone("US/Eastern")
+            punishment_date = datetime.now(est).isoformat()
+            update_expression += ", punishment_date = :d"
+            expression_values[":d"] = punishment_date
+        else:
+            # If unbanning, remove punishment_date attribute
+            update_expression += " remove punishment_date"
+
+        # Update the user item in DynamoDB
+        users_table.update_item(
+            Key={"user_id": uid},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+        )
+
+        return JsonResponse({"status": "success", "is_banned": is_banned})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def toggle_mute_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        username = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(username)
+
+        if not username:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        user = get_user_by_username(username)
+        print(user)
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        uid = user.get("user_id")
+        # Toggle the 'is_banned' attribute
+        is_muted = not user.get("is_muted", False)
+
+        # Define the update expression and attributes
+        update_expression = "set is_muted = :b"
+        expression_values = {":b": is_muted}
+
+        # If banning the user, set 'punishment_date' to the current time
+        if is_muted:
+            est = pytz.timezone("US/Eastern")
+            punishment_date = datetime.now(est).isoformat()
+            update_expression += ", punishment_date = :d"
+            expression_values[":d"] = punishment_date
+        else:
+            # If unbanning, remove punishment_date attribute
+            update_expression += " remove punishment_date"
+
+        # Update the user item in DynamoDB
+        users_table.update_item(
+            Key={"user_id": uid},
+            UpdateExpression=update_expression,
+            ExpressionAttributeValues=expression_values,
+        )
+
+        return JsonResponse({"status": "success", "is_muted": is_muted})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def unban_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        user_id = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(user_id)
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        # Set 'is_banned' to False and remove 'punishment_date'
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="set is_banned = :b remove punishment_date",
+            ExpressionAttributeValues={":b": False},
+        )
+
+        return JsonResponse({"status": "success", "message": "User has been unbanned"})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def unmute_user(request):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    if (
+        request.method == "POST"
+        and request.headers.get("x-requested-with") == "XMLHttpRequest"
+    ):
+        data = json.loads(request.body)
+        user_id = data.get(
+            "user_id"
+        )  # Ensure this matches the 'user_id' field in DynamoDB
+        print(user_id)
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing"}, status=400
+            )
+
+        # Fetch user to check if they exist
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User not found"}, status=404
+            )
+
+        # Set 'is_banned' to False and remove 'punishment_date'
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="set is_muted = :b remove punishment_date",
+            ExpressionAttributeValues={":b": False},
+        )
+
+        return JsonResponse({"status": "success", "message": "User has been unmuted"})
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+# -------------
+# Punishmentsx
+# -------------
+
+
+def punishments_view(request):
+    # Check if the current user is an admin
+    user_id = request.session.get("username")
+    user = get_user_by_username(user_id)
+    if not user or not user.get("is_admin"):
+        return HttpResponseForbidden("You do not have permission to access this page.")
+
+    # Fetch only punished users (banned or muted)
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+    response = users_table.scan(
+        FilterExpression="is_banned = :true OR is_muted = :true",
+        ExpressionAttributeValues={":true": True},
+    )
+    punished_users = response.get("Items", [])
+    print(punished_users)
+
+    # Pass the punished users to the template
+    return render(request, "punishments.html", {"punished_users": punished_users})

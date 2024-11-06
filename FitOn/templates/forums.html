@@ -2,7 +2,6 @@
 {% load static %}
 
 {% block content %}
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,81 +11,139 @@
     <link rel="stylesheet" type="text/css" href="{% static 'css/forum.css' %}">
 </head>
 
-<div class="forum-container">
-    <div class="forum-header">
-        <h2>Forum Threads</h2>
-        <a href="{% url 'new_thread' %}" class="new-thread-btn">New Thread</a>
-    </div>
 
-    <!-- Filters Section -->
-    <div class="forum-filters">
-        <form method="GET" action="{% url 'forum' %}">
-            <!-- Filter by username (dropdown) -->
-            <label for="username">Filter by User:</label>
-            <select id="username" name="username">
-                <option value="">All Users</option>
-                {% for user in users %}
-                    <option value="{{ user.username }}">{{ user.username }}</option>
-                {% endfor %}
-            </select>
+    {% if is_banned %}
+        <!-- Display a message if the user is banned -->
+        <div class="ban-message" style="color: red; font-weight: bold; text-align: center; margin-top: 20px;">
+            You are banned from accessing the forum.
+        </div>
+    {% else %}
+    <div class="forum-container">
+        <div class="forum-header">
+            <h2>Forum Threads</h2>
+            {% if not is_banned %}
+                <a href="{% url 'new_thread' %}" class="new-thread-btn">New Thread</a>
+            {% endif %}
 
-            <!-- Filter by thread or reply -->
-            <label for="type">Filter by Type:</label>
-            <select id="type" name="type">
-                <option value="all">All</option>
-                <option value="thread">Thread</option>
-                <option value="reply">Reply</option>
-            </select>
+            {% if user.is_admin %}
+            <a href="{% url 'reports' %}" class="reports-btn">Reports</a>  <!-- Add Reports button for admin -->
+            {% endif %}
+        </div>
+        <!-- Filters Section -->
+        <div class="forum-filters">
+            <form method="GET" action="{% url 'forum' %}">
+                <!-- Filter by username (dropdown) -->
+                <label for="username">Filter by User:</label>
+                <select id="username" name="username">
+                    <option value="">All Users</option>
+                    {% for user in users %}
+                        <option value="{{ user.username }}">{{ user.username }}</option>
+                    {% endfor %}
+                </select>
 
-            <!-- Filter by date range -->
-            <label for="start-date">From:</label>
-            <input type="date" id="start-date" name="start_date">
+                <!-- Filter by thread or reply -->
+                <label for="type">Filter by Type:</label>
+                <select id="type" name="type">
+                    <option value="all">All</option>
+                    <option value="thread">Thread</option>
+                    <option value="reply">Reply</option>
+                </select>
 
-            <label for="end-date">To:</label>
-            <input type="date" id="end-date" name="end_date">
+                <!-- Filter by date range -->
+                <label for="start-date">From:</label>
+                <input type="date" id="start-date" name="start_date">
 
-            <!-- Filter by phrase or text -->
-            <label for="search">Search by Text:</label>
-            <input type="text" id="search" name="search" placeholder="Enter keyword...">
+                <label for="end-date">To:</label>
+                <input type="date" id="end-date" name="end_date">
 
-            <!-- Submit button for filters -->
-            <button type="submit" class="filter-btn">Apply Filters</button>
-        </form>
-    </div>
+                <!-- Filter by phrase or text -->
+                <label for="search">Search by Text:</label>
+                <input type="text" id="search" name="search" placeholder="Enter keyword...">
 
-    <div class="forum-table">
-        <table>
-            <thead>
-                <tr>
-                    <th>Title</th>
-                    <th>Author</th>
-                    <th>Replies</th>
-                    <th>Thread Created</th>
-                    <th>Last Post</th>
-                    <th>Likes</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for thread in threads %}
-                <tr>
-                    <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title }}</a></td>
-                    <td>{{ thread.UserID }}</td>
-                    <td>{{ thread.ReplyCount }}</td>
-                    <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td>
-                    <td>
-                        {% if thread.LastPostTime %}
-                            User: {{ thread.LastPostUser }}<br>
-                            Last Comment: {{ thread.LastPostTime|date:"M d, Y H:i" }}
-                        {% else %}
-                            No replies yet
+                <!-- Submit button for filters -->
+                <button type="submit" class="filter-btn">Apply Filters</button>
+            </form>
+        </div>
+
+        <!-- Forum Table -->
+        <div class="forum-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Author</th>
+                        <th>Replies</th>
+                        <th>Thread Created</th>
+                        <th>Last Post</th>
+                        <th>Likes</th>
+                        {% if user.is_admin %} <!-- Check if the user is an admin -->
+                            <th>Delete</th>
                         {% endif %}
-                    </td>
-                    <td>{{ thread.Likes }} Likes</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for thread in threads %}
+                    <tr>
+                        <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title }}</a></td>
+                        <td>{{ thread.UserID }}</td>
+                        <td>{{ thread.ReplyCount }}</td>
+                        <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td>
+                        <td>
+                            {% if thread.LastPostTime %}
+                                User: {{ thread.LastPostUser }}<br>
+                                Last Comment: {{ thread.LastPostTime|date:"M d, Y H:i" }}
+                            {% else %}
+                                No replies yet
+                            {% endif %}
+                        </td>
+                        <td>{{ thread.Likes }} Likes</td>
+                        {% if user.is_admin %}
+                        <td>
+                            <button class="delete-thread-btn" data-thread-id="{{ thread.ThreadID }}">Delete</button>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
 </div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        document.querySelectorAll(".delete-thread-btn").forEach(button => {
+            button.addEventListener("click", function() {
+                const threadId = this.getAttribute("data-thread-id");
+
+                if (confirm("Are you sure you want to delete this thread?")) {
+                    // Proceed with the delete request
+                    fetch("/delete_thread/", {
+                        method: "POST",
+                        headers: {
+                            "X-CSRFToken": "{{ csrf_token }}",
+                            "Content-Type": "application/json",
+                            "x-requested-with": "XMLHttpRequest"
+                        },
+                        body: JSON.stringify({ "thread_id": threadId })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === "success") {
+                            // Show success message after deletion
+                            alert("Thread deleted successfully.");
+                            
+                            // Remove the thread row from the table after user clicks "OK" on the success message
+                            this.closest("tr").remove();
+                        } else {
+                            alert("Error: " + data.message);
+                        }
+                    })
+                    .catch(error => console.error("Error deleting thread:", error));
+                }
+            });
+        });
+    });
+</script>
 
 {% endblock %}

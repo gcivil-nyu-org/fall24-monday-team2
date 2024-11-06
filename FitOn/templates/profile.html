@@ -112,10 +112,18 @@
                         Update Profile
                     </button>
                 </div>
-
                 <div class="button-container">
-                    <a href="{% url 'authorize_google_fit' %}" class="submit-button">Sign In using Google</a>
+                    <button type="button" class="submit-button" onclick="redirectToGoogleAuth()">
+                        Sign In using Google
+                    </button>
                 </div>
+                <div class="button-container">
+                    <button type="button" class="deactivate-button" onclick="redirectToGoogleDelink()">
+                        Delink Google Account
+                    </button>
+                </div>
+                
+                
             </form>
         </div>
 
@@ -124,6 +132,7 @@
 
             {% if user.is_admin %}
                 <button type="button" class="submit-button" onclick="redirectToFitnessTrainerApplicationsList()">Review Fitness Trainer Applications</button>
+                <button type="button" class="submit-button" onclick="redirectToPunishments()">Manage Punishments</button>
             {% elif not user.is_fitness_trainer %}
                 <button type="button" class="submit-button" onclick="redirectToFitnessTrainerApplication()">Become a Fitness Trainer</button>
             {% endif %}
@@ -181,6 +190,10 @@
         // Function to redirect to the fitness trainer application view
         function redirectToFitnessTrainerApplication() {
             window.location.href = "{% url 'fitness_trainer_application_view' %}";
+        }
+
+        function redirectToPunishments() {
+            window.location.href = "{% url 'punishments' %}";
         }
 
         // Function to redirect admin to the fitness trainer applications list view
@@ -257,6 +270,36 @@
         // When "OK" is clicked in the success modal, redirect to the homepage
         okBtn.onclick = function() {
             window.location.href = "{% url 'homepage' %}";
+        }
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const loginSuccess = "{{ login_success|default:'false' }}" === "True";
+            if (loginSuccess) {
+                const signInButton = document.querySelector('.submit-button[onclick*="redirectToGoogleAuth"]');
+                if (signInButton) {
+                    signInButton.classList.add('success');
+                }
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const delinkSuccess = "{{ delink_success|default:'false' }}" === "True";
+            if (delinkSuccess) {
+                const delinkGoogleButton = document.querySelector('.deactivate-button[onclick*="redirectToGoogleDelink"]');
+                if (delinkGoogleButton) {
+                    delinkGoogleButton.classList.add('success');
+                }
+            }
+        });
+
+        function redirectToGoogleAuth() {
+            window.location.href = "{% url 'authorize_google_fit' %}";
+        }
+
+        function redirectToGoogleDelink() {
+            window.location.href = "{% url 'delink_google_fit' %}";
         }
     </script>
 

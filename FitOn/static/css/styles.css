@@ -105,6 +105,7 @@ footer {
 .profile-picture-container:hover .edit-icon {
     display: block;
 }
+
 .form-container {
     padding: 20px;
     background-color: #f9f9f9; /* Light background for contrast */
@@ -184,7 +185,8 @@ footer {
 }
 
 /* Common styles for both buttons */
-.submit-button, .deactivate-button {
+.submit-button,
+.deactivate-button {
     flex: 1; /* Make buttons take equal space */
     padding: 10px 20px; /* Padding for the buttons */
     border: none; /* Remove default border */
@@ -193,6 +195,7 @@ footer {
     font-size: 16px; /* Font size */
     margin: 0 10px; /* Add some space between buttons */
     transition: background-color 0.3s ease; /* Smooth transition for background color */
+    text-decoration: none; /* Remove underline */
 }
 
 /* Submit Button styles */
@@ -201,7 +204,6 @@ footer {
     color: white; /* White text */
 }
 
-/* Hover effect for the Submit button */
 .submit-button:hover {
     background-color: #5766db; /* Darker blue on hover */
 }
@@ -212,14 +214,18 @@ footer {
     color: white; /* White text */
 }
 
-/* Hover effect for the Deactivate button */
 .deactivate-button:hover {
     background-color: #ff4949; /* Darker red on hover */
 }
 
+.deactivate-button.success {
+    background-color: #5c0303; /* Darker red for success state */
+}
+
 /* Adjust button size for smaller screens */
 @media (max-width: 600px) {
-    .submit-button, .deactivate-button {
+    .submit-button,
+    .deactivate-button {
         flex: none;
         width: 100%; /* Full width for small screens */
         margin-bottom: 10px; /* Space between buttons */
@@ -236,35 +242,59 @@ footer {
 }
 
 .table-container {
-    overflow-x: auto; /* Enables horizontal scrolling */
+    width: 80%;
+    margin: 20px auto;
+    font-family: Arial, sans-serif;
+    overflow-x: auto;
 }
 
-.applications-table {
+.trainers-table {
     width: 100%;
     border-collapse: collapse;
     margin: 20px 0;
     font-size: 16px;
+    background-color: #f9f9f9;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
-.applications-table th,
-.applications-table td {
+.trainers-table th,
+.trainers-table td {
     padding: 10px;
-    border: 1px solid #ddd; /* Add border to cells */
-    text-align: left; /* Align text to the left */
+    border: 1px solid #ddd;
+    text-align: left;
 }
 
-.applications-table th {
-    background-color: #f4f4f4; /* Light gray background for header */
+.trainers-table th {
+    background-color: #333333;
+    color: white;
+    text-align: center;
 }
 
-.applications-table tr:nth-child(even) {
-    background-color: #f9f9f9; /* Zebra striping for even rows */
+.trainers-table tr:nth-child(even) {
+    background-color: #f9f9f9;
 }
 
-.no-applications {
+.no-trainers {
+    text-align-last: center;
     text-align: center;
     font-weight: bold;
-    color: red; /* Indicate no applications found */
+    color: #999999;
+}
+
+.notification {
+    padding: 10px;
+    margin-bottom: 20px;
+    background-color: #4caf50;
+    color: white;
+    border-radius: 5px;
+    display: none;
+    transition: opacity 0.5s ease;
+    opacity: 0;
+}
+
+.notification.show {
+    display: block;
+    opacity: 1;
 }
 
 .error {
@@ -299,9 +329,9 @@ footer {
 }
 
 .navbar {
-    background-color: #007bff; /* Dark blue */
-    padding: 15px 30px; /* Increased padding */
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2); /* Enhanced shadow */
+    background-color: #007bff;
+    padding: 15px 30px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
 }
 
 .navbar-container {
@@ -353,7 +383,6 @@ footer {
     color: #FFFFFF; /* White */
 }
 
-
 /* Hamburger Menu */
 .hamburger {
     display: none;
@@ -397,7 +426,6 @@ footer {
 .modal-content.show {
     transform: translateY(0); /* Slide down effect */
 }
-
 
 /* Button Styles */
 .modal-buttons {
@@ -460,24 +488,3 @@ footer {
     color: white;
     border: none;
 }
-
-/* Green background for successful login */
-.submit-button.success {
-    background-color: #28a745; /* Green color */
-}
-
-/* .google-sign-in-button {
-    display: inline-block;
-    background-color: #6A82FB;
-    color: white;
-    text-align: center;
-    padding: 10px 20px;
-    border-radius: 6px;
-    text-decoration: none;
-    font-size: 16px;
-    transition: background-color 0.3s ease;
-}
-
-.google-sign-in-button:hover {
-    background-color: #5766db;
-} */

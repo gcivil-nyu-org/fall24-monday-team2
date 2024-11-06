@@ -1,13 +1,15 @@
-import boto3
 from boto3.dynamodb.conditions import Attr
+import boto3, uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
+from datetime import datetime, timezone
+from django.conf import settings
+
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.conf import settings
 import uuid
-from datetime import datetime
 
 
 # Connect to DynamoDB
@@ -17,23 +19,43 @@ s3_client = boto3.client("s3", region_name="us-west-2")
 users_table = dynamodb.Table("Users")
 threads_table = dynamodb.Table("ForumThreads")
 posts_table = dynamodb.Table("ForumPosts")
+fitness_table = dynamodb.Table("UserFitnessData")
 
 password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
+fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
 
 class MockUser:
     def __init__(self, user_data):
-        self.email = user_data.get("email")
-        self.username = user_data.get("username")
-        self.password = user_data.get("password")
-        self.is_active = True
-        self.last_login = None
-        self.pk = user_data.get("user_id")
+        if isinstance(user_data, dict):
+            self.user_id = user_data.get("user_id", None)
+            self.email = user_data.get("email", "")
+            self.username = user_data.get("username", "")
+            self.password = user_data.get("password", "")
+            self.date_of_birth = user_data.get("date_of_birth", "")
+            self.is_active = user_data.get("is_active", True)
+            self.last_login = user_data.get("last_login", None)
+            self.pk = self.user_id
+        else:
+            self.user_id = None
+            self.email = ""
+            self.username = ""
+            self.password = ""
+            self.date_of_birth = ""
+            self.is_active = True
+            self.last_login = None
+            self.pk = None
 
     def get_email_field_name(self):
         return "email"
+
+    def get_username(self):
+        return self.username
+
+    def is_authenticated(self):
+        return True
 
 
 def get_user_by_username(username):
@@ -66,6 +88,11 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
                 "date_of_birth": str(date_of_birth),
                 "gender": gender,
                 "password": password,  # Hashed password
+                "is_admin": False,
+                "is_fitness_trainer": False,
+                "is_muted": False,
+                "is_banned": False,
+                "punishment_date": "",
             }
         )
 
@@ -101,9 +128,10 @@ def delete_user_by_username(username):
         user_id = users[0]["user_id"]  # Get the user's 'user_id'
 
         # Delete the user by user_id (or username if it's the primary key)
-        delete_response = users_table.delete_item(
+        users_table.delete_item(
             Key={"user_id": user_id}  # Replace with your partition key
         )
+
         print(f"User '{username}' successfully deleted.")
         return True
 
@@ -114,11 +142,7 @@ def delete_user_by_username(username):
 
 def get_user_by_email(email):
     try:
-        response = users_table.scan(
-            FilterExpression="#e = :email",
-            ExpressionAttributeNames={"#e": "email"},
-            ExpressionAttributeValues={":email": email},
-        )
+        response = users_table.scan(FilterExpression=Attr("email").eq(email))
         users = response.get("Items", [])
         if users:
             return MockUser(users[0])
@@ -130,10 +154,14 @@ def get_user_by_email(email):
 
 def get_user_by_uid(uid):
     try:
+        # Fetch from DynamoDB table
         response = users_table.get_item(Key={"user_id": uid})
-        return response.get("Item", None)
+        user_data = response.get("Item", None)
+
+        if user_data:
+            return MockUser(user_data)
+        return None
     except Exception as e:
-        print(f"Error fetching user by UID: {e}")
         return None
 
 
@@ -165,13 +193,17 @@ def get_last_reset_request_time(user_id):
 
 def update_reset_request_time(user_id):
     try:
+        if not user_id:
+            print("User ID is None. Cannot update reset request time.")
+            return None
+
+        # Insert a new entry or update the existing reset request time
         response = password_reset_table.put_item(
             Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
         )
-        return response
+        print(f"Reset request time updated for user_id '{user_id}'.")
     except Exception as e:
         print(f"Error updating reset request time for user_id '{user_id}': {e}")
-    return None
 
 
 def get_user(user_id):
@@ -311,8 +343,6 @@ def get_fitness_trainer_applications():
 
         # Process the list of applications to generate S3 URLs
         for application in applications:
-            # Generate S3 URLs for resume and certifications
-            s3_client = boto3.client("s3")
             application["resume_url"] = s3_client.generate_presigned_url(
                 "get_object",
                 Params={
@@ -348,6 +378,81 @@ def get_fitness_trainer_applications():
         return []
 
 
+def get_fitness_trainers():
+    try:
+        # Scan DynamoDB table for all fitness trainers
+        response = fitness_trainers_table.scan()
+        trainers = response.get("Items", [])
+
+        # Process the list of fitness trainers to generate S3 URLs
+        for trainer in trainers:
+            trainer["resume_url"] = s3_client.generate_presigned_url(
+                "get_object",
+                Params={
+                    "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
+                    "Key": trainer["resume"],
+                },
+                ExpiresIn=3600,  # URL valid for 1 hour
+            )
+
+            # Check if certifications exist, and generate presigned URL
+            if trainer.get("certifications"):
+                trainer["certifications_url"] = s3_client.generate_presigned_url(
+                    "get_object",
+                    Params={
+                        "Bucket": settings.AWS_STORAGE_BUCKET_NAME,
+                        "Key": trainer["certifications"],
+                    },
+                    ExpiresIn=3600,
+                )
+            else:
+                trainer["certifications_url"] = None
+
+            user = get_user(trainer["user_id"])
+            trainer["username"] = user["username"] if user else "Unknown"
+
+        return trainers
+
+    except ClientError as client_err:
+        print(f"Client error: {client_err.response['Error']['Message']}")
+        return []
+    except Exception as e:
+        print(f"Unexpected error retrieving fitness trainers: {e}")
+        return []
+
+
+def make_fitness_trainer(user_id):
+    try:
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_fitness_trainer = :ft",
+            ExpressionAttributeValues={":ft": True},
+        )
+
+        response = applications_table.get_item(Key={"user_id": user_id})
+        application_item = response["Item"]
+
+        fitness_trainers_table.put_item(Item=application_item)
+        applications_table.delete_item(Key={"user_id": user_id})
+    except Exception as e:
+        print(f"Unexpected error making updates: {e}")
+        return []
+
+
+def remove_fitness_trainer(user_id):
+    try:
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_fitness_trainer = :ft, is_rejected = :r",
+            ExpressionAttributeValues={":ft": False, ":r": True},
+        )
+        fitness_trainers_table.delete_item(Key={"user_id": user_id})
+        applications_table.delete_item(Key={"user_id": user_id})
+    except Exception as e:
+        print(f"Unexpected error making updates: {e}")
+        return []
+
+
 # -------------------------------
 # Forums Functions
 # -------------------------------
@@ -355,7 +460,7 @@ def get_fitness_trainer_applications():
 
 def create_thread(title, user_id, content):
     thread_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now().isoformat()
 
     thread = {
         "ThreadID": thread_id,
@@ -439,7 +544,7 @@ def fetch_posts_for_thread(thread_id):
     return response.get("Items", [])
 
 
-def create_reply(thread_id, user_id, content):
+def post_comment(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
     created_at = datetime.utcnow().isoformat()
 
@@ -575,3 +680,269 @@ def fetch_all_users():
 
     # Return the list of unique user IDs
     return [{"username": user} for user in unique_users]
+
+
+############################
+# Fetchng Fitness Data     #
+############################
+
+
+def get_fitness_data(metric, email, start_time, end_time):
+    try:
+        print("Inside Fitness Data Function\n")
+        print("Start Time: \n", start_time)
+        print("End Time: \n", end_time)
+        response = fitness_table.scan(
+            FilterExpression="metric = :m AND #t BETWEEN :start AND :end AND email = :email",
+            ExpressionAttributeNames={"#t": "time"},
+            ExpressionAttributeValues={
+                ":m": metric,
+                ":email": email,
+                ":start": start_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                ":end": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+        )
+        print(
+            f"Metric : {metric}\nResponse: {response}\n",
+        )
+        return response
+    except Exception as e:
+        print(f"Error querying DynamoDB for fitness data. {e}")
+
+
+def delete_threads_by_user(user_id):
+    """
+    Deletes all threads in the specified DynamoDB table for a given user ID.
+
+    Parameters:
+    - user_id (str): The UserID for which threads should be deleted.
+    """
+    while True:
+        # Scan the table for items where UserID matches the specified user_id
+        response = threads_table.scan(
+            FilterExpression="UserID = :user",
+            ExpressionAttributeValues={":user": user_id},
+            ProjectionExpression="ThreadID",
+        )
+
+        # Extract ThreadIDs from the scan result
+        thread_ids = [item["ThreadID"] for item in response.get("Items", [])]
+
+        # If there are no more items to delete, exit the loop
+        if not thread_ids:
+            print("No more items to delete.")
+            break
+
+        # Loop through each ThreadID and delete the item
+        for thread_id in thread_ids:
+            threads_table.delete_item(Key={"ThreadID": thread_id})
+            print(f"Deleted ThreadID: {thread_id}")
+
+
+def delete_thread_by_id(thread_id):
+    try:
+        # Delete the forum thread by thread_id (primary key)
+        threads_table.delete_item(
+            Key={"ThreadID": thread_id}  # Replace with your actual partition key
+        )
+
+        print(f"Forum thread with ID '{thread_id}' successfully deleted.")
+        return True
+
+    except Exception as e:
+        print(f"Error deleting forum thread with ID '{thread_id}': {e}")
+        return False
+
+
+def get_thread(title, user_id, content, created_at):
+    try:
+        response = threads_table.scan(
+            FilterExpression="#title = :title AND #user = :user_id AND #content = :content AND #created = :created_at",
+            ExpressionAttributeNames={
+                "#title": "Title",
+                "#user": "UserID",
+                "#content": "Content",
+                "#created": "CreatedAt",
+            },
+            ExpressionAttributeValues={
+                ":title": title,
+                ":user_id": user_id,
+                ":content": content,
+                ":created_at": created_at,
+            },
+        )
+
+        threads = response.get("Items", [])
+        if threads:
+            print("Thread found:", threads[0])
+            return threads[0]
+        else:
+            print(
+                "No thread found with the specified Title, UserID, Content, and CreatedAt."
+            )
+            return None
+
+    except Exception as e:
+        print(f"Error retrieving thread: {e}")
+        return None
+
+
+# Zejun's Code
+
+
+def create_reply(thread_id, user_id, content):
+    reply_id = str(uuid.uuid4())
+    created_at = datetime.utcnow().isoformat()
+
+    reply = {
+        "ReplyID": reply_id,
+        "UserID": user_id,
+        "Content": content,
+        "CreatedAt": created_at,
+    }
+
+    # Append the reply to the post's Replies attribute
+    try:
+        # Update the post by appending the new reply to the Replies list
+        posts_table.update_item(
+            Key={"PostID": post_id},
+            UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
+            ExpressionAttributeValues={
+                ":reply": [reply],  # Append the reply as a list item
+                ":empty_list": [],  # Default to an empty list if Replies doesn't exist
+            },
+        )
+        return {"status": "success", "reply_id": reply_id}
+    except Exception as e:
+        print(f"Error adding reply: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+def like_comment(post_id, user_id):
+    # Fetch the comment by post_id
+    response = posts_table.get_item(Key={"PostID": post_id})
+    post = response.get("Item")
+
+    if not post:
+        raise ValueError("Comment not found")
+
+    liked_by = post.get("LikedBy", [])
+    likes = post.get("Likes", 0)
+
+    # Check if the user has already liked the post
+    if user_id in liked_by:
+        # Unlike the post
+        likes = max(0, likes - 1)
+        liked_by.remove(user_id)
+        liked = False
+    else:
+        # Like the post
+        likes += 1
+        liked_by.append(user_id)
+        liked = True
+
+    # Update the item in DynamoDB
+    posts_table.update_item(
+        Key={"PostID": post_id},
+        UpdateExpression="SET Likes = :likes, LikedBy = :liked_by",
+        ExpressionAttributeValues={":likes": likes, ":liked_by": liked_by},
+    )
+
+    return likes, liked
+
+
+def report_comment(post_id, user_id):
+    # Update the comment as reported by adding user_id to ReportedBy
+    response = posts_table.get_item(Key={"PostID": post_id})
+    post = response.get("Item")
+
+    if not post:
+        raise ValueError("Comment not found")
+
+    reported_by = post.get("ReportedBy", [])
+    if user_id not in reported_by:
+        reported_by.append(user_id)
+
+    # Update the item in DynamoDB
+    posts_table.update_item(
+        Key={"PostID": post_id},
+        UpdateExpression="SET ReportedBy = :reported_by",
+        ExpressionAttributeValues={":reported_by": reported_by},
+    )
+
+
+def delete_reply(post_id, thread_id, reply_id):
+    try:
+        # Fetch the post to get the current list of replies
+        response = posts_table.get_item(Key={"PostID": post_id, "ThreadID": thread_id})
+        post = response.get("Item")
+
+        if not post or "Replies" not in post:
+            return {"status": "error", "message": "Post or replies not found"}
+
+        # Filter out the reply with the specific reply_id
+        updated_replies = [
+            reply for reply in post["Replies"] if reply["ReplyID"] != reply_id
+        ]
+
+        # Update the post in DynamoDB with the new list of replies
+        posts_table.update_item(
+            Key={"PostID": post_id, "ThreadID": thread_id},
+            UpdateExpression="SET Replies = :updated_replies",
+            ExpressionAttributeValues={":updated_replies": updated_replies},
+        )
+
+        return {"status": "success"}
+    except Exception as e:
+        print(f"Error deleting reply: {e}")
+        return {"status": "error", "message": str(e)}
+
+
+def fetch_reported_threads_and_comments():
+    reported_threads = []
+    reported_comments = []
+
+    # Fetch reported threads
+    try:
+        response = threads_table.scan(FilterExpression=Attr("ReportedBy").exists())
+        reported_threads = response.get("Items", [])
+        print(f"Fetched {len(reported_threads)} reported threads.")
+    except ClientError as e:
+        print(f"Error fetching reported threads: {e.response['Error']['Message']}")
+
+    # Fetch reported comments
+    try:
+        response = posts_table.scan(FilterExpression=Attr("ReportedBy").exists())
+        reported_comments = response.get("Items", [])
+        print(f"Fetched {len(reported_comments)} reported comments.")
+    except ClientError as e:
+        print(f"Error fetching reported comments: {e.response['Error']['Message']}")
+
+    return {
+        "reported_threads": reported_threads,
+        "reported_comments": reported_comments,
+    }
+
+
+def mark_thread_as_reported(thread_id):
+    try:
+        # Fetch the thread to check if it already has "ReportedBy" attribute
+        response = threads_table.get_item(Key={"ThreadID": thread_id})
+        thread = response.get("Item", {})
+
+        reported_by = thread.get("ReportedBy", [])
+
+        # Mark the thread as reported (or add to the list if already exists)
+        reported_by.append(
+            "admin"
+        )  # Replace "admin" with the reporting user ID if needed
+
+        # Update the thread with the reported status
+        threads_table.update_item(
+            Key={"ThreadID": thread_id},
+            UpdateExpression="SET ReportedBy = :reported_by",
+            ExpressionAttributeValues={":reported_by": reported_by},
+        )
+        print(f"Thread {thread_id} reported.")
+    except Exception as e:
+        print(f"Error reporting thread {thread_id}: {e}")

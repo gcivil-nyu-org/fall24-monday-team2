@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Password Reset</title>
+    <title>Fitness Trainer</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -40,9 +40,12 @@
 <body>
     <div class="email-container">
         <h1>Hi {{ username }},</h1>
-        <p>Click the button below to reset your password:</p>
-        <a href="{{ reset_url }}" class="button">Reset Your Password</a>
-        <p>If you did not request this, please ignore this email. The link will expire in 1 minute.</p>
+        {% if approval %}
+            <p>You have been APPROVED as a fitness trainer</p>
+        {% else %}
+            <p>You have been REJECTED as a fitness trainer for the following reason:</p>
+            <p>{{ reason }}</p>
+        {% endif %}
     </div>
 </body>
 </html>
