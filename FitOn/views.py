@@ -993,7 +993,7 @@ async def format_bod_fitness_data(total_data):
     list2 = total_data["pressure"]["pressure_data_json"]
 
     def parse_date(date_str):
-        return datetime.datetime.strptime(date_str, "%b %d, %I %p")
+        return dt.datetime.strptime(date_str, "%b %d, %I %p")
 
     # Extract all unique start dates from both lists
     all_dates = set()
@@ -1037,7 +1037,7 @@ def process_dynamo_data(items, frequency):
 
     # Process each item
     for item in items:
-        time = datetime.datetime.strptime(item["time"], "%Y-%m-%dT%H:%M")
+        time = dt.datetime.strptime(item["time"], "%Y-%m-%dT%H:%M")
         start, end = get_group_key(time, frequency)
         start_key = start.strftime("%b %d, %I %p")
         end_key = end.strftime("%b %d, %I %p")
