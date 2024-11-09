@@ -10,6 +10,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.conf import settings
 import uuid
+from pytz import timezone
 
 
 # Connect to DynamoDB
@@ -25,6 +26,8 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
+
+tz = timezone('EST')
 
 
 class MockUser:
@@ -460,7 +463,8 @@ def remove_fitness_trainer(user_id):
 
 def create_thread(title, user_id, content):
     thread_id = str(uuid.uuid4())
-    created_at = datetime.now().isoformat()
+
+    created_at = datetime.now(tz).isoformat()
 
     thread = {
         "ThreadID": thread_id,
@@ -516,7 +520,8 @@ def fetch_thread(thread_id):
 
 def create_post(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+
+    created_at = datetime.now(tz).isoformat()
 
     post = {
         "PostID": post_id,
@@ -546,7 +551,7 @@ def fetch_posts_for_thread(thread_id):
 
 def post_comment(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(tz).isoformat()
 
     reply = {
         "ThreadID": thread_id,
