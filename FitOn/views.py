@@ -180,6 +180,20 @@ def login(request):
 
     return render(request, "login.html", {"form": form, "error_message": error_message})
 
+def custom_logout(request):
+    # Log out the user
+    logout(request)
+    
+    # Clear the entire session to ensure no data is persisted
+    request.session.flush()
+    
+    # Redirect to the homepage or a specific page after logging out
+    response = redirect("login")
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'  # HTTP 1.1
+    response['Pragma'] = 'no-cache'  # HTTP 1.0
+    response['Expires'] = '0'  # Proxies
+    return response
+
 
 def signup(request):
     if request.method == "POST":
@@ -428,6 +442,7 @@ def confirm_deactivation(request):
             if delete_user_by_username(username):
                 # Log the user out and redirect to the homepage
                 logout(request)
+                request.session.flush()
                 return redirect("homepage")  # Redirect to homepage after deactivation
             else:
                 return render(
@@ -884,6 +899,15 @@ def thread_detail_view(request, thread_id):
 
 def new_thread_view(request):
     print("PrePost")
+    user_id = request.session.get("user_id")
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
+
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
+    
     if request.method == "POST":
         print("Post")
         title = request.POST.get("title")
@@ -945,8 +969,12 @@ def delete_post_view(request):
 
 
 def forum_view(request):
+
     user_id = request.session.get("username")
     user = get_user_by_username(user_id)
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
     is_banned = user.get("is_banned")
     print(user)
     print(is_banned)
