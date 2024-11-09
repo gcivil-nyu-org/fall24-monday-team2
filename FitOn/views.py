@@ -717,12 +717,6 @@ def reject_fitness_trainer(request):
 # Forums Functions
 # -------------------------------
 
-
-# def forum_view(request):
-#     threads = fetch_all_threads()
-#     return render(request, "forums.html", {"threads": threads})
-
-
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
@@ -980,7 +974,7 @@ def forum_view(request):
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
 
-    return render(request, "forums.html", {"threads": threads, "users": users})
+    return render(request, "forums.html", {"threads": threads, "users": users, "user": user})
 
 
 ######################################
