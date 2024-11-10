@@ -180,18 +180,19 @@ def login(request):
 
     return render(request, "login.html", {"form": form, "error_message": error_message})
 
+
 def custom_logout(request):
     # Log out the user
     logout(request)
-    
+
     # Clear the entire session to ensure no data is persisted
     request.session.flush()
-    
+
     # Redirect to the homepage or a specific page after logging out
     response = redirect("login")
-    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'  # HTTP 1.1
-    response['Pragma'] = 'no-cache'  # HTTP 1.0
-    response['Expires'] = '0'  # Proxies
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"  # HTTP 1.1
+    response["Pragma"] = "no-cache"  # HTTP 1.0
+    response["Expires"] = "0"  # Proxies
     return response
 
 
@@ -732,6 +733,7 @@ def reject_fitness_trainer(request):
 # Forums Functions
 # -------------------------------
 
+
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
@@ -907,7 +909,7 @@ def new_thread_view(request):
     if not user:
         messages.error(request, "User not found.")
         return redirect("login")
-    
+
     if request.method == "POST":
         print("Post")
         title = request.POST.get("title")
@@ -1002,7 +1004,9 @@ def forum_view(request):
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
 
-    return render(request, "forums.html", {"threads": threads, "users": users, "user": user})
+    return render(
+        request, "forums.html", {"threads": threads, "users": users, "user": user}
+    )
 
 
 ######################################

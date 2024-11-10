@@ -27,7 +27,7 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
-tz = timezone('EST')
+tz = timezone("EST")
 
 
 class MockUser:
