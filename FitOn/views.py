@@ -1607,11 +1607,12 @@ def add_reply(request):
             )
 
         # Create the reply data
+        tz = timezone("EST")
         reply_data = {
             "ReplyID": str(uuid.uuid4()),  # Unique ID for each reply
             "UserID": user_id,
             "Content": content,
-            "CreatedAt": datetime.utcnow().isoformat(),  # Timestamp for each reply
+            "CreatedAt": datetime.now(tz).isoformat(),  # Timestamp for each reply
         }
 
         # Save the reply to DynamoDB by appending it to the 'Replies' list for the post
