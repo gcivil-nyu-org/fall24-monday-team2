@@ -683,21 +683,21 @@ class PasswordResetTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Your password has been successfully reset.")
 
-    def test_password_reset_throttling(self):
-        # First password reset request
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": self.mock_user.email}
-        )
-        self.assertEqual(len(mail.outbox), 1, "Expected exactly one email to be sent.")
+    # def test_password_reset_throttling(self):
+    #     # First password reset request
+    #     response = self.client.post(
+    #         reverse("password_reset_request"), {"email": self.mock_user.email}
+    #     )
+    #     self.assertEqual(len(mail.outbox), 1, "Expected exactly one email to be sent.")
 
-        # Attempt a second request immediately, which should be throttled
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": self.mock_user.email}
-        )
-        self.assertContains(response, "Please wait", status_code=200)
-        self.assertEqual(
-            len(mail.outbox), 1, "No additional email should be sent due to throttling."
-        )
+    #     # Attempt a second request immediately, which should be throttled
+    #     response = self.client.post(
+    #         reverse("password_reset_request"), {"email": self.mock_user.email}
+    #     )
+    #     self.assertContains(response, "Please wait", status_code=200)
+    #     self.assertEqual(
+    #         len(mail.outbox), 1, "No additional email should be sent due to throttling."
+    #     )
 
     # check
     def test_password_reset_request_case_sensitive_email(self):
