@@ -8,6 +8,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FitOn Forum</title>
+    <link rel="stylesheet" type="text/css" href="{% static 'css/forum.css' %}">
 </head>
     {% if is_banned %}
         <!-- Display a message if the user is banned -->
@@ -144,7 +145,7 @@
         });
     });
 </script>
-<style>
+<!-- <style>
     /* Forum Table Styles */
 .forum-container {
     padding: 20px;
@@ -285,6 +286,6 @@ th {
     }
 }
 
-</style>
+</style> -->
 
 {% endblock %}
