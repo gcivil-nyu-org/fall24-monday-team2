@@ -988,7 +988,7 @@ async def format_bod_fitness_data(total_data):
     list2 = total_data["pressure"]["pressure_data_json"]
 
     def parse_date(date_str):
-        return datetime.datetime.strptime(date_str, "%b %d, %I %p")
+        return dt.datetime.strptime(date_str, "%b %d, %I %p")
 
     # Extract all unique start dates from both lists
     all_dates = set()
