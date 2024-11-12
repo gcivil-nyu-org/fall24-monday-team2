@@ -162,7 +162,7 @@ def get_user_by_uid(uid):
         user_data = response.get("Item", None)
 
         if user_data:
-            return MockUser(user_data)
+            return user_data
         return None
     except Exception as e:
         return None

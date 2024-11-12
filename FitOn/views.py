@@ -1738,6 +1738,7 @@ def reports_view(request):
 # ------------------
 
 
+# By username
 def toggle_ban_user(request):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
     users_table = dynamodb.Table("Users")
@@ -1747,6 +1748,7 @@ def toggle_ban_user(request):
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
     ):
         data = json.loads(request.body)
+        print(data)
         username = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
@@ -1759,7 +1761,6 @@ def toggle_ban_user(request):
 
         # Fetch user to check if they exist
         user = get_user_by_username(username)
-        print(user)
         if not user:
             return JsonResponse(
                 {"status": "error", "message": "User not found"}, status=404

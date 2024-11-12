@@ -34,8 +34,8 @@ from .dynamodb import (
     delete_threads_by_user,
     get_thread,
     delete_thread_by_id,
-    MockUser,
-    users_table,
+    # MockUser,
+    # users_table,
 )
 from django.contrib.auth.hashers import check_password
 from botocore.exceptions import ClientError
@@ -95,11 +95,11 @@ class UserCreationAndDeletionTests(TestCase):
 
         # Test get_user_by_uid
         user_by_uid = get_user_by_uid(self.user_data["user_id"])
+        uid = user_by_uid.get("user_id")
         self.assertIsNotNone(user_by_uid, "get_user_by_uid did not find the user.")
-        self.assertEqual(
-            user_by_uid.user_id, self.user_data["user_id"], "User IDs do not match."
-        )
-        self.assertEqual(user_by_uid.username, self.user_data["username"])
+        self.assertEqual(uid, self.user_data["user_id"], "User IDs do not match.")
+        username = user_by_uid.get("username")
+        self.assertEqual(username, self.user_data["username"])
 
     def test_get_user(self):
         # Step 1: Ensure the user exists by calling create_user
@@ -168,81 +168,156 @@ class UserCreationAndDeletionTests(TestCase):
             "Gender update failed.",
         )
 
-    # def test_toggle_ban_user(self):
-    #     create_user(**self.user_data)
-    #     user = get_user_by_uid(self.user_data["user_id"])
-    #     print(user)
-    #     print(user["username"])
-    #     # Step 1: Ban the user by toggling is_banned
-    #     self.client.post(
-    #         "/toggle_ban_user/",
-    #         data=json.dumps({"username": user["username"]}),
-    #         content_type="application/json",
-    #         HTTP_X_REQUESTED_WITH="XMLHttpRequest"
-    #     )
+    def test_toggle_ban_user(self):
+        # Step 1: Create the user
+        create_user(**self.user_data)
 
-    #     # Manually retrieve the user from DynamoDB and verify is_banned is True
-    #     self.assertTrue(user["is_banned"], "User should be banned.")
+        # Retrieve the user from DynamoDB to ensure the user is created
+        user = get_user_by_uid("test_user_123")
+        username = user.get("username")
 
-    #     # Check that punishment_date is set
-    #     self.assertIn("punishment_date", self.user_data, "punishment_date should be set when user is banned.")
+        # Step 2: Ban the user by toggling `is_banned`
+        response = self.client.post(
+            "/ban_user/",
+            data=json.dumps({"user_id": username}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
 
-    #     # Step 2: Unban the user by toggling is_banned again
-    #     self.client.post(
-    #         "/toggle_ban_user/",
-    #         data=json.dumps({"username": self.user_data["username"]}),
-    #         content_type="application/json",
-    #         HTTP_X_REQUESTED_WITH="XMLHttpRequest"
-    #     )
+        # Step 3: Manually retrieve the user from DynamoDB to verify `is_banned` is True
+        response = self.users_table.get_item(Key={"user_id": self.user_data["user_id"]})
+        self.assertIn("Item", response, "User was not found in DynamoDB after banning.")
+        updated_user = response["Item"]
 
-    #     # Manually retrieve the user from DynamoDB and verify is_banned is False
-    #     unbanned_user = get_user(self.user_data["username"])
-    #     self.assertFalse(unbanned_user["is_banned"], "User should be unbanned.")
+        # Check if `is_banned` is set to True
+        self.assertTrue(
+            updated_user.get("is_banned", True),
+            "User should be banned (is_banned should be True).",
+        )
 
-    #     # Check that punishment_date is removed
-    #     self.assertNotIn("punishment_date", unbanned_user, "punishment_date should be removed when user is unbanned.")
+        # Step 4: Check that `punishment_date` is set
+        self.assertIn(
+            "punishment_date",
+            updated_user,
+            "punishment_date should be set when user is banned.",
+        )
 
+    def test_unban_user(self):
+        # Ban the user first by directly setting is_banned to True and setting punishment_date
+        self.users_table.update_item(
+            Key={"user_id": self.user_data["user_id"]},
+            UpdateExpression="set is_banned = :b, punishment_date = :d",
+            ExpressionAttributeValues={
+                ":b": True,
+                ":d": datetime.now(pytz.timezone("US/Eastern")).isoformat(),
+            },
+        )
 
-def test_unban_user(self):
-    # Ban the user first by directly setting is_banned to True and setting punishment_date
-    self.users_table.update_item(
-        Key={"user_id": self.user_data["user_id"]},
-        UpdateExpression="set is_banned = :b, punishment_date = :d",
-        ExpressionAttributeValues={
-            ":b": True,
-            ":d": datetime.now(pytz.timezone("US/Eastern")).isoformat(),
-        },
-    )
+        create_user(**self.user_data)
+        user = get_user_by_uid(self.user_data["user_id"])
+        print(user)
+        print(user.get("is_banned"))
 
-    create_user(**self.user_data)
-    user = get_user_by_uid(self.user_data["user_id"])
-    print(user)
-    print(user.is_banned)
+        # Step 1: Unban the user
+        response = self.client.post(
+            "/unban_user/",
+            data=json.dumps({"user_id": self.user_data["user_id"]}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(
+            data["message"],
+            "User has been unbanned",
+            "Unban message should confirm unban success.",
+        )
 
-    # Step 1: Unban the user
-    response = self.client.post(
-        "/unban_user/",
-        data=json.dumps({"user_id": self.user_data["user_id"]}),
-        content_type="application/json",
-        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-    )
-    self.assertEqual(response.status_code, 200)
-    data = response.json()
-    self.assertEqual(
-        data["message"],
-        "User has been unbanned",
-        "Unban message should confirm unban success.",
-    )
+        # Step 2: Verify the user is unbanned and punishment_date is removed
+        unbanned_user = get_user(self.user_data["user_id"])
+        self.assertFalse(
+            unbanned_user.get("is_banned"),
+            "User's is_banned should be False after unban.",
+        )
+        self.assertFalse(
+            hasattr(unbanned_user, "punishment_date"),
+            "punishment_date should be removed when user is unbanned.",
+        )
 
-    # Step 2: Verify the user is unbanned and punishment_date is removed
-    unbanned_user = get_user(self.user_data["user_id"])
-    self.assertFalse(
-        unbanned_user.is_banned, "User's is_banned should be False after unban."
-    )
-    self.assertFalse(
-        hasattr(unbanned_user, "punishment_date"),
-        "punishment_date should be removed when user is unbanned.",
-    )
+    def test_toggle_mute_user(self):
+        # Step 1: Create the user
+        create_user(**self.user_data)
+
+        # Retrieve the user from DynamoDB to ensure the user is created
+        user = get_user_by_uid("test_user_123")
+        username = user.get("username")
+
+        # Step 2: Ban the user by toggling `is_muted`
+        response = self.client.post(
+            "/mute_user/",
+            data=json.dumps({"user_id": username}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        # Step 3: Manually retrieve the user from DynamoDB to verify `is_muted` is True
+        response = self.users_table.get_item(Key={"user_id": self.user_data["user_id"]})
+        self.assertIn("Item", response, "User was not found in DynamoDB after muting.")
+        updated_user = response["Item"]
+
+        # Check if `is_muted` is set to True
+        self.assertTrue(
+            updated_user.get("is_muted", True),
+            "User should be banned (is_muted should be True).",
+        )
+
+        # Step 4: Check that `punishment_date` is set
+        self.assertIn(
+            "punishment_date",
+            updated_user,
+            "punishment_date should be set when user is banned.",
+        )
+
+    def test_unmute_user(self):
+        # Unmute the user first by directly setting is_banned to True and setting punishment_date
+        self.users_table.update_item(
+            Key={"user_id": self.user_data["user_id"]},
+            UpdateExpression="set is_muted = :b, punishment_date = :d",
+            ExpressionAttributeValues={
+                ":b": True,
+                ":d": datetime.now(pytz.timezone("US/Eastern")).isoformat(),
+            },
+        )
+
+        create_user(**self.user_data)
+        user = get_user_by_uid(self.user_data["user_id"])
+        print(user)
+        print(user.get("is_muted"))
+
+        # Step 1: Unmute the user
+        response = self.client.post(
+            "/unmute_user/",
+            data=json.dumps({"user_id": self.user_data["user_id"]}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(
+            data["message"],
+            "User has been unmuted",
+            "Unmute message should confirm unmute success.",
+        )
+
+        # Step 2: Verify the user is unmuted and punishment_date is removed
+        unmuted_user = get_user(self.user_data["user_id"])
+        self.assertFalse(
+            unmuted_user.get("is_muted"), "User's is_muted should be False after unban."
+        )
+        self.assertFalse(
+            hasattr(unmuted_user, "punishment_date"),
+            "punishment_date should be removed when user is unmuted.",
+        )
 
     def test_delete_user(self):
         # Ensure the user exists before testing deletion
