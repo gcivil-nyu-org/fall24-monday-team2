@@ -1,25 +1,9 @@
-from datetime import datetime, timedelta
-from django.test import TestCase, Client
+from datetime import datetime
+from django.test import TestCase, Client, override_settings
 from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
 from django.urls import reverse
 import boto3
-import json
-import unittest
-from django.test import TestCase, Client, override_settings
-from django.urls import reverse
-import boto3
-
-from django.contrib.auth.models import User
-from django.contrib.auth.tokens import default_token_generator
-from django.contrib.auth.hashers import make_password
-from django.contrib.sessions.models import Session
-from django.utils import timezone
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from django.core import mail
-from unittest.mock import patch
-import time
 import json
 from .views import SCOPES
 from .dynamodb import (

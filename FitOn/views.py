@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from .dynamodb import (
     add_fitness_trainer_application,
     # create_post,
@@ -7,18 +7,14 @@ from .dynamodb import (
     create_reply,
     create_user,
     delete_user_by_username,
-    fetch_all_threads,
+    delete_post,
     fetch_posts_for_thread,
-    # fetch_thread,
     get_fitness_trainer_applications,
     get_last_reset_request_time,
-    # get_replies,
-    # get_thread_details,
     get_user,
     get_user_by_email,
     get_user_by_uid,
     get_user_by_username,
-    MockUser,
     update_reset_request_time,
     update_user,
     update_user_password,
@@ -28,12 +24,9 @@ from .dynamodb import (
     get_fitness_data,
     dynamodb,
     threads_table,
-    delete_post,
     get_fitness_trainers,
     make_fitness_trainer,
     remove_fitness_trainer,
-    like_comment,
-    report_comment,
     delete_reply,
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
@@ -63,15 +56,13 @@ from django.contrib import messages
 from django.conf import settings
 
 # from django.core.files.storage import FileSystemStorage
-from django.core.mail import send_mail, get_connection, EmailMessage
-from django.core.mail.backends.locmem import EmailBackend
+from django.core.mail import EmailMessage
 
 # from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.http import Http404
 
 # from django.utils.encoding import force_bytes
 # from django.utils.html import strip_tags
@@ -79,18 +70,13 @@ from django.http import Http404
 # import os
 from asgiref.sync import sync_to_async
 from django.utils.encoding import force_bytes, force_str
-from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-import os
 import uuid
-import ssl
-import pytz
 import boto3
 from google_auth_oauthlib.flow import Flow
 import requests
 
 # from django.contrib.auth.decorators import login_required
-from .dynamodb import threads_table, delete_post
 import json
 
 # from google import Things
@@ -1571,16 +1557,16 @@ def health_data_view(request):
         metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
 
     return render(request, "display_metric_data.html", {"metrics_data": metrics_data})
-    return render(
-        request,
-        "forums.html",
-        {
-            "user": user,
-            "threads": threads,
-            "users": users,
-            "is_banned": is_banned,
-        },
-    )
+    # return render(
+    #     request,
+    #     "forums.html",
+    #     {
+    #         "user": user,
+    #         "threads": threads,
+    #         "users": users,
+    #         "is_banned": is_banned,
+    #     },
+    # )
 
 
 def add_reply(request):
