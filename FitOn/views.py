@@ -733,6 +733,7 @@ def thread_detail_view(request, thread_id):
             {"status": "error", "message": "Thread not found"}, status=404
         )
 
+
     user_id = request.session.get("user_id")
 
     user = get_user(user_id)
