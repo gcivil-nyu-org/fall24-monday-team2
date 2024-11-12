@@ -363,7 +363,7 @@ class ForumTests(TestCase):
 
         # Step 2: Retrieve the thread from DynamoDB to verify it was added
         response = self.threads_table.get_item(Key={"ThreadID": thread["ThreadID"]})
-        # self.assertIn("Item", response, "Thread not found in DynamoDB after creation.")
+        self.assertIn("Item", response, "Thread not found in DynamoDB after creation.")
 
         created_thread = response["Item"]
         self.assertEqual(
@@ -431,9 +431,9 @@ class ForumTests(TestCase):
 
         # Verify the thread exists in DynamoDB
         response = self.threads_table.get_item(Key={"ThreadID": thread_id})
-        # self.assertIn(
-        #     "Item", response, "Thread should exist in DynamoDB before deletion."
-        # )
+        self.assertIn(
+            "Item", response, "Thread should exist in DynamoDB before deletion."
+        )
 
         # Step 2: Delete the thread
         delete_result = delete_thread_by_id(thread_id)
