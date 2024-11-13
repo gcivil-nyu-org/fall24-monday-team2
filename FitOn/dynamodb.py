@@ -1,7 +1,8 @@
 from boto3.dynamodb.conditions import Attr
-import boto3, uuid
+import boto3
+import uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.hashers import make_password
 from datetime import datetime, timezone
 from django.conf import settings
 
@@ -164,7 +165,7 @@ def get_user_by_uid(uid):
         if user_data:
             return MockUser(user_data)
         return None
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -201,7 +202,7 @@ def update_reset_request_time(user_id):
             return None
 
         # Insert a new entry or update the existing reset request time
-        response = password_reset_table.put_item(
+        password_reset_table.put_item(
             Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
         )
         print(f"Reset request time updated for user_id '{user_id}'.")

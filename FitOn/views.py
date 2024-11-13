@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from .dynamodb import (
     add_fitness_trainer_application,
     # create_post,
@@ -7,7 +7,6 @@ from .dynamodb import (
     create_reply,
     create_user,
     delete_user_by_username,
-    fetch_all_threads,
     fetch_posts_for_thread,
     # fetch_thread,
     get_fitness_trainer_applications,
@@ -18,7 +17,6 @@ from .dynamodb import (
     get_user_by_email,
     get_user_by_uid,
     get_user_by_username,
-    MockUser,
     update_reset_request_time,
     update_user,
     update_user_password,
@@ -32,13 +30,14 @@ from .dynamodb import (
     get_fitness_trainers,
     make_fitness_trainer,
     remove_fitness_trainer,
-    like_comment,
-    report_comment,
     delete_reply,
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
     posts_table,
 )
+
+from .rds import rds_main
+
 from .forms import (
     FitnessTrainerApplicationForm,
     LoginForm,
@@ -63,15 +62,17 @@ from django.contrib import messages
 from django.conf import settings
 
 # from django.core.files.storage import FileSystemStorage
-from django.core.mail import send_mail, get_connection, EmailMessage
-from django.core.mail.backends.locmem import EmailBackend
+from django.core.mail import EmailMessage
+
+# from django.core.mail.backends.locmem import EmailBackend
 
 # from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-from django.http import Http404
+
+# from django.http import Http404
 
 # from django.utils.encoding import force_bytes
 # from django.utils.html import strip_tags
@@ -79,18 +80,15 @@ from django.http import Http404
 # import os
 from asgiref.sync import sync_to_async
 from django.utils.encoding import force_bytes, force_str
-from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-import os
 import uuid
-import ssl
-import pytz
+
+# import ssl
 import boto3
 from google_auth_oauthlib.flow import Flow
 import requests
 
 # from django.contrib.auth.decorators import login_required
-from .dynamodb import threads_table, delete_post
 import json
 
 # from google import Things
@@ -488,7 +486,7 @@ def authorize_google_fit(request):
 def callback_google_fit(request):
     user_id = request.session.get("user_id")
     print("Inside Callback")
-
+    print("Session: ")
     # Fetch user details from DynamoDB
     user = get_user(user_id)
     state = request.session.get("google_fit_state")
@@ -1189,6 +1187,7 @@ def steps_barplot(data):
             steps_data.append(d)
 
     # Pass the plot path to the template
+    print("Steps Data:", steps_data)
     context = {"steps_data_json": steps_data}
     return context
 
@@ -1511,7 +1510,11 @@ async def fetch_all_metric_data(request, duration, frequency):
 
 async def get_metric_data(request):
     credentials = await sync_to_async(lambda: request.session.get("credentials"))()
+    user_id = await sync_to_async(lambda: request.session.get("user_id"))()
+    user = get_user(user_id)
+    user_email = user.get("email")
     print("Credentials: \n", credentials)
+    print("User Email: \n", user_email)
     if credentials:
         duration = "week"
         frequency = "daily"
@@ -1523,9 +1526,10 @@ async def get_metric_data(request):
             frequency = request.GET.get("data_freq")
 
         total_data = await fetch_all_metric_data(request, duration, frequency)
-
+        rds_response = await rds_main(user_email, total_data)
+        print("RDS Response: \n", rds_response)
         context = {"data": total_data}
-        print("Inside get metric:", context)
+        # print("Inside get metric:", context)
         return await sync_to_async(render)(
             request, "display_metrics_data.html", context
         )
@@ -1547,15 +1551,21 @@ def health_data_view(request):
 
     if request.method == "POST":
         data = request.POST
-        print(data)
-        table.put_item(
-            Item={
-                "email": user_email,  # Use the default email
-                "metric": data.get("metric"),
-                "time": data.get("time"),
-                "value": data.get("value"),
-            }
-        )
+        print("Data:", data)
+        try:
+            table.put_item(
+                Item={
+                    "email": user_email,  # Use the default email
+                    "metric": data.get("metric"),
+                    "time": data.get("time"),
+                    "value": data.get("value"),
+                },
+                ConditionExpression="attribute_not_exists(email) AND attribute_not_exists(#t)",
+                ExpressionAttributeNames={"#t": "time"},
+            )
+            print("Item inserted successfully.")
+        except dynamodb_res.meta.client.exceptions.ConditionalCheckFailedException:
+            print("Item already exists and was not replaced.")
         return redirect("get_metric_data")
 
     # Fetch all the metrics data from DynamoDB
