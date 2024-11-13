@@ -113,10 +113,8 @@ class ProfileForm(forms.Form):
         # Validate country_code and phone_number
         if (country_code and not phone_number) or (not country_code and phone_number):
             # Add an error linked to the country_code field
-            self.add_error(
-                "phone_number",
-                "Both country code and phone number must be provided together",
-            )
+            self.add_error("phone_number", "Both country code and phone number must be provided together")
+            self.add_error("country_code", "Both country code and phone number must be provided together")
 
         return cleaned_data
 
