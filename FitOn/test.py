@@ -6,7 +6,6 @@ from google.oauth2.credentials import Credentials
 from django.urls import reverse
 import boto3
 import json
-from .views import SCOPES
 from .dynamodb import (
     create_user,
     delete_user_by_username,
@@ -22,11 +21,18 @@ from .dynamodb import (
     # MockUser,
     # users_table,
 )
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, make_password
+from unittest.mock import patch
 from botocore.exceptions import ClientError, ValidationError
 import pytz
 from django.contrib import messages
-from .forms import SignUpForm, SetNewPasswordForm, ProfileForm, validate_file_extension
+from .forms import (
+    SignUpForm,
+    SetNewPasswordForm,
+    ProfileForm,
+    validate_file_extension,
+)
+from django.urls import reverse
 
 
 class UserCreationAndDeletionTests(TestCase):
