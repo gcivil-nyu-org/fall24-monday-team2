@@ -1,10 +1,11 @@
 from datetime import datetime
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
 from django.urls import reverse
 import boto3
 import json
+
 
 # import unittest
 
