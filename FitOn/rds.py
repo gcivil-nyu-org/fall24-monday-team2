@@ -257,6 +257,7 @@ async def insert_into_tables(email, total_data):
                     )
     conn.close()
 
+
 # Asynchronous functions to display data from tables
 async def show_table(conn, table_name):
     try:
