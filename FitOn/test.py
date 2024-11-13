@@ -911,116 +911,134 @@ class GoogleAuthDelinkTestCase(TestCase):
 #       TEST CASEs FOR VARIOUS FORMS                      #
 ###########################################################
 
+
 class SignUpFormTest(TestCase):
-    
+
     def test_passwords_match(self):
         form_data = {
-            'username': 'testuser',
-            'email': 'testuser@example.com',
-            'name': 'Test User',
-            'date_of_birth': '2000-01-01',
-            'gender': 'M',  # Adjust based on your GENDER_OPTIONS
-            'password': 'strongpassword123',
-            'confirm_password': 'strongpassword123'
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "name": "Test User",
+            "date_of_birth": "2000-01-01",
+            "gender": "M",  # Adjust based on your GENDER_OPTIONS
+            "password": "strongpassword123",
+            "confirm_password": "strongpassword123",
         }
         form = SignUpForm(data=form_data)
         self.assertTrue(form.is_valid())
 
     def test_passwords_do_not_match(self):
         form_data = {
-            'username': 'testuser',
-            'email': 'testuser@example.com',
-            'name': 'Test User',
-            'date_of_birth': '2000-01-01',
-            'gender': 'M',  # Adjust based on your GENDER_OPTIONS
-            'password': 'strongpassword123',
-            'confirm_password': 'differentpassword'
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "name": "Test User",
+            "date_of_birth": "2000-01-01",
+            "gender": "M",  # Adjust based on your GENDER_OPTIONS
+            "password": "strongpassword123",
+            "confirm_password": "differentpassword",
         }
         form = SignUpForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('Passwords do not match.', form.errors['__all__'])
+        self.assertIn("Passwords do not match.", form.errors["__all__"])
+
 
 class SetNewPasswordFormTest(TestCase):
 
     def test_passwords_match(self):
         form_data = {
-            'new_password': 'newstrongpassword123',
-            'confirm_password': 'newstrongpassword123'
+            "new_password": "newstrongpassword123",
+            "confirm_password": "newstrongpassword123",
         }
         form = SetNewPasswordForm(data=form_data)
         self.assertTrue(form.is_valid())
 
     def test_passwords_do_not_match(self):
         form_data = {
-            'new_password': 'newstrongpassword123',
-            'confirm_password': 'differentpassword'
+            "new_password": "newstrongpassword123",
+            "confirm_password": "differentpassword",
         }
         form = SetNewPasswordForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('Passwords do not match.', form.errors['__all__'])
+        self.assertIn("Passwords do not match.", form.errors["__all__"])
+
 
 class ProfileFormTest(TestCase):
 
     def test_valid_form_with_country_code_and_phone(self):
         form_data = {
-            'name': 'John Doe',
-            'date_of_birth': '1990-01-01',
-            'email': 'johndoe@example.com',
-            'gender': 'M',  # Use a valid value from GENDER_OPTIONS
-            'country_code': '+1',  # Replace with a valid choice from COUNTRY_CODES
-            'phone_number': '1234567890'
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "country_code": "+1",  # Replace with a valid choice from COUNTRY_CODES
+            "phone_number": "1234567890",
         }
         form = ProfileForm(data=form_data)
         self.assertTrue(form.is_valid())
 
     def test_valid_form_without_phone_and_country_code(self):
         form_data = {
-            'name': 'John Doe',
-            'date_of_birth': '1990-01-01',
-            'email': 'johndoe@example.com',
-            'gender': 'M',  # Use a valid value from GENDER_OPTIONS
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
         }
         form = ProfileForm(data=form_data)
         self.assertTrue(form.is_valid())
 
     def test_invalid_phone_number_non_digits(self):
         form_data = {
-            'name': 'John Doe',
-            'date_of_birth': '1990-01-01',
-            'email': 'johndoe@example.com',
-            'gender': 'M',  # Use a valid value from GENDER_OPTIONS
-            'country_code': '+1',  # Replace with a valid choice from COUNTRY_CODES
-            'phone_number': 'abcd1234'
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "country_code": "+1",  # Replace with a valid choice from COUNTRY_CODES
+            "phone_number": "abcd1234",
         }
         form = ProfileForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('Phone number should contain only digits.', form.errors['phone_number'])
+        self.assertIn(
+            "Phone number should contain only digits.", form.errors["phone_number"]
+        )
 
     def test_country_code_without_phone_number(self):
         form_data = {
-            'name': 'John Doe',
-            'date_of_birth': '1990-01-01',
-            'email': 'johndoe@example.com',
-            'gender': 'M',  # Use a valid value from GENDER_OPTIONS
-            'country_code': '+1'  # Replace with a valid choice from COUNTRY_CODES
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "country_code": "+1",  # Replace with a valid choice from COUNTRY_CODES
         }
         form = ProfileForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('Both country code and phone number must be provided together', form.errors['phone_number'])
-        self.assertIn('Both country code and phone number must be provided together', form.errors['country_code'])
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["phone_number"],
+        )
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["country_code"],
+        )
 
     def test_phone_number_without_country_code(self):
         form_data = {
-            'name': 'John Doe',
-            'date_of_birth': '1990-01-01',
-            'email': 'johndoe@example.com',
-            'gender': 'M',  # Use a valid value from GENDER_OPTIONS
-            'phone_number': '1234567890'
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "phone_number": "1234567890",
         }
         form = ProfileForm(data=form_data)
         self.assertFalse(form.is_valid())
-        self.assertIn('Both country code and phone number must be provided together', form.errors['phone_number'])
-        self.assertIn('Both country code and phone number must be provided together', form.errors['country_code'])
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["phone_number"],
+        )
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["country_code"],
+        )
+
 
 class ValidateFileExtensionTest(TestCase):
 
