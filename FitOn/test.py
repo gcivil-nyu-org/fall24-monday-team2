@@ -21,7 +21,7 @@ from .dynamodb import (
     # MockUser,
     # users_table,
 )
-from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.hashers import check_password
 from unittest.mock import patch
 from botocore.exceptions import ClientError, ValidationError
 import pytz
@@ -33,6 +33,7 @@ from .forms import (
     validate_file_extension,
 )
 from django.urls import reverse
+from .views import SCOPES
 
 
 class UserCreationAndDeletionTests(TestCase):
