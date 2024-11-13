@@ -257,23 +257,6 @@ async def insert_into_tables(email, total_data):
                     )
     conn.close()
 
-
-# Example usage
-async def main():
-    email = "test@example.com"
-    total_data = {
-        "steps": [{"start": "Nov 10, 3 PM", "end": "Nov 10, 4 PM", "count": 100}],
-        "heartRate": [{"start": "Nov 10, 4 PM", "end": "Nov 10, 5 PM", "count": 75}],
-        "restingHeartRate": [
-            {"start": "Nov 10, 5 PM", "end": "Nov 10, 6 PM", "count": 60}
-        ],
-        "oxygen": [{"start": "Nov 10, 6 PM", "end": "Nov 10, 7 PM", "count": 95}],
-        "glucose": [{"start": "Nov 10, 7 PM", "end": "Nov 10, 8 PM", "count": 110}],
-        "pressure": [{"start": "Nov 10, 8 PM", "end": "Nov 10, 9 PM", "count": 120}],
-    }
-    await insert_into_tables(email, total_data)
-
-
 # Asynchronous functions to display data from tables
 async def show_table(conn, table_name):
     try:
