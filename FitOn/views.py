@@ -179,6 +179,21 @@ def login(request):
     return render(request, "login.html", {"form": form, "error_message": error_message})
 
 
+def custom_logout(request):
+    # Log out the user
+    logout(request)
+
+    # Clear the entire session to ensure no data is persisted
+    request.session.flush()
+
+    # Redirect to the homepage or a specific page after logging out
+    response = redirect("login")
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"  # HTTP 1.1
+    response["Pragma"] = "no-cache"  # HTTP 1.0
+    response["Expires"] = "0"  # Proxies
+    return response
+
+
 def signup(request):
     if request.method == "POST":
         form = SignUpForm(request.POST)
@@ -426,6 +441,7 @@ def confirm_deactivation(request):
             if delete_user_by_username(username):
                 # Log the user out and redirect to the homepage
                 logout(request)
+                request.session.flush()
                 return redirect("homepage")  # Redirect to homepage after deactivation
             else:
                 return render(
@@ -717,11 +733,6 @@ def reject_fitness_trainer(request):
 # -------------------------------
 
 
-# def forum_view(request):
-#     threads = fetch_all_threads()
-#     return render(request, "forums.html", {"threads": threads})
-
-
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
@@ -889,6 +900,15 @@ def thread_detail_view(request, thread_id):
 
 def new_thread_view(request):
     print("PrePost")
+    user_id = request.session.get("user_id")
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
+
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
+
     if request.method == "POST":
         print("Post")
         title = request.POST.get("title")
@@ -950,8 +970,12 @@ def delete_post_view(request):
 
 
 def forum_view(request):
+
     user_id = request.session.get("username")
     user = get_user_by_username(user_id)
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
     is_banned = user.get("is_banned")
     print(user)
     print(is_banned)
@@ -979,7 +1003,9 @@ def forum_view(request):
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
 
-    return render(request, "forums.html", {"threads": threads, "users": users})
+    return render(
+        request, "forums.html", {"threads": threads, "users": users, "user": user}
+    )
 
 
 ######################################
@@ -1595,11 +1621,12 @@ def add_reply(request):
             )
 
         # Create the reply data
+        tz = timezone("EST")
         reply_data = {
             "ReplyID": str(uuid.uuid4()),  # Unique ID for each reply
             "UserID": user_id,
             "Content": content,
-            "CreatedAt": datetime.utcnow().isoformat(),  # Timestamp for each reply
+            "CreatedAt": datetime.now(tz).isoformat(),  # Timestamp for each reply
         }
 
         # Save the reply to DynamoDB by appending it to the 'Replies' list for the post

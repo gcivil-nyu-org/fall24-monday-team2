@@ -37,7 +37,7 @@ urlpatterns = [
     path(
         "deactivate/confirm/", views.confirm_deactivation, name="confirm_deactivation"
     ),
-    path("logout/", views.login, name="logout"),
+    path("logout/", views.custom_logout, name="logout"),
     path(
         "reset-password/", views.password_reset_request, name="password_reset_request"
     ),
