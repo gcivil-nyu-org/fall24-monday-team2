@@ -3,11 +3,13 @@ import boto3
 import json
 from datetime import datetime
 
+
 # Function to convert date strings to MySQL-compatible datetime strings
 def convert_to_mysql_datetime(date_str):
     dt = datetime.strptime(date_str, "%b %d, %I %p")
     mysql_datetime = dt.strftime("%Y-%m-%d %H:%M:%S")
     return mysql_datetime
+
 
 # Asynchronous function to get RDS secrets from AWS Secrets Manager
 async def get_secret_rds():
@@ -15,24 +17,26 @@ async def get_secret_rds():
     client = boto3.client("secretsmanager", region_name="us-west-2")
     response = client.get_secret_value(SecretId="rds_credentials")
     response = json.loads(response["SecretString"])
-    d['host'] = response.get("host")
-    d['database'] = response.get("database")
-    d['port'] = response.get("port")
-    d['password'] = response.get("password")
-    d['username'] = response.get("username")
+    d["host"] = response.get("host")
+    d["database"] = response.get("database")
+    d["port"] = response.get("port")
+    d["password"] = response.get("password")
+    d["username"] = response.get("username")
     return d
+
 
 # Asynchronous function to create a database connection
 async def create_connection():
     d = await get_secret_rds()
     conn = await aiomysql.connect(
-        host=d['host'],
-        user=d['username'],
-        password=d['password'],
-        db=d['database'],
-        port=int(d['port'])
+        host=d["host"],
+        user=d["username"],
+        password=d["password"],
+        db=d["database"],
+        port=int(d["port"]),
     )
     return conn
+
 
 # Asynchronous function to create tables
 async def create_table(conn, table_sql):
@@ -40,11 +44,13 @@ async def create_table(conn, table_sql):
         await cursor.execute(table_sql)
     await conn.commit()
 
+
 # Asynchronous function to insert data into tables
 async def insert_data(conn, query, data):
     async with conn.cursor() as cursor:
         await cursor.execute(query, data)
     await conn.commit()
+
 
 # Functions to create tables
 async def create_steps_table(conn):
@@ -59,6 +65,7 @@ async def create_steps_table(conn):
     """
     await create_table(conn, table_sql)
 
+
 async def create_heartRate_table(conn):
     table_sql = """
         CREATE TABLE IF NOT EXISTS HEART_RATE (
@@ -70,6 +77,7 @@ async def create_heartRate_table(conn):
         )
     """
     await create_table(conn, table_sql)
+
 
 async def create_restingHeartRate_table(conn):
     table_sql = """
@@ -83,6 +91,7 @@ async def create_restingHeartRate_table(conn):
     """
     await create_table(conn, table_sql)
 
+
 async def create_oxygen_table(conn):
     table_sql = """
         CREATE TABLE IF NOT EXISTS OXYGEN (
@@ -94,6 +103,7 @@ async def create_oxygen_table(conn):
         )
     """
     await create_table(conn, table_sql)
+
 
 async def create_glucose_table(conn):
     table_sql = """
@@ -107,6 +117,7 @@ async def create_glucose_table(conn):
     """
     await create_table(conn, table_sql)
 
+
 async def create_pressure_table(conn):
     table_sql = """
         CREATE TABLE IF NOT EXISTS PRESSURE (
@@ -118,6 +129,7 @@ async def create_pressure_table(conn):
         )
     """
     await create_table(conn, table_sql)
+
 
 # Functions to insert data into tables
 async def insert_into_steps_table(conn, email, start_time, end_time, count):
@@ -134,6 +146,7 @@ async def insert_into_steps_table(conn, email, start_time, end_time, count):
     except Exception as e:
         print(f"Error: {e}")
 
+
 async def insert_into_heartRate_table(conn, email, start_time, end_time, count):
     await create_heartRate_table(conn)
     c_start_time = convert_to_mysql_datetime(start_time)
@@ -147,6 +160,7 @@ async def insert_into_heartRate_table(conn, email, start_time, end_time, count):
         print("Inserted into Heart Rate Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
+
 
 async def insert_into_restingHeartRate_table(conn, email, start_time, end_time, count):
     await create_restingHeartRate_table(conn)
@@ -162,6 +176,7 @@ async def insert_into_restingHeartRate_table(conn, email, start_time, end_time, 
     except Exception as e:
         print(f"Error: {e}")
 
+
 async def insert_into_oxygen_table(conn, email, start_time, end_time, count):
     await create_oxygen_table(conn)
     c_start_time = convert_to_mysql_datetime(start_time)
@@ -175,6 +190,7 @@ async def insert_into_oxygen_table(conn, email, start_time, end_time, count):
         print("Inserted into Oxygen Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
+
 
 async def insert_into_glucose_table(conn, email, start_time, end_time, count):
     await create_glucose_table(conn)
@@ -190,6 +206,7 @@ async def insert_into_glucose_table(conn, email, start_time, end_time, count):
     except Exception as e:
         print(f"Error: {e}")
 
+
 async def insert_into_pressure_table(conn, email, start_time, end_time, count):
     await create_pressure_table(conn)
     c_start_time = convert_to_mysql_datetime(start_time)
@@ -204,28 +221,42 @@ async def insert_into_pressure_table(conn, email, start_time, end_time, count):
     except Exception as e:
         print(f"Error: {e}")
 
+
 # Main function to insert data into all tables
 async def insert_into_tables(email, total_data):
     conn = await create_connection()
     for data_type, data_list in total_data.items():
         for entry in data_list.values():
             for d in entry:
-                start_time = d['start']
-                end_time = d['end']
-                count = d['count']
-                if data_type == 'steps':
-                    await insert_into_steps_table(conn, email, start_time, end_time, count)
-                elif data_type == 'heartRate':
-                    await insert_into_heartRate_table(conn, email, start_time, end_time, count)
-                elif data_type == 'restingHeartRate':
-                    await insert_into_restingHeartRate_table(conn, email, start_time, end_time, count)
-                elif data_type == 'oxygen':
-                    await insert_into_oxygen_table(conn, email, start_time, end_time, count)
-                elif data_type == 'glucose':
-                    await insert_into_glucose_table(conn, email, start_time, end_time, count)
-                elif data_type == 'pressure':
-                    await insert_into_pressure_table(conn, email, start_time, end_time, count)
+                start_time = d["start"]
+                end_time = d["end"]
+                count = d["count"]
+                if data_type == "steps":
+                    await insert_into_steps_table(
+                        conn, email, start_time, end_time, count
+                    )
+                elif data_type == "heartRate":
+                    await insert_into_heartRate_table(
+                        conn, email, start_time, end_time, count
+                    )
+                elif data_type == "restingHeartRate":
+                    await insert_into_restingHeartRate_table(
+                        conn, email, start_time, end_time, count
+                    )
+                elif data_type == "oxygen":
+                    await insert_into_oxygen_table(
+                        conn, email, start_time, end_time, count
+                    )
+                elif data_type == "glucose":
+                    await insert_into_glucose_table(
+                        conn, email, start_time, end_time, count
+                    )
+                elif data_type == "pressure":
+                    await insert_into_pressure_table(
+                        conn, email, start_time, end_time, count
+                    )
     conn.close()
+
 
 # Example usage
 async def main():
@@ -233,12 +264,15 @@ async def main():
     total_data = {
         "steps": [{"start": "Nov 10, 3 PM", "end": "Nov 10, 4 PM", "count": 100}],
         "heartRate": [{"start": "Nov 10, 4 PM", "end": "Nov 10, 5 PM", "count": 75}],
-        "restingHeartRate": [{"start": "Nov 10, 5 PM", "end": "Nov 10, 6 PM", "count": 60}],
+        "restingHeartRate": [
+            {"start": "Nov 10, 5 PM", "end": "Nov 10, 6 PM", "count": 60}
+        ],
         "oxygen": [{"start": "Nov 10, 6 PM", "end": "Nov 10, 7 PM", "count": 95}],
         "glucose": [{"start": "Nov 10, 7 PM", "end": "Nov 10, 8 PM", "count": 110}],
-        "pressure": [{"start": "Nov 10, 8 PM", "end": "Nov 10, 9 PM", "count": 120}]
+        "pressure": [{"start": "Nov 10, 8 PM", "end": "Nov 10, 9 PM", "count": 120}],
     }
     await insert_into_tables(email, total_data)
+
 
 # Asynchronous functions to display data from tables
 async def show_table(conn, table_name):
@@ -249,27 +283,34 @@ async def show_table(conn, table_name):
             print(f"Data in the {table_name} table:")
             for row in rows:
                 print(row)
-    except:
+    except Exception:
         print("")
+
 
 # Wrapper functions for each table
 async def show_steps_table(conn):
     await show_table(conn, "STEPS")
 
+
 async def show_heartRate_table(conn):
     await show_table(conn, "HEART_RATE")
+
 
 async def show_restingHeartRate_table(conn):
     await show_table(conn, "RESTING_HEART_RATE")
 
+
 async def show_oxygen_table(conn):
     await show_table(conn, "OXYGEN")
+
 
 async def show_glucose_table(conn):
     await show_table(conn, "GLUCOSE")
 
+
 async def show_pressure_table(conn):
     await show_table(conn, "PRESSURE")
+
 
 # Main function to show all tables
 async def show_tables():
@@ -284,10 +325,12 @@ async def show_tables():
     finally:
         conn.close()
 
-async def main(email,total_data):
+
+async def main(email, total_data):
 
     await insert_into_tables(email, total_data)
     await show_tables()
+
 
 async def rds_main(email, total_data):
     # Directly await the main function

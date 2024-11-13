@@ -467,9 +467,7 @@ def authorize_google_fit(request):
         # else:
         print(settings.GOOGLEFIT_CLIENT_CONFIG)
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
-        flow.redirect_uri = request.build_absolute_uri(
-            reverse("callback_google_fit")
-        )
+        flow.redirect_uri = request.build_absolute_uri(reverse("callback_google_fit"))
         # .replace("http://", "https://")
         print("Redirected URI: ", flow.redirect_uri)
         authorization_url, state = flow.authorization_url(
@@ -1188,7 +1186,7 @@ def steps_barplot(data):
             steps_data.append(d)
 
     # Pass the plot path to the template
-    print("Steps Data:",steps_data)
+    print("Steps Data:", steps_data)
     context = {"steps_data_json": steps_data}
     return context
 
@@ -1527,8 +1525,8 @@ async def get_metric_data(request):
             frequency = request.GET.get("data_freq")
 
         total_data = await fetch_all_metric_data(request, duration, frequency)
-        rds_response = await rds_main(user_email,total_data)
-        print("RDS Response: \n",rds_response)
+        rds_response = await rds_main(user_email, total_data)
+        print("RDS Response: \n", rds_response)
         context = {"data": total_data}
         # print("Inside get metric:", context)
         return await sync_to_async(render)(
@@ -1562,15 +1560,12 @@ def health_data_view(request):
                     "value": data.get("value"),
                 },
                 ConditionExpression="attribute_not_exists(email) AND attribute_not_exists(#t)",
-                ExpressionAttributeNames={
-                    "#t": "time"
-                }
+                ExpressionAttributeNames={"#t": "time"},
             )
             print("Item inserted successfully.")
         except dynamodb_res.meta.client.exceptions.ConditionalCheckFailedException:
             print("Item already exists and was not replaced.")
         return redirect("get_metric_data")
-
 
     # Fetch all the metrics data from DynamoDB
     response = table.scan()
