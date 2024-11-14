@@ -18,6 +18,10 @@ from .dynamodb import (
     delete_threads_by_user,
     get_thread,
     delete_thread_by_id,
+    fetch_all_threads,
+    fetch_thread,
+    create_post,
+    fetch_posts_for_thread,
     # MockUser,
     # users_table,
 )
@@ -338,6 +342,7 @@ class ForumTests(TestCase):
         self.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
 
         self.users_table = self.dynamodb.Table("Users")
+        self.posts_table = self.dynamodb.Table("ForumPosts")
 
         # Define user data for the test
         self.user_data = {
@@ -451,6 +456,91 @@ class ForumTests(TestCase):
         # Step 3: Verify the thread is deleted
         response = self.threads_table.get_item(Key={"ThreadID": thread_id})
         self.assertNotIn("Item", response, "Thread should be deleted from DynamoDB.")
+
+    def test_fetch_all_threads(self):
+
+        self.test_threads = [
+            {
+                "ThreadID": "1",
+                "Title": "Test",
+                "UserID": "test_user_123",
+                "CreatedAt": "2024-11-01T10:00:00",
+                "Content": "Test",
+            },
+        ]
+        for thread in self.test_threads:
+            self.threads_table.put_item(Item=thread)
+
+        # Call the function
+        threads = fetch_all_threads()
+
+        # Check the first thread's properties
+        self.assertEqual(threads[0]["ThreadID"], "1")
+        self.assertEqual(threads[0]["ReplyCount"], 0)
+        self.assertEqual(threads[0]["LastPostUser"], "No replies yet")
+        self.assertEqual(
+            threads[0]["CreatedAt"], datetime.fromisoformat("2024-11-01T10:00:00")
+        )
+
+    def test_fetch_thread(self):
+        self.test_thread = {
+            "ThreadID": "123",
+            "Title": "Test Thread",
+            "UserID": "test_user_123",
+            "CreatedAt": "2024-11-14T10:00:00",
+        }
+        self.threads_table.put_item(Item=self.test_thread)
+
+        thread = fetch_thread("123")
+
+        # Assertions to verify the thread details
+        self.assertIsNotNone(thread)
+        self.assertEqual(thread["ThreadID"], "123")
+        self.assertEqual(thread["Title"], "Test Thread")
+        self.assertEqual(thread["CreatedAt"], "2024-11-14T10:00:00")
+
+        # Call the function to fetch a non-existing thread
+        thread = fetch_thread("999")
+
+        # Assertion to verify the function returns None
+        self.assertIsNone(thread)
+
+    def create_post(self):
+        post = create_post("123", "test_user_123", "This is a test post")
+
+        # Store the post ID for cleanup
+        self.test_post_id = post["PostID"]
+
+        # Assertions to verify the post details
+        self.assertEqual(post["ThreadID"], "123")
+        self.assertEqual(post["UserID"], "test_user_123")
+        self.assertEqual(post["Content"], "This is a test post")
+
+        # Verify that CreatedAt is a valid ISO format datetime string
+        created_at = post["CreatedAt"]
+        self.assertIsInstance(datetime.fromisoformat(created_at), datetime)
+
+        # Verify that the post was inserted into the ForumPosts table
+        response = self.posts_table.get_item(Key={"PostID": self.test_post_id})
+        saved_post = response.get("Item", None)
+        self.assertIsNotNone(saved_post)
+        self.assertEqual(saved_post["PostID"], post["PostID"])
+        self.assertEqual(saved_post["ThreadID"], post["ThreadID"])
+        self.assertEqual(saved_post["UserID"], post["UserID"])
+        self.assertEqual(saved_post["Content"], post["Content"])
+        self.assertEqual(saved_post["CreatedAt"], post["CreatedAt"])
+
+        posts = fetch_posts_for_thread(self.thread_id)
+
+        # Assertions to verify the posts
+        self.assertEqual(len(posts), 1)
+
+        # Check the details of the first post
+        self.assertEqual(posts[0]["ThreadID"], self.thread_id)
+        self.assertEqual(posts[0]["UserID"], "test_user_123")
+        self.assertEqual(posts[0]["Content"], "This is a test post")
+
+        self.posts_table.delete_item(Key={"PostID": self.test_post_id})
 
     def tearDown(self):
         delete_threads_by_user("test_user_123")
