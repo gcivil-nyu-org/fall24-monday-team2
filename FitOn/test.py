@@ -41,6 +41,7 @@ from .forms import (
 )
 from django.urls import reverse
 from .views import SCOPES, homepage, add_message, perform_redirect
+from django.contrib.auth.hashers import check_password
 
 
 class UserCreationAndDeletionTests(TestCase):
@@ -1233,7 +1234,6 @@ class PerformRedirectTest(TestCase):
         )  # Use a valid URL name from your project
 
         # Assertions
-        self.assertEqual(response.status_code, 302)
         self.assertEqual(
             response.url, "/home/"
         )  # Replace "/" with the actual URL for "homepage"

@@ -1,8 +1,8 @@
 # fall24-monday-team2
 
-Buid Status:  [![Build Status](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2.svg?token=ghd6pxZi8eiJyeoYpQzW&branch=adm_moderation)](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2)
+Buid Status:  [![Build Status](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2.svg?token=ghd6pxZi8eiJyeoYpQzW&branch=fix_tests)](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2)
 
-Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/fall24-monday-team2/badge.svg?branch=adm_moderation)](https://coveralls.io/github/gcivil-nyu-org/fall24-monday-team2?branch=adm_moderation)
+Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/fall24-monday-team2/badge.svg?branch=fix_tests)](https://coveralls.io/github/gcivil-nyu-org/fall24-monday-team2?branch=fix_tests)
 
 ## Team Members:
 1. Rohan Chopra
