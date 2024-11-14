@@ -1,9 +1,12 @@
 aiomysql
 asgiref
+awscli
 black
 boto
 boto3
 botocore
+coverage
+coveralls
 cachetools
 certifi
 charset-normalizer
@@ -21,6 +24,7 @@ googleapis-common-protos
 httplib2
 idna
 jmespath
+moto
 mypy-extensions
 numpy
 oauthlib
@@ -33,6 +37,7 @@ protobuf
 pyasn1
 pyasn1_modules
 PyMySQL
+pyYAML
 pyparsing
 python-dateutil
 pytz
