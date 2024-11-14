@@ -21,8 +21,6 @@ httplib2
 idna
 jmespath
 mypy-extensions
-# mysql
-# mysql-connector-python
 numpy
 oauthlib
 packaging
