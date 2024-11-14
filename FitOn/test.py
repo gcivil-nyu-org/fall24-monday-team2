@@ -1,8 +1,10 @@
 from datetime import datetime
-from django.test import TestCase, Client, override_settings
+from django.test import TestCase, Client, override_settings, RequestFactory
 from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
+from django.contrib.messages.middleware import MessageMiddleware
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 import boto3
 import json
@@ -30,6 +32,7 @@ from unittest.mock import patch
 from botocore.exceptions import ClientError, ValidationError
 import pytz
 from django.contrib import messages
+from django.contrib.messages import get_messages
 from .forms import (
     SignUpForm,
     SetNewPasswordForm,
@@ -37,7 +40,7 @@ from .forms import (
     validate_file_extension,
 )
 from django.urls import reverse
-from .views import SCOPES
+from .views import SCOPES, homepage, add_message, perform_redirect
 
 
 class UserCreationAndDeletionTests(TestCase):
@@ -1156,3 +1159,81 @@ class ValidateFileExtensionTest(TestCase):
     #         self.assertListEqual(e.messages, ["Only PDF files are allowed."])
     #         return  # Test passed
     #     self.fail("validate_file_extension did not raise ValidationError")
+
+
+############################
+# Tests for views #
+############################
+
+
+class HomepageViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def test_homepage_with_username(self):
+        request = self.factory.get("/")
+        request.session = {"username": "sg8002"}  # Directly set the session
+
+        response = homepage(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "sg8002"
+        )  # Check that "JohnDoe" is in the response content
+
+    def test_homepage_without_username(self):
+        request = self.factory.get("/")
+        request.session = {}  # No username in the session
+
+        response = homepage(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "Guest"
+        )  # Check that "Guest" is in the response content
+
+
+class AddMessageTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _attach_middlewares(self, request):
+        """Helper method to attach SessionMiddleware and MessageMiddleware to the request."""
+        session_middleware = SessionMiddleware(lambda req: None)
+        session_middleware.process_request(request)
+        request.session.save()  # Save the session to initialize it
+
+        message_middleware = MessageMiddleware(lambda req: None)
+        message_middleware.process_request(request)
+
+    def test_add_message(self):
+        # Create a mock request
+        request = self.factory.get("/")
+        self._attach_middlewares(request)  # Attach both middlewares
+
+        # Call the add_message function
+        add_message(request, level=25, message="Test Message")
+
+        # Retrieve the messages from the request
+        messages = list(get_messages(request))
+
+        # Assertions
+        self.assertEqual(len(messages), 0)
+
+
+class PerformRedirectTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    async def test_perform_redirect(self):
+        # Call the async perform_redirect function
+        response = await perform_redirect(
+            "homepage"
+        )  # Use a valid URL name from your project
+
+        # Assertions
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url, "/home/"
+        )  # Replace "/" with the actual URL for "homepage"
