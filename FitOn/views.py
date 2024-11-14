@@ -356,7 +356,7 @@ def profile_view(request):
 
     if not user:
         messages.error(request, "User not found.")
-        return redirect("homepage")
+        return redirect("login")
 
     if request.method == "POST":
         # Handle profile picture upload
