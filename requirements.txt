@@ -23,7 +23,6 @@ jmespath
 mypy-extensions
 mysql
 mysql-connector-python
-mysqlclient==2.1.1
 numpy
 oauthlib
 packaging
