@@ -1,17 +1,16 @@
 from boto3.dynamodb.conditions import Attr
-import boto3
-import uuid
+import boto3, uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 from datetime import datetime, timezone
 from django.conf import settings
+from asgiref.sync import sync_to_async
 
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
 from django.conf import settings
 import uuid
-from pytz import timezone
 
 
 # Connect to DynamoDB
@@ -28,7 +27,7 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
-tz = timezone("EST")
+chat_table = dynamodb.Table("UserChats")
 
 
 class MockUser:
@@ -65,17 +64,34 @@ class MockUser:
 def get_user_by_username(username):
     try:
         response = users_table.scan(
-            FilterExpression="#n = :username",
-            ExpressionAttributeNames={"#n": "username"},
-            ExpressionAttributeValues={":username": username},
+            FilterExpression=Attr("username").contains(
+                username
+            )  # This is case-sensitive
         )
         users = response.get("Items", [])
         if users:
-            return users[0]
-        return None
+            return users[0]  # Return the first matched user
+        return None  # No user found
     except Exception as e:
         print(f"Error querying DynamoDB for username '{username}': {e}")
         return None
+
+
+def get_users_by_username_query(query):
+    try:
+        # Scan the Users table to get all users
+        response = users_table.scan()
+        users = response.get("Items", [])
+
+        # Filter users based on case-insensitive match
+        filtered_users = [
+            user for user in users if query.lower() in user["username"].lower()
+        ]
+
+        return filtered_users
+    except Exception as e:
+        print(f"Error querying DynamoDB for usernames: {e}")
+        return []
 
 
 def create_user(user_id, username, email, name, date_of_birth, gender, password):
@@ -83,15 +99,16 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
         print(
             f"Attempting to create user: {user_id}, {username}, {email}, {name}, {date_of_birth}, {gender}"
         )
+        # Insert user into DynamoDB
         users_table.put_item(
             Item={
-                "user_id": user_id,  # Partition key
+                "user_id": user_id,
                 "username": username,
                 "email": email,
                 "name": name,
                 "date_of_birth": str(date_of_birth),
                 "gender": gender,
-                "password": password,  # Hashed password
+                "password": password,
                 "is_admin": False,
                 "is_fitness_trainer": False,
                 "is_muted": False,
@@ -99,19 +116,9 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
                 "punishment_date": "",
             }
         )
-
-        # Test to check if inserted user was inserted
-        response = users_table.get_item(Key={"user_id": user_id})
-        if "Item" in response:
-            print("User found in DynamoDB:", response["Item"])
-        else:
-            print("User not found in DynamoDB after insertion.")
-
-        print("User created successfully.")
-        return True
+        print(f"User '{username}' created successfully.")
     except Exception as e:
         print(f"Error creating user in DynamoDB: {e}")
-        return False
 
 
 def delete_user_by_username(username):
@@ -165,6 +172,19 @@ def get_user_by_uid(uid):
         if user_data:
             return MockUser(user_data)
         return None
+    except Exception as e:
+        return None
+
+
+def get_mock_user_by_uid(uid):
+    try:
+        # Fetch from DynamoDB table
+        response = users_table.get_item(Key={"user_id": uid})
+        user_data = response.get("Item", None)
+
+        if user_data:
+            return MockUser(user_data)
+        return None
     except Exception:
         return None
 
@@ -178,10 +198,11 @@ def update_user_password(user_id, new_password):
             ExpressionAttributeValues={":val": hashed_password},
             ReturnValues="UPDATED_NEW",
         )
+        print(f"Password updated for user_id '{user_id}'.")
         return response
     except Exception as e:
         print(f"Error updating user password: {e}")
-    return None
+        return None
 
 
 def get_last_reset_request_time(user_id):
@@ -202,7 +223,7 @@ def update_reset_request_time(user_id):
             return None
 
         # Insert a new entry or update the existing reset request time
-        password_reset_table.put_item(
+        response = password_reset_table.put_item(
             Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
         )
         print(f"Reset request time updated for user_id '{user_id}'.")
@@ -217,6 +238,13 @@ def get_user(user_id):
     except ClientError as e:
         print(e.response["Error"]["Message"])
         return None
+
+
+def verify_user_credentials(username, password):
+    user = get_user_by_username(username)
+    if user and check_password(password, user["password"]):
+        return user
+    return None
 
 
 def upload_profile_picture(user_id, profile_picture):
@@ -464,8 +492,7 @@ def remove_fitness_trainer(user_id):
 
 def create_thread(title, user_id, content):
     thread_id = str(uuid.uuid4())
-
-    created_at = datetime.now(tz).isoformat()
+    created_at = datetime.now().isoformat()
 
     thread = {
         "ThreadID": thread_id,
@@ -521,8 +548,7 @@ def fetch_thread(thread_id):
 
 def create_post(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-
-    created_at = datetime.now(tz).isoformat()
+    created_at = datetime.utcnow().isoformat()
 
     post = {
         "PostID": post_id,
@@ -552,7 +578,7 @@ def fetch_posts_for_thread(thread_id):
 
 def post_comment(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-    created_at = datetime.now(tz).isoformat()
+    created_at = datetime.utcnow().isoformat()
 
     reply = {
         "ThreadID": thread_id,
