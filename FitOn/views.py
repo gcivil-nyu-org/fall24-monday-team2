@@ -1495,7 +1495,7 @@ async def fetch_all_metric_data(request, duration, frequency):
             )
 
         await asyncio.gather(*tasks)
-        total_data = await get_sleep_scores(total_data, email)
+        # total_data = await get_sleep_scores(total_data, email)
         total_data = await format_bod_fitness_data(total_data)
 
         # except Exception as e:
