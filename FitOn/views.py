@@ -31,6 +31,7 @@ from .dynamodb import (
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
     posts_table,
+    delete_thread_by_id,
 )
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -1680,7 +1681,8 @@ def delete_thread(request):
 
         try:
             # Perform the deletion from DynamoDB
-            threads_table.delete_item(Key={"ThreadID": thread_id})
+            delete_thread_by_id(thread_id)
+            # threads_table.delete_item(Key={"ThreadID": thread_id})
             return JsonResponse(
                 {"status": "success", "message": "Thread deleted successfully."}
             )

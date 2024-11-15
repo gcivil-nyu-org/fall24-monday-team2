@@ -741,18 +741,27 @@ def delete_threads_by_user(user_id):
 
 
 def delete_thread_by_id(thread_id):
-    # try:
-    # Delete the forum thread by thread_id (primary key)
+    # Initialize the response to scan for posts associated with the thread
+    response = posts_table.scan(FilterExpression=Attr("ThreadID").eq(thread_id))
+
+    # Iterate through each item and delete it
+    for item in response["Items"]:
+        # Include both the partition key ('PostID') and the sort key ('ThreadID')
+        posts_table.delete_item(
+            Key={
+                "PostID": item["PostID"],  # Your partition key
+                "ThreadID": item["ThreadID"],  # Your sort key
+            }
+        )
+
+    # Delete the thread from the threads table
     threads_table.delete_item(
-        Key={"ThreadID": thread_id}  # Replace with your actual partition key
+        Key={
+            "ThreadID": thread_id
+        }  # Ensure this matches your table's primary key schema
     )
 
-    print(f"Forum thread with ID '{thread_id}' successfully deleted.")
     return True
-
-    # except Exception as e:
-    #     print(f"Error deleting forum thread with ID '{thread_id}': {e}")
-    #     return False
 
 
 def get_thread(title, user_id, content, created_at):
