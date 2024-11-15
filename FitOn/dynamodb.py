@@ -75,9 +75,6 @@ def get_user_by_username(username):
 
 def create_user(user_id, username, email, name, date_of_birth, gender, password):
     # try:
-    print(
-        f"Attempting to create user: {user_id}, {username}, {email}, {name}, {date_of_birth}, {gender}"
-    )
     users_table.put_item(
         Item={
             "user_id": user_id,  # Partition key
@@ -96,13 +93,13 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
     )
 
     # Test to check if inserted user was inserted
-    response = users_table.get_item(Key={"user_id": user_id})
-    if "Item" in response:
-        print("User found in DynamoDB:", response["Item"])
-    else:
-        print("User not found in DynamoDB after insertion.")
+    # response = users_table.get_item(Key={"user_id": user_id})
+    # if "Item" in response:
+    #     print("User found in DynamoDB:", response["Item"])
+    # else:
+    #     print("User not found in DynamoDB after insertion.")
 
-    print("User created successfully.")
+    # print("User created successfully.")
     return True
     # except Exception as e:
     #     print(f"Error creating user in DynamoDB: {e}")
@@ -120,7 +117,7 @@ def delete_user_by_username(username):
 
     users = response.get("Items", [])
     if not users:
-        print(f"No user found with username: {username}")
+        # print(f"No user found with username: {username}")
         return False  # No user to delete
 
     # Assuming the 'user_id' is the partition key
@@ -129,7 +126,7 @@ def delete_user_by_username(username):
     # Delete the user by user_id (or username if it's the primary key)
     users_table.delete_item(Key={"user_id": user_id})  # Replace with your partition key
 
-    print(f"User '{username}' successfully deleted.")
+    # print(f"User '{username}' successfully deleted.")
     return True
 
     # except Exception as e:
@@ -471,7 +468,6 @@ def create_thread(title, user_id, content):
         "Likes": 0,
         "LikedBy": [],
     }
-    print(thread)
 
     threads_table.put_item(Item=thread)
     return thread
@@ -526,7 +522,6 @@ def create_post(thread_id, user_id, content):
         "Content": content,
         "CreatedAt": created_at,
     }
-    print(post)
 
     posts_table.put_item(Item=post)
     return post
@@ -731,13 +726,11 @@ def delete_threads_by_user(user_id):
 
         # If there are no more items to delete, exit the loop
         if not thread_ids:
-            print("No more items to delete.")
             break
 
         # Loop through each ThreadID and delete the item
         for thread_id in thread_ids:
             threads_table.delete_item(Key={"ThreadID": thread_id})
-            print(f"Deleted ThreadID: {thread_id}")
 
 
 def delete_thread_by_id(thread_id):
@@ -784,12 +777,8 @@ def get_thread(title, user_id, content, created_at):
 
     threads = response.get("Items", [])
     if threads:
-        print("Thread found:", threads[0])
         return threads[0]
     else:
-        print(
-            "No thread found with the specified Title, UserID, Content, and CreatedAt."
-        )
         return None
 
     # except Exception as e:

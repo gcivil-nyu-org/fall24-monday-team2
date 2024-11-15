@@ -215,9 +215,6 @@ class UserCreationAndDeletionTests(TestCase):
         )
 
         create_user(**self.user_data)
-        user = get_user_by_uid(self.user_data["user_id"])
-        print(user)
-        print(user.get("is_banned"))
 
         # Step 1: Unban the user
         response = self.client.post(
@@ -291,9 +288,6 @@ class UserCreationAndDeletionTests(TestCase):
         )
 
         create_user(**self.user_data)
-        user = get_user_by_uid(self.user_data["user_id"])
-        print(user)
-        print(user.get("is_muted"))
 
         # Step 1: Unmute the user
         response = self.client.post(
@@ -404,8 +398,6 @@ class ForumTests(TestCase):
             created_thread["LikedBy"], [], "Initial LikedBy list should be empty."
         )
 
-    # TODO: ADD DELETE_POST FUNCTION
-
     def test_get_thread(self):
         # Step 1: Create a sample thread
         thread = create_thread(
@@ -437,6 +429,38 @@ class ForumTests(TestCase):
             thread["Content"],
             "Thread content does not match.",
         )
+
+    def test_create_post(self):
+        # Setup: Create a thread for the post to be attached to
+        thread = create_thread(
+            title=self.thread_data["title"],
+            user_id=self.thread_data["user_id"],
+            content=self.thread_data["content"],
+        )
+        thread_id = thread["ThreadID"]
+
+        # Create a post in the thread
+        post = create_post(thread_id, "test_user_123", "This is a test post content.")
+        post_id = post["PostID"]
+
+        try:
+            # Fetch the post from DynamoDB
+            post_response = self.posts_table.get_item(
+                Key={"PostID": post_id, "ThreadID": thread_id}
+            )
+
+            # Assertions for the post
+            self.assertIn("Item", post_response)
+            self.assertEqual(post_response["Item"]["ThreadID"], thread_id)
+            self.assertEqual(post_response["Item"]["UserID"], "test_user_123")
+            self.assertEqual(
+                post_response["Item"]["Content"], "This is a test post content."
+            )
+
+        finally:
+            # Cleanup: Delete the created thread and post from DynamoDB
+            self.threads_table.delete_item(Key={"ThreadID": thread_id})
+            self.posts_table.delete_item(Key={"PostID": post_id, "ThreadID": thread_id})
 
     def test_delete_thread_by_id(self):
         # Step 1: Create a sample thread
