@@ -393,6 +393,48 @@
             });
         });
 
+        // Attach event listeners to all delete reply buttons
+        document.querySelectorAll(".delete-reply-btn").forEach(button => {
+            button.addEventListener("click", function(event) {
+                event.preventDefault();
+                const replyId = this.getAttribute("data-reply-id");
+                const postId = this.getAttribute("data-post-id");
+                
+                if (!replyId || !postId || !threadId) {
+                    alert("Reply ID, Post ID, or Thread ID is missing.");
+                    return;
+                }   
+
+                if (confirm("Are you sure you want to delete this reply?")) {
+                    fetch('/delete_reply/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token }}',
+                            'Content-Type': 'application/json',
+                            'x-requested-with': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ 'post_id': postId, 'reply_id': replyId, 'thread_id': threadId })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === 'success') {
+                            // Remove the reply from the DOM
+                            const replyElement = document.getElementById(`reply-${replyId}`);
+                            if (replyElement) {
+                                replyElement.remove();
+                                alert("Reply deleted successfully.");
+                            } else {
+                                console.error('Reply element not found in DOM');
+                            }
+                        } else {
+                            //console.error("Error:", data.message);
+                            alert("Error: " + data.message);
+                        }
+                    })
+                    .catch(error => console.error("Error in fetch request:", error));
+                }
+            });
+        });
 
         // Ban/Unban button click event
         banButtons.forEach(button => {
