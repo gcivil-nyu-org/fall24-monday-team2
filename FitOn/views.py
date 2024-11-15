@@ -1583,64 +1583,74 @@ def health_data_view(request):
     )
 
 
+
 def add_reply(request):
+    print("Received request in add_reply")  # Debugging statement
+
     if (
         request.method == "POST"
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
     ):
-        data = json.loads(request.body.decode("utf-8"))
-        post_id = data.get("post_id")
-        content = data.get("content")
-        thread_id = data.get("thread_id")
-
-        if not post_id or not content:
-            return JsonResponse(
-                {"status": "error", "message": "Post ID and content are required."},
-                status=400,
-            )
-
-        # Get the user info from the session
-        user_id = request.session.get("username")
-        if not user_id:
-            return JsonResponse(
-                {"status": "error", "message": "User not authenticated"}, status=403
-            )
-
-        # Create the reply data
-        tz = timezone("EST")
-        reply_data = {
-            "ReplyID": str(uuid.uuid4()),  # Unique ID for each reply
-            "UserID": user_id,
-            "Content": content,
-            "CreatedAt": datetime.now(tz).isoformat(),  # Timestamp for each reply
-        }
-
-        # Save the reply to DynamoDB by appending it to the 'Replies' list for the post
         try:
+            data = json.loads(request.body.decode("utf-8"))
+            print("Data received:", data)  # Debugging statement
+
+            post_id = data.get("post_id")
+            content = data.get("content")
+            thread_id = data.get("thread_id")
+
+            if not post_id or not content:
+                print("Missing post_id or content")  # Debugging statement
+                return JsonResponse(
+                    {"status": "error", "message": "Post ID and content are required."},
+                    status=400,
+                )
+
+            user_id = request.session.get("username")
+            if not user_id:
+                print("User not authenticated")  # Debugging statement
+                return JsonResponse(
+                    {"status": "error", "message": "User not authenticated"}, status=403
+                )
+
+            #tz = timezone("EST")
+            reply_data = {
+                "ReplyID": str(uuid.uuid4()),
+                "UserID": user_id,
+                "Content": content,
+                #"CreatedAt": datetime.now(tz).isoformat(),
+            }
+
+            # Simulating interaction with a database (DynamoDB, for example)
+            print("Attempting to save reply:", reply_data)  # Debugging statement
+            # Assuming 'posts_table' is configured to interact with your database
             posts_table.update_item(
                 Key={"PostID": post_id, "ThreadID": thread_id},
                 UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
                 ExpressionAttributeValues={":reply": [reply_data], ":empty_list": []},
                 ReturnValues="UPDATED_NEW",
             )
+
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "reply_id": reply_data["ReplyID"],
+                    "content": content,
+                    "username": user_id,
+                    #"created_at": reply_data["CreatedAt"],
+                }
+            )
+
         except Exception as e:
+            print("Exception occurred:", e)  # Debugging statement
+            logger.error("Failed to process add_reply request", exc_info=True)
             return JsonResponse(
                 {"status": "error", "message": f"Failed to save reply: {str(e)}"},
                 status=500,
             )
 
-        # Return success response with reply details
-        return JsonResponse(
-            {
-                "status": "success",
-                "reply_id": reply_data["ReplyID"],
-                "content": content,
-                "username": user_id,
-                "created_at": reply_data["CreatedAt"],
-            }
-        )
-
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
 
 
 def delete_reply_view(request):
