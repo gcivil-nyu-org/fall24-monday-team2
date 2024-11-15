@@ -27,8 +27,6 @@ from .dynamodb import (
     # MockUser,
     # users_table,
 )
-from django.contrib.auth.hashers import check_password
-from unittest.mock import patch
 from botocore.exceptions import ClientError, ValidationError
 import pytz
 from django.contrib import messages
@@ -39,8 +37,15 @@ from .forms import (
     ProfileForm,
     validate_file_extension,
 )
-from django.urls import reverse
-from .views import SCOPES, homepage, add_message, perform_redirect, login
+from .views import (
+    SCOPES,
+    homepage,
+    add_message,
+    perform_redirect,
+    login,
+    custom_logout,
+    signup,
+)
 from django.contrib.auth.hashers import check_password, make_password
 
 
@@ -1322,3 +1327,113 @@ class LoginViewTest(TestCase):
         # Check for the correct error message in the response
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Invalid password. Please try again.")
+
+
+class CustomLogoutViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _attach_session(self, request):
+        """Helper method to attach a session to the request using SessionMiddleware."""
+        middleware = SessionMiddleware(
+            lambda req: None
+        )  # Pass a dummy get_response function
+        middleware.process_request(request)
+        request.session.save()  # Save the session to initialize it
+
+    def test_custom_logout(self):
+        # Create a mock request and attach a session
+        request = self.factory.get("/")
+        self._attach_session(request)
+
+        # Set some session data
+        request.session["username"] = "testuser"
+        request.session["user_id"] = "123"
+
+        # Call the custom_logout view
+        response = custom_logout(request)
+
+        # Assertions
+        self.assertEqual(response.status_code, 302)  # Check for redirect
+        self.assertEqual(response["Location"], reverse("login"))  # Check redirect URL
+
+        # Check that the session is flushed (no data should remain)
+        self.assertNotIn("username", request.session)
+        self.assertNotIn("user_id", request.session)
+
+        # Check cache control headers
+        self.assertEqual(
+            response["Cache-Control"], "no-cache, no-store, must-revalidate"
+        )
+        self.assertEqual(response["Pragma"], "no-cache")
+        self.assertEqual(response["Expires"], "0")
+
+
+class SignUpViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        # User data for testing
+        self.username = "newuser"
+        self.email = "newuser@example.com"
+        self.name = "New User"
+        self.date_of_birth = "2000-01-01"
+        self.gender = "M"
+        self.password = "newpassword"
+
+    def tearDown(self):
+        # Clean up the test user from DynamoDB
+        delete_user_by_username(self.username)
+
+    def test_signup_valid_data(self):
+        # Create a POST request with valid sign-up data
+        request = self.factory.post(
+            "/signup/",
+            {  # Use "/signup/" instead of "/"
+                "username": self.username,
+                "email": self.email,
+                "name": self.name,
+                "date_of_birth": self.date_of_birth,
+                "gender": self.gender,
+                "password": self.password,
+                "confirm_password": self.password,  # Ensure passwords match
+            },
+        )
+        request.session = {}
+
+        # Call the signup view
+        response = signup(request)
+
+        # print(response)
+
+        # Check if the response is a redirect to the homepage
+        self.assertEqual(response.status_code, 302, "Expected redirect did not occur.")
+        self.assertEqual(response.url, reverse("homepage"))
+        self.assertIn("username", request.session)
+        self.assertEqual(request.session["username"], self.username)
+
+    def test_signup_invalid_data(self):
+        # Create a POST request with invalid data (e.g., missing required fields)
+        request = self.factory.post(
+            "/signup/",
+            {
+                "username": "",
+                "email": "invalidemail",
+                "name": "",
+                "date_of_birth": "",
+                "gender": "",
+                "password": "short",
+                "confirm_password": "different",  # Passwords do not match
+            },
+        )
+        request.session = {}
+
+        # Call the signup view
+        response = signup(request)
+
+        # Check that the response does not redirect and the form has errors
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("This field is required.", response.content.decode())
+        self.assertIn("Enter a valid email address.", response.content.decode())
+        self.assertIn("Passwords do not match.", response.content.decode())
