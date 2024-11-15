@@ -40,8 +40,8 @@ from .forms import (
     validate_file_extension,
 )
 from django.urls import reverse
-from .views import SCOPES, homepage, add_message, perform_redirect
-from django.contrib.auth.hashers import check_password
+from .views import SCOPES, homepage, add_message, perform_redirect, login
+from django.contrib.auth.hashers import check_password, make_password
 
 
 class UserCreationAndDeletionTests(TestCase):
@@ -1261,3 +1261,64 @@ class PerformRedirectTest(TestCase):
         self.assertEqual(
             response.url, "/home/"
         )  # Replace "/" with the actual URL for "homepage"
+
+
+class LoginViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        # Create a user in DynamoDB for testing
+        self.username = "testuser"
+        self.password = "correctpassword"
+        hashed_password = make_password(self.password)
+        create_user(
+            self.username, self.username, "", "Test User", "", "", hashed_password
+        )
+
+    def tearDown(self):
+        # Clean up the test user from DynamoDB
+        delete_user_by_username(self.username)
+
+    def test_login_valid_user_and_password(self):
+        # Create a POST request with valid credentials
+        request = self.factory.post(
+            "/", {"username": self.username, "password": self.password}
+        )
+        request.session = {}
+
+        # Call the login view
+        response = login(request)
+
+        # Check if the response is a redirect to the homepage
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("homepage"))
+        self.assertIn("username", request.session)
+        self.assertEqual(request.session["username"], self.username)
+
+    def test_login_user_does_not_exist(self):
+        # Create a POST request with a non-existent username
+        request = self.factory.post(
+            "/", {"username": "nonexistentuser", "password": "password"}
+        )
+        request.session = {}
+
+        # Call the login view
+        response = login(request)
+
+        # Check for the correct error message in the response
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "User does not exist.")
+
+    def test_login_invalid_password(self):
+        # Create a POST request with an incorrect password
+        request = self.factory.post(
+            "/", {"username": self.username, "password": "wrongpassword"}
+        )
+        request.session = {}
+
+        # Call the login view
+        response = login(request)
+
+        # Check for the correct error message in the response
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Invalid password. Please try again.")
