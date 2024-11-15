@@ -208,7 +208,6 @@ def signup(request):
                 request.session["user_id"] = user_id
                 return redirect("homepage")
             else:
-                print("Form validation errors:", form.errors)
                 form.add_error(None, "Error creating user in DynamoDB.")
     else:
         form = SignUpForm()  # Return an empty form for the GET request
