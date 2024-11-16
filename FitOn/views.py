@@ -1716,31 +1716,32 @@ def delete_thread(request):
 
 
 def reports_view(request):
-    # Get user details to check if they are an admin
     user = get_user(request.session.get("user_id"))
 
-    # Only allow access if the user is an admin
-    if not user.get("is_admin"):
-        return redirect("forum")  # Redirect non-admins to the main forum page
-
+    # Handle POST requests (Reporting Threads) - Available to all users
     if request.method == "POST":
         data = json.loads(request.body.decode("utf-8"))
         action = data.get("action")
         thread_id = data.get("thread_id")
 
-        # Check if the action is to report a thread
+        # Allow anyone to report a thread
         if action == "report_thread" and thread_id:
             # Mark the thread as reported in DynamoDB
             mark_thread_as_reported(thread_id)
             return JsonResponse({"status": "success"})
-        else:
-            return JsonResponse(
-                {"status": "error", "message": "Invalid request"}, status=400
-            )
 
-    # If it's a GET request, retrieve reported threads and comments
+        return JsonResponse(
+            {"status": "error", "message": "Invalid request"}, status=400
+        )
+
+    # Handle GET requests (View reported threads) - Restricted to admins
+    if not user.get("is_admin"):
+        return redirect("forum")  # Redirect non-admins to the main forum page
+
+    # Retrieve reported threads and comments (Only for admins)
     reported_data = fetch_reported_threads_and_comments()
     return render(request, "reports.html", reported_data)
+
 
 
 # -----------------
