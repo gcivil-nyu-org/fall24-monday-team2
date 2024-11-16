@@ -1,6 +1,8 @@
 from django import forms
 from django.core.exceptions import ValidationError
 import datetime
+from .dynamodb import get_user_by_username
+
 
 GENDER_OPTIONS = [
     ("", "Choose gender"),
@@ -46,6 +48,15 @@ class SignUpForm(forms.Form):
     confirm_password = forms.CharField(
         widget=forms.PasswordInput(), label="Confirm Password"
     )
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username")
+        
+        # Query DynamoDB to check if the username already exists
+        if get_user_by_username(username):
+            raise ValidationError("This username is already taken. Please choose another.")
+        
+        return username
 
     def clean(self):
         cleaned_data = super().clean()
