@@ -951,3 +951,36 @@ def mark_thread_as_reported(thread_id):
         print(f"Thread {thread_id} reported.")
     except Exception as e:
         print(f"Error reporting thread {thread_id}: {e}")
+
+
+def mark_comment_as_reported(thread_id, post_id, reporting_user):
+    try:
+        print(f"Fetching comment {post_id} in thread {thread_id}")
+        response = posts_table.get_item(Key={"ThreadID": thread_id, "PostID": post_id})
+        comment = response.get("Item", {})
+        print(f"Comment fetched: {comment}")
+        
+        if not comment:
+            print(f"Comment {post_id} not found in thread {thread_id}")
+            return
+        
+        # Initialize ReportedBy if it doesn't exist
+        reported_by = comment.get("ReportedBy", [])
+        print(f"Current ReportedBy list: {reported_by}")
+        
+        # Avoid duplicate reporting
+        if reporting_user not in reported_by:
+            reported_by.append(reporting_user)
+        
+        # Update the comment with the ReportedBy field
+        posts_table.update_item(
+            Key={"ThreadID": thread_id, "PostID": post_id},
+            UpdateExpression="SET ReportedBy = :reported_by",
+            ExpressionAttributeValues={":reported_by": reported_by},
+        )
+        print(f"Successfully reported comment {post_id} in thread {thread_id}")
+    except Exception as e:
+        print(f"Error reporting comment: {e}")
+
+
+

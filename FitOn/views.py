@@ -37,6 +37,7 @@ from .dynamodb import (
     delete_reply,
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
+    mark_comment_as_reported,
     posts_table,
 )
 from .forms import (
@@ -1717,12 +1718,17 @@ def delete_thread(request):
 
 def reports_view(request):
     user = get_user(request.session.get("user_id"))
+    reporting_user = user.get("user_id")  # Get the user ID from the session
 
-    # Handle POST requests (Reporting Threads) - Available to all users
+    # Handle POST requests (Reporting Threads and Comments) - Available to all users
     if request.method == "POST":
         data = json.loads(request.body.decode("utf-8"))
         action = data.get("action")
         thread_id = data.get("thread_id")
+        post_id = data.get("post_id")  # Add support for comment IDs
+
+         # Debugging input values
+        print(f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}")
 
         # Allow anyone to report a thread
         if action == "report_thread" and thread_id:
@@ -1730,17 +1736,27 @@ def reports_view(request):
             mark_thread_as_reported(thread_id)
             return JsonResponse({"status": "success"})
 
+        # Allow anyone to report a comment
+        elif action == "report_comment" and thread_id and post_id:
+            print("Reporting comment...")
+            # Pass all three arguments to the function
+            mark_comment_as_reported(thread_id, post_id, reporting_user)
+            return JsonResponse({"status": "success", "message": f"Comment {post_id} reported successfully."})
+
+
+
         return JsonResponse(
             {"status": "error", "message": "Invalid request"}, status=400
         )
 
-    # Handle GET requests (View reported threads) - Restricted to admins
+    # Handle GET requests (View reported threads and comments) - Restricted to admins
     if not user.get("is_admin"):
         return redirect("forum")  # Redirect non-admins to the main forum page
 
     # Retrieve reported threads and comments (Only for admins)
     reported_data = fetch_reported_threads_and_comments()
     return render(request, "reports.html", reported_data)
+
 
 
 

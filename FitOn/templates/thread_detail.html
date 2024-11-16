@@ -58,7 +58,7 @@
                 <button class="like-comment-btn" data-post-id="{{ post.PostID }}" style="background-color: {% if post.PostID in liked_comments %}darkgreen{% else %}green{% endif %}; color: white; border: none; padding: 5px 15px; cursor: pointer;">
                     ▲ {{ post.Likes|default:0 }} Like{% if post.Likes != 1 %}s{% endif %}
                 </button>
-                <button class="report-comment-btn" data-post-id="{{ post.PostID }}" style="background-color: gray; color: black; border: 1px solid gray; padding: 5px 10px; cursor: pointer;">
+                <button class="report-comment-btn" data-post-id="{{ post.PostID }}"  data-thread-id="{{ thread.ThreadID }}" style="background-color: gray; color: black; border: 1px solid gray; padding: 5px 10px; cursor: pointer;">
                     Report
                 </button>
                 <button class="reply-comment-btn" data-post-id="{{ post.PostID }}" style="margin-left: auto; background-color: blue; color: white; border: none; padding: 5px 10px; cursor: pointer;">
@@ -281,9 +281,10 @@
                     'Content-Type': 'application/json',
                     'x-requested-with': 'XMLHttpRequest'
                 },
-                body: JSON.stringify({ 
-                    'action': 'report_thread',  // Specify the action for reporting
-                    'thread_id': threadId       // Include the thread ID in the request body
+                body: JSON.stringify({
+                    action: 'report_thread',
+                    thread_id: threadId,
+                    post_id: null  // This is explicitly null since it's not a comment
                 })
             })
             .then(response => response.json())
@@ -307,14 +308,18 @@
                 event.preventDefault();
                 const postId = this.dataset.postId;
 
-                fetch(window.location.href, {
+                fetch('/reports/', {
                     method: 'POST',
                     headers: {
                         'X-CSRFToken': '{{ csrf_token }}',
                         'Content-Type': 'application/json',
                         'x-requested-with': 'XMLHttpRequest'
                     },
-                    body: JSON.stringify({ action: 'report_comment', post_id: postId })
+                    body: JSON.stringify({
+                        action: 'report_comment',
+                        thread_id: threadId, // This is explicitly null since it's not a thread
+                        post_id: postId
+                    })
                 })
                 .then(response => response.json())
                 .then(data => {
