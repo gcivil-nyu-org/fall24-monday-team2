@@ -324,7 +324,11 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        alert(data.message);
+                        alert('Comment has been reported successfully.');
+                        // Disable the report button or change its appearance
+                        this.disabled = true;
+                        this.style.backgroundColor = '#ccc';
+                        this.textContent = 'Reported';
                     } else {
                         alert('Error: ' + data.message);
                     }
