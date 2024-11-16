@@ -346,11 +346,10 @@
 
         
         // Event Listener for reply buttons to submit reply
-        submitReplyButtons.forEach(button => {
-            button.addEventListener('click', function() {
+        submitReplyButtons.forEach((button) => {
+            button.addEventListener("click", function () {
                 const postId = this.dataset.postId;
-                const threadId = this.dataset.threadId;  // Retrieve thread_id
-
+                const threadId = this.dataset.threadId;
 
                 const replyContent = document.getElementById(`reply-content-${postId}`).value;
 
@@ -360,38 +359,92 @@
                 }
 
                 // Sending reply via AJAX
-                fetch('/add_reply/', {
-                    method: 'POST',
+                fetch("/add_reply/", {
+                    method: "POST",
                     headers: {
-                        'X-CSRFToken': '{{ csrf_token }}',
-                        'Content-Type': 'application/json',
-                        'x-requested-with': 'XMLHttpRequest'
+                        "X-CSRFToken": "{{ csrf_token }}",
+                        "Content-Type": "application/json",
+                        "x-requested-with": "XMLHttpRequest",
                     },
-                    body: JSON.stringify({ action: "add_reply",'post_id': postId, 'thread_id': threadId, 'content': replyContent })
+                    body: JSON.stringify({
+                        action: "add_reply",
+                        post_id: postId,
+                        thread_id: threadId,
+                        content: replyContent,
+                    }),
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        const repliesContainer = document.getElementById(`replies-${postId}`);
-                        const newReply = document.createElement("div");
-                        newReply.classList.add("reply");
-                        newReply.style.border = "1px solid #ddd";
-                        newReply.style.padding = "5px";
-                        newReply.style.marginTop = "5px";
-                        newReply.innerHTML = `<p><strong>${data.username}</strong> said: ${data.content}</p><p style="color: #888; font-size: 12px;">Just now</p>`;
-                        
-                        repliesContainer.appendChild(newReply);
+                    .then((response) => response.json())
+                    .then((data) => {
+                        if (data.status === "success") {
+                            const repliesContainer = document.getElementById(`replies-${postId}`);
+                            const newReply = document.createElement("div");
+                            newReply.classList.add("reply");
+                            newReply.id = `reply-${data.reply_id}`;
+                            newReply.style.border = "1px solid #ddd";
+                            newReply.style.padding = "5px";
+                            newReply.style.marginTop = "5px";
 
-                        // Clear the reply box and hide it
-                        document.getElementById(`reply-content-${postId}`).value = "";
-                        toggleReplyBox(postId);
-                    } else {
-                        alert('Error: ' + data.message);
-                    }
-                })
-                .catch(error => console.error('Error in submitting reply:', error));
+                            // Include the "Delete Reply" button
+                            newReply.innerHTML = `
+                                <p><strong>${data.username}</strong> said: ${data.content}</p>
+                                <p style="color: #888; font-size: 12px;">Just now</p>
+                                <button class="delete-reply-btn" 
+                                        data-reply-id="${data.reply_id}" 
+                                        data-post-id="${postId}" 
+                                        style="background-color: white; color: red; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
+                                    Delete Reply
+                                </button>
+                            `;
+
+                            repliesContainer.appendChild(newReply);
+
+                            // Clear the reply box and hide it
+                            document.getElementById(`reply-content-${postId}`).value = "";
+                            toggleReplyBox(postId);
+
+                            // Add event listener for the newly added "Delete Reply" button
+                            const deleteButton = newReply.querySelector(".delete-reply-btn");
+                            deleteButton.addEventListener("click", function (event) {
+                                event.preventDefault();
+                                const replyId = this.getAttribute("data-reply-id");
+
+                                if (confirm("Are you sure you want to delete this reply?")) {
+                                    fetch("/delete_reply/", {
+                                        method: "POST",
+                                        headers: {
+                                            "X-CSRFToken": "{{ csrf_token }}",
+                                            "Content-Type": "application/json",
+                                            "x-requested-with": "XMLHttpRequest",
+                                        },
+                                        body: JSON.stringify({
+                                            post_id: postId,
+                                            reply_id: replyId,
+                                            thread_id: threadId,
+                                        }),
+                                    })
+                                        .then((response) => response.json())
+                                        .then((data) => {
+                                            if (data.status === "success") {
+                                                const replyElement = document.getElementById(`reply-${replyId}`);
+                                                if (replyElement) {
+                                                    replyElement.remove();
+                                                    alert("Reply deleted successfully.");
+                                                }
+                                            } else {
+                                                alert("Error: " + data.message);
+                                            }
+                                        })
+                                        .catch((error) => console.error("Error in fetch request:", error));
+                                }
+                            });
+                        } else {
+                            alert("Error: " + data.message);
+                        }
+                    })
+                    .catch((error) => console.error("Error in submitting reply:", error));
             });
         });
+
 
         // Attach event listeners to all delete reply buttons
         document.querySelectorAll(".delete-reply-btn").forEach(button => {
