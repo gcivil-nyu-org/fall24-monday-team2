@@ -507,12 +507,13 @@ class ForumTests(TestCase):
         # Call the function
         threads = fetch_all_threads()
 
-        # Check the first thread's properties
-        self.assertEqual(threads[0]["ThreadID"], "1")
-        self.assertEqual(threads[0]["ReplyCount"], 0)
-        self.assertEqual(threads[0]["LastPostUser"], "No replies yet")
+        # Check the first thread of test user's threads' properties
+        thread = next((t for t in threads if t.get("UserID") == "test_user_123"), None)
+        self.assertEqual(thread["ThreadID"], "1")
+        self.assertEqual(thread["ReplyCount"], 0)
+        self.assertEqual(thread["LastPostUser"], "No replies yet")
         self.assertEqual(
-            threads[0]["CreatedAt"], datetime.fromisoformat("2024-11-01T10:00:00")
+            thread["CreatedAt"], datetime.fromisoformat("2024-11-01T10:00:00")
         )
 
     def test_fetch_thread(self):
