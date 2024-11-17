@@ -13,3 +13,6 @@ Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/
 
 ## Wiki:
 https://github.com/gcivil-nyu-org/fall24-monday-team2/wiki
+
+## TODO:
+- Delete threads by user and other user oriented information before deleting the user
