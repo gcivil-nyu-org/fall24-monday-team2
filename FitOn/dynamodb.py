@@ -6,7 +6,6 @@ from django.contrib.auth.hashers import make_password
 from datetime import datetime, timezone
 from django.conf import settings
 from django.utils import timezone
-from django.conf import settings
 from pytz import timezone
 
 # Connect to DynamoDB
