@@ -33,6 +33,9 @@ from .dynamodb import (
     posts_table,
     delete_thread_by_id,
 )
+
+from .rds import rds_main
+
 from .forms import (
     FitnessTrainerApplicationForm,
     LoginForm,
@@ -59,6 +62,7 @@ from django.conf import settings
 # from django.core.files.storage import FileSystemStorage
 from django.core.mail import EmailMessage
 
+# from django.core.mail.backends.locmem import EmailBackend
 # from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
@@ -475,7 +479,7 @@ def authorize_google_fit(request):
 def callback_google_fit(request):
     user_id = request.session.get("user_id")
     print("Inside Callback")
-
+    print("Session: ")
     # Fetch user details from DynamoDB
     user = get_user(user_id)
     state = request.session.get("google_fit_state")
@@ -1165,6 +1169,7 @@ def steps_barplot(data):
             steps_data.append(d)
 
     # Pass the plot path to the template
+    print("Steps Data:", steps_data)
     context = {"steps_data_json": steps_data}
     return context
 
@@ -1487,7 +1492,11 @@ async def fetch_all_metric_data(request, duration, frequency):
 
 async def get_metric_data(request):
     credentials = await sync_to_async(lambda: request.session.get("credentials"))()
+    user_id = await sync_to_async(lambda: request.session.get("user_id"))()
+    user = get_user(user_id)
+    user_email = user.get("email")
     print("Credentials: \n", credentials)
+    print("User Email: \n", user_email)
     if credentials:
         duration = "week"
         frequency = "daily"
@@ -1499,9 +1508,10 @@ async def get_metric_data(request):
             frequency = request.GET.get("data_freq")
 
         total_data = await fetch_all_metric_data(request, duration, frequency)
-
+        rds_response = await rds_main(user_email, total_data)
+        print("RDS Response: \n", rds_response)
         context = {"data": total_data}
-        print("Inside get metric:", context)
+        # print("Inside get metric:", context)
         return await sync_to_async(render)(
             request, "display_metrics_data.html", context
         )
@@ -1523,15 +1533,21 @@ def health_data_view(request):
 
     if request.method == "POST":
         data = request.POST
-        print(data)
-        table.put_item(
-            Item={
-                "email": user_email,  # Use the default email
-                "metric": data.get("metric"),
-                "time": data.get("time"),
-                "value": data.get("value"),
-            }
-        )
+        print("Data:", data)
+        try:
+            table.put_item(
+                Item={
+                    "email": user_email,  # Use the default email
+                    "metric": data.get("metric"),
+                    "time": data.get("time"),
+                    "value": data.get("value"),
+                },
+                ConditionExpression="attribute_not_exists(email) AND attribute_not_exists(#t)",
+                ExpressionAttributeNames={"#t": "time"},
+            )
+            print("Item inserted successfully.")
+        except dynamodb_res.meta.client.exceptions.ConditionalCheckFailedException:
+            print("Item already exists and was not replaced.")
         return redirect("get_metric_data")
 
     # Fetch all the metrics data from DynamoDB
