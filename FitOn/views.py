@@ -7,12 +7,10 @@ from .dynamodb import (
     create_reply,
     create_user,
     delete_user_by_username,
+    delete_post,
     fetch_posts_for_thread,
-    # fetch_thread,
     get_fitness_trainer_applications,
     get_last_reset_request_time,
-    # get_replies,
-    # get_thread_details,
     get_user,
     get_user_by_email,
     get_user_by_uid,
@@ -26,7 +24,6 @@ from .dynamodb import (
     get_fitness_data,
     dynamodb,
     threads_table,
-    delete_post,
     get_fitness_trainers,
     make_fitness_trainer,
     remove_fitness_trainer,
@@ -34,6 +31,7 @@ from .dynamodb import (
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
     posts_table,
+    delete_thread_by_id,
 )
 
 from .rds import rds_main
@@ -65,14 +63,11 @@ from django.conf import settings
 from django.core.mail import EmailMessage
 
 # from django.core.mail.backends.locmem import EmailBackend
-
 # from django.core.mail import EmailMultiAlternatives
 from django.http import JsonResponse, HttpResponseForbidden
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
-
-# from django.http import Http404
 
 # from django.utils.encoding import force_bytes
 # from django.utils.html import strip_tags
@@ -82,8 +77,6 @@ from asgiref.sync import sync_to_async
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 import uuid
-
-# import ssl
 import boto3
 from google_auth_oauthlib.flow import Flow
 import requests
@@ -368,7 +361,7 @@ def profile_view(request):
 
     if not user:
         messages.error(request, "User not found.")
-        return redirect("homepage")
+        return redirect("login")
 
     if request.method == "POST":
         # Handle profile picture upload
@@ -898,7 +891,6 @@ def thread_detail_view(request, thread_id):
 
 
 def new_thread_view(request):
-    print("PrePost")
     user_id = request.session.get("user_id")
 
     # Fetch user details from DynamoDB
@@ -909,13 +901,9 @@ def new_thread_view(request):
         return redirect("login")
 
     if request.method == "POST":
-        print("Post")
         title = request.POST.get("title")
         content = request.POST.get("content")
         user_id = request.session.get("username")  # Assuming the user is logged in
-
-        # Debugging: Add print statements to confirm values
-        print(f"Title: {title}, Content: {content}, User: {user_id}")
 
         if title and content and user_id:
             # Call your DynamoDB function to create a new thread
@@ -945,10 +933,6 @@ def delete_post_view(request):
             post_id = data.get("post_id")
             thread_id = data.get("thread_id")  # Make sure you're getting thread_id too
 
-            # Log the post_id and thread_id for debugging
-            print("post_id: {post_id}, thread_id: {thread_id}")
-            print("Hello?")
-
             if not post_id or not thread_id:
                 return JsonResponse(
                     {"status": "error", "message": "Post or Thread ID missing"},
@@ -976,8 +960,6 @@ def forum_view(request):
         messages.error(request, "User not found.")
         return redirect("login")
     is_banned = user.get("is_banned")
-    print(user)
-    print(is_banned)
     if is_banned:
         return render(request, "forums.html", {"is_banned": is_banned})
 
@@ -1581,16 +1563,16 @@ def health_data_view(request):
         metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
 
     return render(request, "display_metric_data.html", {"metrics_data": metrics_data})
-    return render(
-        request,
-        "forums.html",
-        {
-            "user": user,
-            "threads": threads,
-            "users": users,
-            "is_banned": is_banned,
-        },
-    )
+    # return render(
+    #     request,
+    #     "forums.html",
+    #     {
+    #         "user": user,
+    #         "threads": threads,
+    #         "users": users,
+    #         "is_banned": is_banned,
+    #     },
+    # )
 
 
 def add_reply(request):
@@ -1704,7 +1686,8 @@ def delete_thread(request):
 
         try:
             # Perform the deletion from DynamoDB
-            threads_table.delete_item(Key={"ThreadID": thread_id})
+            delete_thread_by_id(thread_id)
+            # threads_table.delete_item(Key={"ThreadID": thread_id})
             return JsonResponse(
                 {"status": "success", "message": "Thread deleted successfully."}
             )
@@ -1748,6 +1731,7 @@ def reports_view(request):
 # ------------------
 
 
+# By username
 def toggle_ban_user(request):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
     users_table = dynamodb.Table("Users")
@@ -1760,7 +1744,6 @@ def toggle_ban_user(request):
         username = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
-        print(username)
 
         if not username:
             return JsonResponse(
@@ -1769,7 +1752,6 @@ def toggle_ban_user(request):
 
         # Fetch user to check if they exist
         user = get_user_by_username(username)
-        print(user)
         if not user:
             return JsonResponse(
                 {"status": "error", "message": "User not found"}, status=404
@@ -1817,7 +1799,6 @@ def toggle_mute_user(request):
         username = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
-        print(username)
 
         if not username:
             return JsonResponse(
@@ -1826,7 +1807,6 @@ def toggle_mute_user(request):
 
         # Fetch user to check if they exist
         user = get_user_by_username(username)
-        print(user)
         if not user:
             return JsonResponse(
                 {"status": "error", "message": "User not found"}, status=404
@@ -1874,7 +1854,7 @@ def unban_user(request):
         user_id = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
-        print(user_id)
+
         if not user_id:
             return JsonResponse(
                 {"status": "error", "message": "User ID is missing"}, status=400
@@ -1910,7 +1890,6 @@ def unmute_user(request):
         user_id = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
-        print(user_id)
         if not user_id:
             return JsonResponse(
                 {"status": "error", "message": "User ID is missing"}, status=400
@@ -1954,7 +1933,6 @@ def punishments_view(request):
         ExpressionAttributeValues={":true": True},
     )
     punished_users = response.get("Items", [])
-    print(punished_users)
 
     # Pass the punished users to the template
     return render(request, "punishments.html", {"punished_users": punished_users})
