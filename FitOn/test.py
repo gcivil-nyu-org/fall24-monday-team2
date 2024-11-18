@@ -197,7 +197,7 @@ class UserCreationAndDeletionTests(TestCase):
 
         # Check if `is_banned` is set to True
         self.assertTrue(
-            updated_user.get("is_banned", True),
+            updated_user.get("is_banned") is True,  # Updated assertion
             "User should be banned (is_banned should be True).",
         )
 
@@ -311,8 +311,9 @@ class UserCreationAndDeletionTests(TestCase):
 
         # Step 2: Verify the user is unmuted and punishment_date is removed
         unmuted_user = get_user(self.user_data["user_id"])
-        self.assertFalse(
-            unmuted_user.get("is_muted"), "User's is_muted should be False after unban."
+        self.assertTrue(
+            unmuted_user.get("is_muted") is not True,
+            "User's is_muted should be False after unban.",
         )
         self.assertFalse(
             hasattr(unmuted_user, "punishment_date"),
