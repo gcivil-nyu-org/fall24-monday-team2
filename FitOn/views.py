@@ -13,7 +13,8 @@ from .dynamodb import (
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
-    get_user_by_uid,
+    # get_user_by_uid,
+    get_mock_user_by_uid,
     get_user_by_username,
     update_reset_request_time,
     update_user,
@@ -303,7 +304,7 @@ def password_reset_confirm(request, uidb64, token):
         )
     try:
         user_id = force_str(urlsafe_base64_decode(uidb64))
-        user = get_user_by_uid(user_id)
+        user = get_mock_user_by_uid(user_id)
         if user and default_token_generator.check_token(user, token):
             form = SetNewPasswordForm(request.POST or None)
             if request.method == "POST" and form.is_valid():
@@ -1286,8 +1287,17 @@ def merge_data(existing_data, new_data, frequency):
             existing_item = data_index[new_start]
             # Averaging the counts, updating mins and maxs
             existing_item["count"] = (existing_item["count"] + new_item["count"]) / 2
-            existing_item["min"] = min(existing_item["min"], new_item["min"])
-            existing_item["max"] = max(existing_item["max"], new_item["max"])
+            if min in existing_item or min in new_item:
+                existing_item["min"] = (
+                    new_item["min"]
+                    if "min" not in existing_item
+                    else min(existing_item["min"], new_item["min"])
+                )
+                existing_item["max"] = (
+                    new_item["max"]
+                    if "max" not in existing_item
+                    else max(existing_item["max"], new_item["max"])
+                )
         else:
             # No overlap, append this new item
             new_item["end"] = new_end.strftime(

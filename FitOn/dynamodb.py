@@ -1,12 +1,17 @@
 from boto3.dynamodb.conditions import Attr
 import boto3
-import uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 from datetime import datetime, timezone
-from django.conf import settings
+
+# from asgiref.sync import sync_to_async
+
+
+# from django.core.files.storage import default_storage
 from django.utils import timezone
 from pytz import timezone
+from django.conf import settings
+import uuid
 
 # Connect to DynamoDB
 dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
@@ -21,6 +26,8 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
+
+chat_table = dynamodb.Table("UserChats")
 
 tz = timezone("EST")
 
@@ -46,15 +53,15 @@ class MockUser:
             self.is_active = user_data.get("is_active", True)
             self.last_login = user_data.get("last_login", None)
             self.pk = self.user_id
-        else:
-            self.user_id = None
-            self.email = ""
-            self.username = ""
-            self.password = ""
-            self.date_of_birth = ""
-            self.is_active = True
-            self.last_login = None
-            self.pk = None
+        # else:
+        #     self.user_id = None
+        #     self.email = ""
+        #     self.username = ""
+        #     self.password = ""
+        #     self.date_of_birth = ""
+        #     self.is_active = True
+        #     self.last_login = None
+        #     self.pk = None
 
     def get_email_field_name(self):
         return "email"
@@ -80,6 +87,23 @@ def get_user_by_username(username):
     # except Exception as e:
     #     print(f"Error querying DynamoDB for username '{username}': {e}")
     #     return None
+
+
+def get_users_by_username_query(query):
+    try:
+        # Scan the Users table to get all users
+        response = users_table.scan()
+        users = response.get("Items", [])
+
+        # Filter users based on case-insensitive match
+        filtered_users = [
+            user for user in users if query.lower() in user["username"].lower()
+        ]
+
+        return filtered_users
+    except Exception as e:
+        print(f"Error querying DynamoDB for usernames: {e}")
+        return []
 
 
 def create_user(user_id, username, email, name, date_of_birth, gender, password):
@@ -168,6 +192,19 @@ def get_user_by_uid(uid):
     #     return e
 
 
+def get_mock_user_by_uid(uid):
+    # try:
+    # Fetch from DynamoDB table
+    response = users_table.get_item(Key={"user_id": uid})
+    user_data = response.get("Item", None)
+
+    if user_data:
+        return MockUser(user_data)
+    return None
+    # except Exception:
+    # return None
+
+
 def update_user_password(user_id, new_password):
     # try:
     hashed_password = make_password(new_password)
@@ -216,6 +253,13 @@ def get_user(user_id):
     except ClientError as e:
         print(e.response["Error"]["Message"])
         return None
+
+
+def verify_user_credentials(username, password):
+    user = get_user_by_username(username)
+    if user and check_password(password, user["password"]):
+        return user
+    return None
 
 
 def upload_profile_picture(user_id, profile_picture):
