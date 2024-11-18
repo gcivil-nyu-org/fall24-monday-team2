@@ -28,6 +28,9 @@ from .dynamodb import (
     get_fitness_trainers,
     make_fitness_trainer,
     remove_fitness_trainer,
+    get_standard_users,
+    send_data_request_to_user,
+    cancel_data_request_to_user,
     delete_reply,
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
@@ -567,6 +570,11 @@ def delink_google_fit(request):
     return redirect("profile")
 
 
+# --------------------------------- #
+# User + Fitness Trainer Functions  #
+# --------------------------------- #
+
+
 def fitness_trainer_application_view(request):
     user_id = request.session.get("user_id")
     if request.method == "POST":
@@ -619,24 +627,6 @@ def fitness_trainer_applications_list_view(request):
         request,
         "fitness_trainer_applications_list.html",
         {"applications": applications},
-    )
-
-
-def fitness_trainers_list_view(request):
-    # Check if the current user is an admin
-    user_id = request.session.get("user_id")
-    user = get_user(user_id)
-    if not user or not user.get("is_admin"):
-        return HttpResponseForbidden("You do not have permission to access this page")
-
-    # Retrieve list of trainers from DynamoDB
-    trainers = get_fitness_trainers()
-
-    # Render the list of trainers
-    return render(
-        request,
-        "fitness_trainers_list.html",
-        {"trainers": trainers},
     )
 
 
@@ -720,6 +710,174 @@ def reject_fitness_trainer(request):
         )
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def accept_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        trainer = get_user(trainer_id)
+
+        user_id = request.session.get("user_id")
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        user["trainers_with_access"].append(trainer_id)
+        trainer["users_with_access"].append(user_id)
+
+        user["waiting_list_of_trainers"].remove(trainer_id)
+        trainer["waiting_list_of_users"].remove(user_id)
+
+        update_user(user_id, user)
+        update_user(trainer_id, trainer)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def deny_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        trainer = get_user(trainer_id)
+
+        user_id = request.session.get("user_id")
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        user["waiting_list_of_trainers"].remove(trainer_id)
+        trainer["waiting_list_of_users"].remove(user_id)
+
+        update_user(user_id, user)
+        update_user(trainer_id, trainer)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def provide_access_to_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        trainer = get_user(trainer_id)
+
+        user_id = request.session.get("user_id")
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        user["trainers_with_access"].append(trainer_id)
+        trainer["users_with_access"].append(user_id)
+
+        update_user(user_id, user)
+        update_user(trainer_id, trainer)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def fitness_trainers_list_view(request):
+    # Make sure that the current user is not a fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of trainers from DynamoDB
+    trainers = get_fitness_trainers()
+
+    waiting_list_of_trainers = user.get("waiting_list_of_trainers", [])
+    trainers_in_waiting_list = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] in waiting_list_of_trainers
+    ]
+    remaining_trainers = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] not in waiting_list_of_trainers
+    ]
+
+    return render(
+        request,
+        "fitness_trainers_list.html",
+        {
+            "trainers_in_waiting_list": trainers_in_waiting_list,
+            "remaining_trainers": remaining_trainers,
+        },
+    )
+
+
+def standard_users_list_view(request):
+    # Check if the current user is a verified fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of standard users from DynamoDB
+    standard_users = get_standard_users()
+
+    waiting_list_of_users = user.get("waiting_list_of_users", [])
+    users_in_waiting_list = [
+        user for user in standard_users if user["user_id"] in waiting_list_of_users
+    ]
+    remaining_users = [
+        user for user in standard_users if user["user_id"] not in waiting_list_of_users
+    ]
+
+    return render(
+        request,
+        "standard_users_list.html",
+        {
+            "users_in_waiting_list": users_in_waiting_list,
+            "remaining_users": remaining_users,
+        },
+    )
+
+
+def send_data_request(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
+
+        success = send_data_request_to_user(fitness_trainer_id, standard_user_id)
+
+        if success:
+            return JsonResponse({"message": "Request sent successfully!"}, status=200)
+        else:
+            return JsonResponse({"error": "Failed to send request"}, status=400)
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+def cancel_data_request(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
+
+        if not standard_user_id:
+            return JsonResponse({"error": "User ID is required"}, status=400)
+
+        success = cancel_data_request_to_user(fitness_trainer_id, standard_user_id)
+
+        if success:
+            return JsonResponse(
+                {"message": "Request cancelled successfully"}, status=200
+            )
+        else:
+            return JsonResponse({"error": "Failed to cancel the request"}, status=400)
+    else:
+        return JsonResponse({"error": "Invalid method"}, status=405)
 
 
 # -------------------------------

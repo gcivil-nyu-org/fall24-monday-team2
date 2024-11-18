@@ -71,6 +71,26 @@ urlpatterns = [
         views.fitness_trainers_list_view,
         name="fitness_trainers_list",
     ),
+    path(
+        "trainer/standard-users/",
+        views.standard_users_list_view,
+        name="standard_users_list",
+    ),
+    path(
+        "trainer/send-data-request/", views.send_data_request, name="send_data_request"
+    ),
+    path(
+        "trainer/cancel-data-request/",
+        views.cancel_data_request,
+        name="cancel_data_request",
+    ),
+    path("user/accept_trainer/", views.accept_trainer, name="accept_trainer"),
+    path("user/deny_trainer/", views.deny_trainer, name="deny_trainer"),
+    path(
+        "user/provide_access_to_trainer/",
+        views.provide_access_to_trainer,
+        name="provide_access_to_trainer",
+    ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),
