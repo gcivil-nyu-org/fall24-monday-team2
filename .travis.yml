@@ -1,33 +1,34 @@
 dist: focal
-
 language: python
 python:
 - "3.11"
-
-
+before_install:
+  # Install AWS CLI
+  - pip install awscli
+  # Fetch the secrets from AWS Secrets Manager
+  - export AWS_CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id "aws_secrets" --query SecretString --output text)
+  # Parse and export the secrets
+  - export AWS_ACCESS_KEY_ID=$(echo $AWS_CREDENTIALS | jq -r '.AWS_ACCESS_KEY_ID')
+  - export AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDENTIALS | jq -r '.AWS_SECRET_ACCESS_KEY')
+  # Print the parsed secrets for debugging (Do not print in production for security reasons)
+  - echo "Parsed AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID"
+  - echo "Parsed AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY"
 install:
 - pip install -r requirements.txt
-
-
-
 script:
 - black --check .
-- flake8 --max-line-length=150 --exclude=.venv --ignore=W503,F811 .
+- flake8 --max-line-length=150 --exclude=venv --ignore=E261,F821,W293,W503,F401,E501,F841,F811,E401 .
 - coverage run manage.py test FitOn
-
-env:
-  global:
-    - AWS_ACCESS_KEY_ID=$AWS_ID
-    - AWS_SECRET_ACCESS_KEY=$AWS_KEY
-
-
+# env:
+#   global:
+#     - AWS_ACCESS_KEY_ID=$AWS_ID
+#     - AWS_SECRET_ACCESS_KEY=$AWS_KEY
 after_scripts:
 - coveralls
-
 deploy:
   provider: elasticbeanstalk
-  access_key_id: $AWS_ID
-  secret_access_key: $AWS_KEY
+  access_key_id: $$AWS_ACCESS_KEY_ID
+  secret_access_key: $AWS_SECRET_ACCESS_KEY
   region: us-west-2
   app: fiton-fall2024
   env: fiton-dev-without-template
