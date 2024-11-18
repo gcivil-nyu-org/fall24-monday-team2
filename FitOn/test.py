@@ -18,6 +18,8 @@ import json
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.hashers import make_password
 
+# from django.contrib.auth.hashers import check_password
+
 # from django.contrib.sessions.models import Session
 # from django.utils import timezone
 from django.utils.http import urlsafe_base64_encode
