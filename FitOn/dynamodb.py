@@ -249,7 +249,7 @@ def update_reset_request_time(user_id):
 def get_user(user_id):
     try:
         response = users_table.get_item(Key={"user_id": user_id})
-        return response.get("Item")
+        return response.get("Item") or {}
     except ClientError as e:
         print(e.response["Error"]["Message"])
         return None
