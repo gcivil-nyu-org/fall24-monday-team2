@@ -128,6 +128,10 @@ class ProfileForm(forms.Form):
                 "phone_number",
                 "Both country code and phone number must be provided together",
             )
+            self.add_error(
+                "country_code",
+                "Both country code and phone number must be provided together",
+            )
 
         return cleaned_data
 
