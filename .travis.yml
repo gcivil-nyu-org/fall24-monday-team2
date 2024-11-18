@@ -6,13 +6,13 @@ before_install:
   # Install AWS CLI
   - pip install awscli
   # Fetch the secrets from AWS Secrets Manager
-  - export AWS_CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id "aws_secrets" --query SecretString --output text)
+  - export AWS_CREDENTIALS=$(aws secretsmanager get-secret-value --secret-id "aws_secrets" --query SecretString --output text --region "us-west-2")
   # Parse and export the secrets
   - export AWS_ACCESS_KEY_ID=$(echo $AWS_CREDENTIALS | jq -r '.AWS_ACCESS_KEY_ID')
   - export AWS_SECRET_ACCESS_KEY=$(echo $AWS_CREDENTIALS | jq -r '.AWS_SECRET_ACCESS_KEY')
   # Print the parsed secrets for debugging (Do not print in production for security reasons)
-  - echo "Parsed AWS_ACCESS_KEY_ID: $AWS_ACCESS_KEY_ID"
-  - echo "Parsed AWS_SECRET_ACCESS_KEY: $AWS_SECRET_ACCESS_KEY"
+  - echo "Parsed AWS_ACCESS_KEY_ID $AWS_ACCESS_KEY_ID"
+  - echo "Parsed AWS_SECRET_ACCESS_KEY $AWS_SECRET_ACCESS_KEY"
 install:
 - pip install -r requirements.txt
 script:
