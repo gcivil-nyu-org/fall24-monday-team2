@@ -71,6 +71,14 @@ urlpatterns = [
         views.fitness_trainers_list_view,
         name="fitness_trainers_list",
     ),
+    path(
+        "trainer/standard-users/",
+        views.standard_users_list_view,
+        name="standard_users_list",
+    ),
+    path(
+        "trainer/send-data-request/", views.send_data_request, name="send_data_request"
+    ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),

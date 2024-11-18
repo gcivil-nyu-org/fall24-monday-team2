@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block title %}Standard Users List{% endblock %}
+
+{% block content %}
+    <div class="table-container">
+        <h2 class="page-title">All Users</h2>
+        <table class="trainers-table">
+            <thead class="thead-dark">
+                <tr>
+                    <th>Name</th>
+                    <th>Gender</th>
+                    <th>Age Group</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in standard_users %}
+                <tr>
+                    <td>{{ user.name }}</td>
+                    <td>{{ user.gender }}</td>
+                    <td>{{ user.age }}</td>
+                    <td>
+                        <button class="btn btn-primary" onclick="sendRequest('{{ user.id }}')">Request Data</button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center">No standard users found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        function sendRequest(userId) {
+            if (confirm("Are you sure you want to send a data request to this user?")) {
+                fetch("{% url 'send_data_request' %}", {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ user_id: userId })
+                })
+                .then(response => {
+                    if (response.ok) {
+                        alert("Data request sent successfully!");
+                    } else {
+                        alert("Failed to send data request.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Error:", error);
+                    alert("An unexpected error occurred. Please try again later.");
+                });
+            }
+        }
+    </script>
+{% endblock %}
+

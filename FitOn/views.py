@@ -27,6 +27,8 @@ from .dynamodb import (
     get_fitness_trainers,
     make_fitness_trainer,
     remove_fitness_trainer,
+    get_standard_users,
+    send_data_request_to_user,
     delete_reply,
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
@@ -719,6 +721,41 @@ def reject_fitness_trainer(request):
         )
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def standard_users_list_view(request):
+    # Check if the current user is a verified fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of standard users from DynamoDB
+    standard_users = get_standard_users()
+
+    # Render the list of standard users
+    return render(
+        request,
+        "standard_users_list.html",
+        {"standard_users": standard_users},
+    )
+
+
+def send_data_request(request):
+    if request.method == "POST":
+        fitness_trainer_id = request.user.id  # Get current fitness trainer's ID
+        standard_user_id = request.POST.get(
+            "user_id"
+        )  # Get the standard user ID from the POST data
+
+        # Call the function to send data request
+        success = send_data_request_to_user(fitness_trainer_id, standard_user_id)
+
+        if success:
+            return JsonResponse({"message": "Request sent successfully!"}, status=200)
+        else:
+            return JsonResponse({"error": "Failed to send request"}, status=400)
+    return JsonResponse({"error": "Invalid request"}, status=400)
 
 
 # -------------------------------
