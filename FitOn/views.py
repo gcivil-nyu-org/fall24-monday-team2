@@ -1134,8 +1134,17 @@ def merge_data(existing_data, new_data, frequency):
             existing_item = data_index[new_start]
             # Averaging the counts, updating mins and maxs
             existing_item["count"] = (existing_item["count"] + new_item["count"]) / 2
-            existing_item["min"] = min(existing_item["min"], new_item["min"])
-            existing_item["max"] = max(existing_item["max"], new_item["max"])
+            if min in existing_item or min in new_item:
+                existing_item["min"] = (
+                    new_item["min"]
+                    if "min" not in existing_item
+                    else min(existing_item["min"], new_item["min"])
+                )
+                existing_item["max"] = (
+                    new_item["max"]
+                    if "max" not in existing_item
+                    else max(existing_item["max"], new_item["max"])
+                )
         else:
             # No overlap, append this new item
             new_item["end"] = new_end.strftime(
