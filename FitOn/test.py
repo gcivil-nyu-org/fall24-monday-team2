@@ -609,7 +609,6 @@ class GoogleAuthTestCase(TestCase):
         session = self.client.session
         session["google_fit_state"] = "mock-state"
         session.save()
-        print(session.items())
 
         # Assertions
         self.assertEqual(response.status_code, 302)  # Check if redirect status code

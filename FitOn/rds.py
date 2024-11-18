@@ -228,9 +228,11 @@ async def insert_into_tables(email, total_data):
     for data_type, data_list in total_data.items():
         for entry in data_list.values():
             for d in entry:
-                start_time = d["start"]
-                end_time = d["end"]
-                count = d["count"]
+                if isinstance(d, tuple):
+                    continue
+                start_time = d.get("start")
+                end_time = d.get("end")
+                count = d.get("count")
                 if data_type == "steps":
                     await insert_into_steps_table(
                         conn, email, start_time, end_time, count
