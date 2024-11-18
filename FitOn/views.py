@@ -13,7 +13,8 @@ from .dynamodb import (
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
-    get_user_by_uid,
+    # get_user_by_uid,
+    get_mock_user_by_uid,
     get_user_by_username,
     update_reset_request_time,
     update_user,
@@ -300,7 +301,7 @@ def password_reset_confirm(request, uidb64, token):
         )
     try:
         user_id = force_str(urlsafe_base64_decode(uidb64))
-        user = get_user_by_uid(user_id)
+        user = get_mock_user_by_uid(user_id)
         if user and default_token_generator.check_token(user, token):
             form = SetNewPasswordForm(request.POST or None)
             if request.method == "POST" and form.is_valid():
