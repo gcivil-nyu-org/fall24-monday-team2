@@ -5,6 +5,7 @@ from google.oauth2.credentials import Credentials
 from django.urls import reverse
 import boto3
 import json
+import pytest
 
 
 # import unittest
@@ -33,12 +34,15 @@ from .dynamodb import (
     delete_threads_by_user,
     get_thread,
     delete_thread_by_id,
+    get_user, 
+    dynamodb,
     MockUser,
 )
 from django.contrib.auth.hashers import check_password
 from botocore.exceptions import ClientError
 import pytz
 from django.contrib import messages
+from django.test import AsyncClient
 
 
 class UserCreationAndDeletionTests(TestCase):
@@ -532,6 +536,11 @@ class GoogleAuthDelinkTestCase(TestCase):
     def tearDownClass(cls):
         # Perform any additional cleanup if needed
         super().tearDownClass()
+
+###########################################################
+#       TEST CASE FOR Metric Display, Insertion Data      #
+###########################################################
+
 
 
 ###########################################################
