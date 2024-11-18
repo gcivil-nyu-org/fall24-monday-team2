@@ -51,11 +51,13 @@ class SignUpForm(forms.Form):
 
     def clean_username(self):
         username = self.cleaned_data.get("username")
-        
+
         # Query DynamoDB to check if the username already exists
         if get_user_by_username(username):
-            raise ValidationError("This username is already taken. Please choose another.")
-        
+            raise ValidationError(
+                "This username is already taken. Please choose another."
+            )
+
         return username
 
     def clean(self):

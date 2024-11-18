@@ -1576,7 +1576,6 @@ def health_data_view(request):
     # )
 
 
-
 def add_reply(request):
     print("Received request in add_reply")  # Debugging statement
 
@@ -1606,12 +1605,12 @@ def add_reply(request):
                     {"status": "error", "message": "User not authenticated"}, status=403
                 )
 
-            #tz = timezone("EST")
+            # tz = timezone("EST")
             reply_data = {
                 "ReplyID": str(uuid.uuid4()),
                 "UserID": user_id,
                 "Content": content,
-                #"CreatedAt": datetime.now(tz).isoformat(),
+                # "CreatedAt": datetime.now(tz).isoformat(),
             }
 
             # Simulating interaction with a database (DynamoDB, for example)
@@ -1630,20 +1629,19 @@ def add_reply(request):
                     "reply_id": reply_data["ReplyID"],
                     "content": content,
                     "username": user_id,
-                    #"created_at": reply_data["CreatedAt"],
+                    # "created_at": reply_data["CreatedAt"],
                 }
             )
 
         except Exception as e:
             print("Exception occurred:", e)  # Debugging statement
-            logger.error("Failed to process add_reply request", exc_info=True)
+            # logger.error("Failed to process add_reply request", exc_info=True)
             return JsonResponse(
                 {"status": "error", "message": f"Failed to save reply: {str(e)}"},
                 status=500,
             )
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
-
 
 
 def delete_reply_view(request):
@@ -1720,7 +1718,7 @@ def reports_view(request):
         thread_id = data.get("thread_id")
         post_id = data.get("post_id")  # Add support for comment IDs
 
-         # Debugging input values
+        # Debugging input values
         print(f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}")
 
         # Allow anyone to report a thread
@@ -1734,9 +1732,12 @@ def reports_view(request):
             print("Reporting comment...")
             # Pass all three arguments to the function
             mark_comment_as_reported(thread_id, post_id, reporting_user)
-            return JsonResponse({"status": "success", "message": f"Comment {post_id} reported successfully."})
-
-
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "message": f"Comment {post_id} reported successfully.",
+                }
+            )
 
         return JsonResponse(
             {"status": "error", "message": "Invalid request"}, status=400
@@ -1749,8 +1750,6 @@ def reports_view(request):
     # Retrieve reported threads and comments (Only for admins)
     reported_data = fetch_reported_threads_and_comments()
     return render(request, "reports.html", reported_data)
-
-
 
 
 # -----------------

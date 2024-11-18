@@ -954,19 +954,19 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
         response = posts_table.get_item(Key={"ThreadID": thread_id, "PostID": post_id})
         comment = response.get("Item", {})
         print(f"Comment fetched: {comment}")
-        
+
         if not comment:
             print(f"Comment {post_id} not found in thread {thread_id}")
             return
-        
+
         # Initialize ReportedBy if it doesn't exist
         reported_by = comment.get("ReportedBy", [])
         print(f"Current ReportedBy list: {reported_by}")
-        
+
         # Avoid duplicate reporting
         if reporting_user not in reported_by:
             reported_by.append(reporting_user)
-        
+
         # Update the comment with the ReportedBy field
         posts_table.update_item(
             Key={"ThreadID": thread_id, "PostID": post_id},
@@ -976,6 +976,3 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
         print(f"Successfully reported comment {post_id} in thread {thread_id}")
     except Exception as e:
         print(f"Error reporting comment: {e}")
-
-
-
