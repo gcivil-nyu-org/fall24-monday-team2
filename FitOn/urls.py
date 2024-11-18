@@ -84,6 +84,13 @@ urlpatterns = [
         views.cancel_data_request,
         name="cancel_data_request",
     ),
+    path("user/accept_trainer/", views.accept_trainer, name="accept_trainer"),
+    path("user/deny_trainer/", views.deny_trainer, name="deny_trainer"),
+    path(
+        "user/provide_access_to_trainer/",
+        views.provide_access_to_trainer,
+        name="provide_access_to_trainer",
+    ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),

@@ -414,6 +414,8 @@ def get_fitness_trainers():
 
             user = get_user(trainer["user_id"])
             trainer["username"] = user["username"] if user else "Unknown"
+            trainer["name"] = user["name"] if user else "Unknown"
+            trainer["gender"] = GENDER_OPTIONS[user["gender"]] if user else "Unknown"
 
         return trainers
 

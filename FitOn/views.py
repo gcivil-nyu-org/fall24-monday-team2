@@ -569,6 +569,11 @@ def delink_google_fit(request):
     return redirect("profile")
 
 
+# --------------------------------- #
+# User + Fitness Trainer Functions  #
+# --------------------------------- #
+
+
 def fitness_trainer_application_view(request):
     user_id = request.session.get("user_id")
     if request.method == "POST":
@@ -621,24 +626,6 @@ def fitness_trainer_applications_list_view(request):
         request,
         "fitness_trainer_applications_list.html",
         {"applications": applications},
-    )
-
-
-def fitness_trainers_list_view(request):
-    # Check if the current user is an admin
-    user_id = request.session.get("user_id")
-    user = get_user(user_id)
-    if not user or not user.get("is_admin"):
-        return HttpResponseForbidden("You do not have permission to access this page")
-
-    # Retrieve list of trainers from DynamoDB
-    trainers = get_fitness_trainers()
-
-    # Render the list of trainers
-    return render(
-        request,
-        "fitness_trainers_list.html",
-        {"trainers": trainers},
     )
 
 
@@ -722,6 +709,110 @@ def reject_fitness_trainer(request):
         )
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def accept_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        trainer = get_user(trainer_id)
+
+        user_id = request.session.get("user_id")
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        user["trainers_with_access"].append(trainer_id)
+        trainer["users_with_access"].append(user_id)
+
+        user["waiting_list_of_trainers"].remove(trainer_id)
+        trainer["waiting_list_of_users"].remove(user_id)
+
+        update_user(user_id, user)
+        update_user(trainer_id, trainer)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def deny_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        trainer = get_user(trainer_id)
+
+        user_id = request.session.get("user_id")
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        user["waiting_list_of_trainers"].remove(trainer_id)
+        trainer["waiting_list_of_users"].remove(user_id)
+
+        update_user(user_id, user)
+        update_user(trainer_id, trainer)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def provide_access_to_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        trainer = get_user(trainer_id)
+
+        user_id = request.session.get("user_id")
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        user["trainers_with_access"].append(trainer_id)
+        trainer["users_with_access"].append(user_id)
+
+        update_user(user_id, user)
+        update_user(trainer_id, trainer)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def fitness_trainers_list_view(request):
+    # Make sure that the current user is not a fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of trainers from DynamoDB
+    trainers = get_fitness_trainers()
+
+    waiting_list_of_trainers = user.get("waiting_list_of_trainers", [])
+    trainers_in_waiting_list = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] in waiting_list_of_trainers
+    ]
+    remaining_trainers = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] not in waiting_list_of_trainers
+    ]
+
+    return render(
+        request,
+        "fitness_trainers_list.html",
+        {
+            "trainers_in_waiting_list": trainers_in_waiting_list,
+            "remaining_trainers": remaining_trainers,
+        },
+    )
 
 
 def standard_users_list_view(request):
