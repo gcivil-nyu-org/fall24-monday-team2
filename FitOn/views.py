@@ -733,11 +733,21 @@ def standard_users_list_view(request):
     # Retrieve list of standard users from DynamoDB
     standard_users = get_standard_users()
 
-    # Render the list of standard users
+    waiting_list_of_users = user.get("waiting_list_of_users", [])
+    users_in_waiting_list = [
+        user for user in standard_users if user["user_id"] in waiting_list_of_users
+    ]
+    remaining_users = [
+        user for user in standard_users if user["user_id"] not in waiting_list_of_users
+    ]
+
     return render(
         request,
         "standard_users_list.html",
-        {"standard_users": standard_users},
+        {
+            "users_in_waiting_list": users_in_waiting_list,
+            "remaining_users": remaining_users,
+        },
     )
 
 
