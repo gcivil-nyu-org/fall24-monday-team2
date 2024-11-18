@@ -1,12 +1,12 @@
 from datetime import datetime
-from django.test import TestCase, Client, override_settings
+from django.test import TestCase, Client, override_settings, RequestFactory
 
-# from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
 
-# from django.contrib.messages.middleware import MessageMiddleware
-# from django.contrib.sessions.middleware import SessionMiddleware
+from django.contrib.messages.middleware import MessageMiddleware
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 import boto3
 import json
@@ -47,26 +47,25 @@ from .dynamodb import (
     MockUser,
     # users_table,
 )
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ValidationError
 import pytz
 from django.contrib import messages
-
-# from django.contrib.messages import get_messages
-# from .forms import (
-#     SignUpForm,
-#     SetNewPasswordForm,
-#     ProfileForm,
-#     validate_file_extension,
-# )
-# from .views import (
-#     SCOPES,
-#     homepage,
-#     add_message,
-#     perform_redirect,
-#     login,
-#     custom_logout,
-#     signup,
-# )
+from django.contrib.messages import get_messages
+from .forms import (
+    SignUpForm,
+    SetNewPasswordForm,
+    ProfileForm,
+    validate_file_extension,
+)
+from .views import (
+    SCOPES,
+    homepage,
+    add_message,
+    perform_redirect,
+    login,
+    custom_logout,
+    signup,
+)
 from django.contrib.auth.hashers import check_password, make_password
 
 
@@ -1107,3 +1106,405 @@ class PasswordResetTests(TestCase):
             len(mail.outbox), 0, "No email should be sent for an injection attempt."
         )
         self.assertContains(response, "Enter a valid email address.", status_code=200)
+
+
+###########################################################
+#       TEST CASEs FOR VARIOUS FORMS                      #
+###########################################################
+
+
+class SignUpFormTest(TestCase):
+
+    def test_passwords_match(self):
+        form_data = {
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "name": "Test User",
+            "date_of_birth": "2000-01-01",
+            "gender": "M",  # Adjust based on your GENDER_OPTIONS
+            "password": "strongpassword123",
+            "confirm_password": "strongpassword123",
+        }
+        form = SignUpForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_passwords_do_not_match(self):
+        form_data = {
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "name": "Test User",
+            "date_of_birth": "2000-01-01",
+            "gender": "M",  # Adjust based on your GENDER_OPTIONS
+            "password": "strongpassword123",
+            "confirm_password": "differentpassword",
+        }
+        form = SignUpForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("Passwords do not match.", form.errors["__all__"])
+
+
+class SetNewPasswordFormTest(TestCase):
+
+    def test_passwords_match(self):
+        form_data = {
+            "new_password": "newstrongpassword123",
+            "confirm_password": "newstrongpassword123",
+        }
+        form = SetNewPasswordForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_passwords_do_not_match(self):
+        form_data = {
+            "new_password": "newstrongpassword123",
+            "confirm_password": "differentpassword",
+        }
+        form = SetNewPasswordForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("Passwords do not match.", form.errors["__all__"])
+
+
+class ProfileFormTest(TestCase):
+
+    def test_valid_form_with_country_code_and_phone(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "country_code": "+1",  # Replace with a valid choice from COUNTRY_CODES
+            "phone_number": "1234567890",
+        }
+        form = ProfileForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_valid_form_without_phone_and_country_code(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+        }
+        form = ProfileForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_invalid_phone_number_non_digits(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "country_code": "+1",  # Replace with a valid choice from COUNTRY_CODES
+            "phone_number": "abcd1234",
+        }
+        form = ProfileForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            "Phone number should contain only digits.", form.errors["phone_number"]
+        )
+
+    def test_country_code_without_phone_number(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "country_code": "+1",  # Replace with a valid choice from COUNTRY_CODES
+        }
+        form = ProfileForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["phone_number"],
+        )
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["country_code"],
+        )
+
+    def test_phone_number_without_country_code(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "phone_number": "1234567890",
+        }
+        form = ProfileForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["phone_number"],
+        )
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["country_code"],
+        )
+
+
+class ValidateFileExtensionTest(TestCase):
+
+    def test_valid_pdf_file(self):
+        valid_file = SimpleUploadedFile("document.pdf", b"file_content")
+        try:
+            validate_file_extension(valid_file)
+        except ValidationError:
+            self.fail("validate_file_extension raised ValidationError unexpectedly!")
+
+    # def test_invalid_file_extension(self):
+    #     invalid_file = SimpleUploadedFile("document.txt", b"file_content", content_type="text/plain")
+    #     # Attempt to call the validation function
+    #     try:
+    #         validate_file_extension(invalid_file)
+    #     except ValidationError as e:
+    #         # Check if the exception contains the expected message
+    #         self.assertListEqual(e.messages, ["Only PDF files are allowed."])
+    #         return  # Test passed
+    #     self.fail("validate_file_extension did not raise ValidationError")
+
+
+############################
+# Tests for views #
+############################
+
+
+class HomepageViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def test_homepage_with_username(self):
+        request = self.factory.get("/")
+        request.session = {"username": "sg8002"}  # Directly set the session
+
+        response = homepage(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "sg8002"
+        )  # Check that "JohnDoe" is in the response content
+
+    def test_homepage_without_username(self):
+        request = self.factory.get("/")
+        request.session = {}  # No username in the session
+
+        response = homepage(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "Guest"
+        )  # Check that "Guest" is in the response content
+
+
+class AddMessageTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _attach_middlewares(self, request):
+        """Helper method to attach SessionMiddleware and MessageMiddleware to the request."""
+        session_middleware = SessionMiddleware(lambda req: None)
+        session_middleware.process_request(request)
+        request.session.save()  # Save the session to initialize it
+
+        message_middleware = MessageMiddleware(lambda req: None)
+        message_middleware.process_request(request)
+
+    def test_add_message(self):
+        # Create a mock request
+        request = self.factory.get("/")
+        self._attach_middlewares(request)  # Attach both middlewares
+
+        # Call the add_message function
+        add_message(request, level=25, message="Test Message")
+
+        # Retrieve the messages from the request
+        messages = list(get_messages(request))
+
+        # Assertions
+        self.assertEqual(len(messages), 0)
+
+
+class PerformRedirectTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    async def test_perform_redirect(self):
+        # Call the async perform_redirect function
+        response = await perform_redirect(
+            "homepage"
+        )  # Use a valid URL name from your project
+
+        # Assertions
+        self.assertEqual(
+            response.url, "/home/"
+        )  # Replace "/" with the actual URL for "homepage"
+
+
+class LoginViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        # Create a user in DynamoDB for testing
+        self.username = "testuser"
+        self.password = "correctpassword"
+        hashed_password = make_password(self.password)
+        create_user(
+            self.username, self.username, "", "Test User", "", "", hashed_password
+        )
+
+    def tearDown(self):
+        # Clean up the test user from DynamoDB
+        delete_user_by_username(self.username)
+
+    def test_login_valid_user_and_password(self):
+        # Create a POST request with valid credentials
+        request = self.factory.post(
+            "/", {"username": self.username, "password": self.password}
+        )
+        request.session = {}
+
+        # Call the login view
+        response = login(request)
+
+        # Check if the response is a redirect to the homepage
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("homepage"))
+        self.assertIn("username", request.session)
+        self.assertEqual(request.session["username"], self.username)
+
+    def test_login_user_does_not_exist(self):
+        # Create a POST request with a non-existent username
+        request = self.factory.post(
+            "/", {"username": "nonexistentuser", "password": "password"}
+        )
+        request.session = {}
+
+        # Call the login view
+        response = login(request)
+
+        # Check for the correct error message in the response
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "User does not exist.")
+
+    def test_login_invalid_password(self):
+        # Create a POST request with an incorrect password
+        request = self.factory.post(
+            "/", {"username": self.username, "password": "wrongpassword"}
+        )
+        request.session = {}
+
+        # Call the login view
+        response = login(request)
+
+        # Check for the correct error message in the response
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Invalid password. Please try again.")
+
+
+class CustomLogoutViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _attach_session(self, request):
+        """Helper method to attach a session to the request using SessionMiddleware."""
+        middleware = SessionMiddleware(
+            lambda req: None
+        )  # Pass a dummy get_response function
+        middleware.process_request(request)
+        request.session.save()  # Save the session to initialize it
+
+    def test_custom_logout(self):
+        # Create a mock request and attach a session
+        request = self.factory.get("/")
+        self._attach_session(request)
+
+        # Set some session data
+        request.session["username"] = "testuser"
+        request.session["user_id"] = "123"
+
+        # Call the custom_logout view
+        response = custom_logout(request)
+
+        # Assertions
+        self.assertEqual(response.status_code, 302)  # Check for redirect
+        self.assertEqual(response["Location"], reverse("login"))  # Check redirect URL
+
+        # Check that the session is flushed (no data should remain)
+        self.assertNotIn("username", request.session)
+        self.assertNotIn("user_id", request.session)
+
+        # Check cache control headers
+        self.assertEqual(
+            response["Cache-Control"], "no-cache, no-store, must-revalidate"
+        )
+        self.assertEqual(response["Pragma"], "no-cache")
+        self.assertEqual(response["Expires"], "0")
+
+
+class SignUpViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        # User data for testing
+        self.username = "newuser"
+        self.email = "newuser@example.com"
+        self.name = "New User"
+        self.date_of_birth = "2000-01-01"
+        self.gender = "M"
+        self.password = "newpassword"
+
+    def tearDown(self):
+        # Clean up the test user from DynamoDB
+        delete_user_by_username(self.username)
+
+    def test_signup_valid_data(self):
+        # Create a POST request with valid sign-up data
+        request = self.factory.post(
+            "/signup/",
+            {  # Use "/signup/" instead of "/"
+                "username": self.username,
+                "email": self.email,
+                "name": self.name,
+                "date_of_birth": self.date_of_birth,
+                "gender": self.gender,
+                "password": self.password,
+                "confirm_password": self.password,  # Ensure passwords match
+            },
+        )
+        request.session = {}
+
+        # Call the signup view
+        response = signup(request)
+
+        # print(response)
+
+        # Check if the response is a redirect to the homepage
+        self.assertEqual(response.status_code, 302, "Expected redirect did not occur.")
+        self.assertEqual(response.url, reverse("homepage"))
+        self.assertIn("username", request.session)
+        self.assertEqual(request.session["username"], self.username)
+
+    def test_signup_invalid_data(self):
+        # Create a POST request with invalid data (e.g., missing required fields)
+        request = self.factory.post(
+            "/signup/",
+            {
+                "username": "",
+                "email": "invalidemail",
+                "name": "",
+                "date_of_birth": "",
+                "gender": "",
+                "password": "short",
+                "confirm_password": "different",  # Passwords do not match
+            },
+        )
+        request.session = {}
+
+        # Call the signup view
+        response = signup(request)
+
+        # Check that the response does not redirect and the form has errors
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("This field is required.", response.content.decode())
+        self.assertIn("Enter a valid email address.", response.content.decode())
+        self.assertIn("Passwords do not match.", response.content.decode())
