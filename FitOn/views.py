@@ -29,6 +29,7 @@ from .dynamodb import (
     remove_fitness_trainer,
     get_standard_users,
     send_data_request_to_user,
+    cancel_data_request_to_user,
     delete_reply,
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
@@ -764,6 +765,27 @@ def send_data_request(request):
         else:
             return JsonResponse({"error": "Failed to send request"}, status=400)
     return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+def cancel_data_request(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
+
+        if not standard_user_id:
+            return JsonResponse({"error": "User ID is required"}, status=400)
+
+        success = cancel_data_request_to_user(fitness_trainer_id, standard_user_id)
+
+        if success:
+            return JsonResponse(
+                {"message": "Request cancelled successfully"}, status=200
+            )
+        else:
+            return JsonResponse({"error": "Failed to cancel the request"}, status=400)
+    else:
+        return JsonResponse({"error": "Invalid method"}, status=405)
 
 
 # -------------------------------

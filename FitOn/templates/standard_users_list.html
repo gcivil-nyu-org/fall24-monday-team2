@@ -3,6 +3,7 @@
 {% block title %}Standard Users List{% endblock %}
 
 {% block content %}
+    <div id="notification" class="notification table-container" style="display:none;"></div>
     {% if users_in_waiting_list %}
         <div class="table-container">
             <h2 class="page-title">Users in Waiting List</h2>
@@ -25,7 +26,7 @@
                             <td>{{ user.age }}</td>
                             <td>
                                 <div class="button-container" style="margin-top: 0px;">
-                                    <button class="submit-button request-button" data-userId="{{ user.user_id }}">Request Data</button>
+                                    <button class="deactivate-button cancel-request-button" data-userId="{{ user.user_id }}">Cancel Request</button>
                                 </div>
                             </td>
                         </tr>
@@ -71,12 +72,34 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            const buttons = document.querySelectorAll(".request-button");
+            const notification = document.getElementById('notification');
 
-            buttons.forEach(function(button) {
+            const storedMessage = localStorage.getItem("notificationMessage");
+            if (storedMessage) {
+                notification.textContent = storedMessage;
+                notification.classList.add('show');
+                notification.style.display = 'block';
+                setTimeout(() => {
+                    notification.classList.remove('show');
+                    notification.style.display = 'none';
+                    localStorage.removeItem("notificationMessage");
+                }, 3000);
+            }
+
+            const showNotificationAndReload = (message) => {
+                localStorage.setItem("notificationMessage", message);
+                location.reload();
+            };
+            
+            document.querySelectorAll(".request-button, .cancel-request-button").forEach(function(button) {
                 button.addEventListener("click", function(event) {
                     const userId = event.target.getAttribute("data-userId");
-                    fetch("{% url 'send_data_request' %}", {
+                    const url = event.target.classList.contains("request-button") ? 
+                        "{% url 'send_data_request' %}" : 
+                        "{% url 'cancel_data_request' %}";
+                    const action = event.target.classList.contains("request-button") ? "Request Data" : "Cancel Request";
+                    
+                    fetch(url, {
                         method: 'POST',
                         headers: {
                             'X-CSRFToken': '{{ csrf_token }}',
@@ -85,15 +108,16 @@
                         body: JSON.stringify({ user_id: userId })
                     })
                     .then(response => {
+                        console.log(response); 
                         if (response.ok) {
-                            alert("Data request sent successfully!");
+                            showNotificationAndReload(`Request ${event.target.classList.contains("request-button") ? 'sent' : 'cancelled'} successfully!`);
                         } else {
-                            alert("Failed to send data request.");
+                            showNotificationAndReload(`Failed to ${action.toLowerCase()}`);
                         }
                     })
                     .catch(error => {
                         console.error("Error:", error);
-                        alert("An unexpected error occurred. Please try again later.");
+                        showNotificationAndReload("An unexpected error occurred. Please try again later.");
                     });
                 });
             });

@@ -516,7 +516,6 @@ def get_standard_users():
 
 def send_data_request_to_user(fitness_trainer_id, standard_user_id):
     try:
-        # Fetch the standard user and fitness trainer from DynamoDB
         standard_user = get_user(standard_user_id)
         fitness_trainer = get_user(fitness_trainer_id)
 
@@ -524,15 +523,12 @@ def send_data_request_to_user(fitness_trainer_id, standard_user_id):
             print("User(s) not found")
             return False
 
-        # Add fitness trainer's ID to standard user's waiting list
         if "waiting_list_of_trainers" not in standard_user:
             standard_user["waiting_list_of_trainers"] = []
 
-        # Add the fitness trainer ID if not already in the list
         if fitness_trainer_id not in standard_user["waiting_list_of_trainers"]:
             standard_user["waiting_list_of_trainers"].append(fitness_trainer_id)
 
-        # Update the standard user's record in DynamoDB
         users_table.update_item(
             Key={"user_id": standard_user_id},
             UpdateExpression="SET waiting_list_of_trainers = :waiting_list_of_trainers",
@@ -541,15 +537,12 @@ def send_data_request_to_user(fitness_trainer_id, standard_user_id):
             },
         )
 
-        # Add standard user's ID to fitness trainer's waiting list
         if "waiting_list_of_users" not in fitness_trainer:
             fitness_trainer["waiting_list_of_users"] = []
 
-        # Add the standard user ID if not already in the list
         if standard_user_id not in fitness_trainer["waiting_list_of_users"]:
             fitness_trainer["waiting_list_of_users"].append(standard_user_id)
 
-        # Update the fitness trainer's record in DynamoDB
         users_table.update_item(
             Key={"user_id": fitness_trainer_id},
             UpdateExpression="SET waiting_list_of_users = :waiting_list_of_users",
@@ -562,6 +555,42 @@ def send_data_request_to_user(fitness_trainer_id, standard_user_id):
 
     except ClientError as e:
         print(f"Error sending data request: {e}")
+        return False
+
+
+def cancel_data_request_to_user(fitness_trainer_id, standard_user_id):
+    try:
+        standard_user = get_user(standard_user_id)
+        fitness_trainer = get_user(fitness_trainer_id)
+
+        if not standard_user or not fitness_trainer:
+            print("User(s) not found")
+            return False
+
+        if "waiting_list_of_trainers" in standard_user:
+            waiting_list_of_trainers = standard_user["waiting_list_of_trainers"]
+            if fitness_trainer_id in waiting_list_of_trainers:
+                waiting_list_of_trainers.remove(fitness_trainer_id)
+                users_table.update_item(
+                    Key={"user_id": standard_user_id},
+                    UpdateExpression="SET waiting_list_of_trainers = :new_list",
+                    ExpressionAttributeValues={":new_list": waiting_list_of_trainers},
+                )
+
+        if "waiting_list_of_users" in fitness_trainer:
+            waiting_list_of_users = fitness_trainer["waiting_list_of_users"]
+            if standard_user_id in waiting_list_of_users:
+                waiting_list_of_users.remove(standard_user_id)
+                users_table.update_item(
+                    Key={"user_id": fitness_trainer_id},
+                    UpdateExpression="SET waiting_list_of_users = :new_list",
+                    ExpressionAttributeValues={":new_list": waiting_list_of_users},
+                )
+
+        return True
+
+    except Exception as e:
+        print(f"Error in cancelling data request: {e}")
         return False
 
 
