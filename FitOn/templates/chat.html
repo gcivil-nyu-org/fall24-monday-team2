@@ -1,0 +1,156 @@
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Chat</title>
+    <link rel="stylesheet" type="text/css" href="../static/css/chat.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="leftSide">
+            <!--header-->
+
+            <!--search-->
+            <button style="width: 100%;height: 60px" id="group">
+                Group Chat
+            </button>
+            <!--ChatList-->
+
+            {% for i in data %}
+            <div class="chatlist" data-user-id="{{ i.user_id }}" data-user-name="{{ i.username }}">
+                <div class="block">
+                    <div class="details">
+                        <div class="listHead">
+                            <h4>{{ i.username }}</h4>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div id="rightBar" class="rightSide" style="visibility: hidden">
+            <div class="header">
+
+            </div>
+            <!--chatbox-->
+            <div class="chatBox" id="chatBox">
+
+            </div>
+            <!--chat input-->
+            <div class="chatbox_input">
+                <div>
+                    <input id="input_message" type="text">
+                    <button id="submit" style="width: 40px">
+                        Send
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const chatListItems = document.querySelectorAll('.chatlist');
+
+            chatListItems.forEach(item => {
+                item.addEventListener('click', function () {
+                    startChat(this);
+                });
+            });
+
+            const group = document.getElementById('group')
+            group.addEventListener('click', function () {
+                window.location.href = "/chatg";
+            })
+        });
+
+        function createRoomId(uidA, uidB) {
+            const ids = [uidA, uidB].sort();
+            return `${ids[0]}and${ids[1]}`;
+        }
+        let submitListener = null;
+
+        function startChat(chatElement) {
+            const element = document.getElementById("rightBar");
+            element.style.visibility = 'visible';
+
+            if (window.chatSocket != null) {
+                window.chatSocket.close(1000, 'Closing connection');
+                window.chatSocket.onclose = null;
+                window.chatSocket = null;
+            }
+
+            const chatBox = document.getElementById("chatBox");
+            if (chatBox) {
+                chatBox.innerHTML = '';
+            }
+
+            const blockListItems = document.querySelectorAll('.block');
+            blockListItems.forEach(item => {
+                item.classList.remove("active");
+            });
+
+            const block = chatElement.querySelector('.block');
+            block.classList.add("active");
+
+            const userId = chatElement.getAttribute('data-user-id');
+            const roomId = createRoomId("{{ mine.user_id }}", userId);
+            fetch(`/chat/history/${roomId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    data.messages.forEach(message => {
+                        const messageDiv = document.createElement('div');
+                        if (message.sender === '{{ mine.user_id }}') {
+                            messageDiv.classList.add('message', 'my_message');
+                        } else {
+                            messageDiv.classList.add('message', 'frnd_message');
+                        }
+                        messageDiv.innerHTML = `<p>${message.message}<br></p>`;
+                        chatBox.appendChild(messageDiv);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching chat history:', error);
+                });
+
+            window.chatSocket = new WebSocket('ws://' + window.location.host + '/ws/chat/' + roomId + '/');
+
+            window.chatSocket.onmessage = function (e) {
+                const data = JSON.parse(e.data);
+                const messageDiv = document.createElement('div');
+                if (data.sender === '{{ mine.user_id }}') {
+                    messageDiv.classList.add('message', 'my_message');
+                } else {
+                    messageDiv.classList.add('message', 'frnd_message');
+                }
+                messageDiv.innerHTML = `<p>${data.message}<br></p>`;
+                document.getElementsByClassName('chatBox')[0].appendChild(messageDiv);
+            };
+
+            if (submitListener) {
+                document.getElementById('submit').removeEventListener('click', submitListener);
+            }
+
+            submitListener = function () {
+                submitMessage(this, window.chatSocket);
+            };
+            document.getElementById('submit').addEventListener('click', submitListener);
+
+            console.log(userId);
+        }
+
+        function submitMessage(element, chatSocket) {
+            var inputValue = document.getElementById('input_message').value;
+            chatSocket.send(JSON.stringify({
+                'message': inputValue,
+                'sender': '{{ mine.user_id }}'
+            }));
+        }
+    </script>
+</body>
+
+</html>

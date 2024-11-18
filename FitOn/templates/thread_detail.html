@@ -205,101 +205,7 @@
                 .catch(error => console.error('Error:', error));
             });
         });
-        
-        // Toggle visibility of the reply box
-        function toggleReplyBox(postId) {
-            const replyBox = document.getElementById(`reply-box-${postId}`);
-            if (replyBox) {
-                replyBox.style.display = (replyBox.style.display === 'none' || replyBox.style.display === '') ? 'block' : 'none';
-            }
-        }
-
-
-        // Event Listener for "Reply" buttons to open the reply box
-        replyCommentButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                alert("Reply button")
-                const postId = this.dataset.postId;
-                toggleReplyBox(postId);
-            });
-        });
-
-            
-        // Event Listener for reply buttons to submit reply
-        submitReplyButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                const postId = this.dataset.postId;
-                const threadId = this.dataset.threadId;  // Retrieve thread_id
-
-
-                const replyContent = document.getElementById(`reply-content-${postId}`).value;
-
-                if (replyContent.trim() === "") {
-                    alert("Reply content cannot be empty!");
-                    return;
-                }
-
-                // Sending reply via AJAX
-                fetch('/add_reply/', {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': '{{ csrf_token }}',
-                        'Content-Type': 'application/json',
-                        'x-requested-with': 'XMLHttpRequest'
-                    },
-                    body: JSON.stringify({ action: "add_reply",'post_id': postId, 'thread_id': threadId, 'content': replyContent })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        const repliesContainer = document.getElementById(`replies-${postId}`);
-                        const newReply = document.createElement("div");
-                        newReply.classList.add("reply");
-                        newReply.style.border = "1px solid #ddd";
-                        newReply.style.padding = "5px";
-                        newReply.style.marginTop = "5px";
-                        newReply.innerHTML = `<p><strong>${data.username}</strong> said: ${data.content}</p><p style="color: #888; font-size: 12px;">Just now</p>`;
-                        
-                        repliesContainer.appendChild(newReply);
-
-                        // Clear the reply box and hide it
-                        document.getElementById(`reply-content-${postId}`).value = "";
-                        toggleReplyBox(postId);
-                    } else {
-                        alert('Error: ' + data.message);
-                    }
-                })
-                .catch(error => console.error('Error in submitting reply:', error));
-            });
-        });
-
-         // Like comment
-    likeCommentButtons.forEach(button => {
-        button.addEventListener('click', function(event) {
-            event.preventDefault();
-            const postId = this.dataset.postId;
-
-            fetch(window.location.href, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}',
-                    'Content-Type': 'application/json',
-                    'x-requested-with': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({ action: 'like_comment', post_id: postId })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    button.textContent = `▲ ${data.likes} Like${data.likes !== 1 ? 's' : ''}`;
-                    button.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
-                } else {
-                    alert('Error: ' + data.message);
-                }
-            });
-        });
-    });
-
+    
         // Like button functionality (example placeholder)
         likeButton.addEventListener('click', function(event) {
         event.preventDefault();
@@ -422,7 +328,72 @@
         }, 3000); // Adjust timeout duration based on response time if needed
     });
 
-        
+        // Toggle visibility of the reply box
+        function toggleReplyBox(postId) {
+            const replyBox = document.getElementById(`reply-box-${postId}`);
+            if (replyBox) {
+                replyBox.style.display = (replyBox.style.display === 'none' || replyBox.style.display === '') ? 'block' : 'none';
+            }
+        }
+
+
+        // Event Listener for "Reply" buttons to open the reply box
+        replyCommentButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                alert("Reply button")
+                const postId = this.dataset.postId;
+                toggleReplyBox(postId);
+            });
+        });
+
+            
+        // Event Listener for reply buttons to submit reply
+        submitReplyButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const postId = this.dataset.postId;
+                const threadId = this.dataset.threadId;  // Retrieve thread_id
+
+
+                const replyContent = document.getElementById(`reply-content-${postId}`).value;
+
+                if (replyContent.trim() === "") {
+                    alert("Reply content cannot be empty!");
+                    return;
+                }
+
+                // Sending reply via AJAX
+                fetch('/add_reply/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ action: "add_reply",'post_id': postId, 'thread_id': threadId, 'content': replyContent })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        const repliesContainer = document.getElementById(`replies-${postId}`);
+                        const newReply = document.createElement("div");
+                        newReply.classList.add("reply");
+                        newReply.style.border = "1px solid #ddd";
+                        newReply.style.padding = "5px";
+                        newReply.style.marginTop = "5px";
+                        newReply.innerHTML = `<p><strong>${data.username}</strong> said: ${data.content}</p><p style="color: #888; font-size: 12px;">Just now</p>`;
+                        
+                        repliesContainer.appendChild(newReply);
+
+                        // Clear the reply box and hide it
+                        document.getElementById(`reply-content-${postId}`).value = "";
+                        toggleReplyBox(postId);
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error in submitting reply:', error));
+            });
+        });
 
         // Report main thread post
         reportButton.addEventListener('click', function(event) {
@@ -463,7 +434,32 @@
             .catch(error => console.error('Error reporting thread:', error));
         });
 
-        
+         // Like comment
+    likeCommentButtons.forEach(button => {
+        button.addEventListener('click', function(event) {
+            event.preventDefault();
+            const postId = this.dataset.postId;
+
+            fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json',
+                    'x-requested-with': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({ action: 'like_comment', post_id: postId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    button.textContent = `▲ ${data.likes} Like${data.likes !== 1 ? 's' : ''}`;
+                    button.style.backgroundColor = data.liked ? 'darkgreen' : 'green';
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            });
+        });
+    });
 
     reportCommentButtons.forEach(button => {
         button.addEventListener('click', function(event) {

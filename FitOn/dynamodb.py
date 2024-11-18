@@ -1,18 +1,16 @@
-from boto3.dynamodb.conditions import Attr
-import boto3
 import uuid
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password
 from datetime import datetime, timezone
-from django.conf import settings
 
+import boto3
+from boto3.dynamodb.conditions import Key
+from asgiref.sync import sync_to_async
+from boto3.dynamodb.conditions import Attr
+from botocore.exceptions import ClientError, NoCredentialsError, PartialCredentialsError
+from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
-from django.conf import settings
-import uuid
-from pytz import timezone
-
 
 # Connect to DynamoDB
 dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
@@ -28,7 +26,7 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
-tz = timezone("EST")
+chat_table = dynamodb.Table("chat_table")
 
 
 class MockUser:
@@ -165,7 +163,7 @@ def get_user_by_uid(uid):
         if user_data:
             return MockUser(user_data)
         return None
-    except Exception:
+    except Exception as e:
         return None
 
 
@@ -181,7 +179,7 @@ def update_user_password(user_id, new_password):
         return response
     except Exception as e:
         print(f"Error updating user password: {e}")
-    return None
+        return None
 
 
 def get_last_reset_request_time(user_id):
@@ -202,7 +200,7 @@ def update_reset_request_time(user_id):
             return None
 
         # Insert a new entry or update the existing reset request time
-        password_reset_table.put_item(
+        response = password_reset_table.put_item(
             Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
         )
         print(f"Reset request time updated for user_id '{user_id}'.")
@@ -464,8 +462,7 @@ def remove_fitness_trainer(user_id):
 
 def create_thread(title, user_id, content):
     thread_id = str(uuid.uuid4())
-
-    created_at = datetime.now(tz).isoformat()
+    created_at = datetime.now().isoformat()
 
     thread = {
         "ThreadID": thread_id,
@@ -521,8 +518,7 @@ def fetch_thread(thread_id):
 
 def create_post(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-
-    created_at = datetime.now(tz).isoformat()
+    created_at = datetime.utcnow().isoformat()
 
     post = {
         "PostID": post_id,
@@ -552,7 +548,7 @@ def fetch_posts_for_thread(thread_id):
 
 def post_comment(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-    created_at = datetime.now(tz).isoformat()
+    created_at = datetime.utcnow().isoformat()
 
     reply = {
         "ThreadID": thread_id,
@@ -952,3 +948,42 @@ def mark_thread_as_reported(thread_id):
         print(f"Thread {thread_id} reported.")
     except Exception as e:
         print(f"Error reporting thread {thread_id}: {e}")
+
+
+@sync_to_async
+def save_chat_message(sender, message, room_name, sender_name):
+    timestamp = int(datetime.utcnow().timestamp()) 
+
+    chat_table.put_item(
+        Item={
+            "room_name": room_name,
+            "sender": sender,
+            "sender_name": sender_name,
+            "message": message,
+            "timestamp": timestamp,
+        }
+    )
+
+
+def get_users_without_specific_username(exclude_username):
+    try:
+        response = users_table.scan(
+            FilterExpression=Attr("username").ne(
+                exclude_username
+            )  # Exclude the specified username
+        )
+        users = response.get("Items", [])
+        return users  # Return all matched users
+    except Exception as e:
+        print(
+            f"Error querying DynamoDB for users excluding username '{exclude_username}': {e}"
+        )
+        return None
+
+
+def get_chat_history_from_db(room_id):
+    response = chat_table.query(
+        KeyConditionExpression=Key("room_name").eq(room_id),
+        ScanIndexForward=True,
+    )
+    return response

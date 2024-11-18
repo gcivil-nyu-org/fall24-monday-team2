@@ -15,15 +15,17 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
-from . import views
+from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 
 # from django.contrib.auth import views
 from django.urls import path
 
-# from .views import signup, homepage, login, profile_view, upload_profile_picture
-from django.conf import settings
+from . import consumers, views
+from .views import homepage, login, profile_view, signup, upload_profile_picture
+
+app_name = "chat"
 
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),
@@ -37,7 +39,7 @@ urlpatterns = [
     path(
         "deactivate/confirm/", views.confirm_deactivation, name="confirm_deactivation"
     ),
-    path("logout/", views.custom_logout, name="logout"),
+    path("logout/", views.login, name="logout"),
     path(
         "reset-password/", views.password_reset_request, name="password_reset_request"
     ),
@@ -100,4 +102,12 @@ urlpatterns = [
     path("delete_reply/", views.delete_reply_view, name="delete_reply"),
     path("delete_thread/", views.delete_thread, name="delete_thread"),
     path("reports/", views.reports_view, name="reports"),
+    path("chat/", views.private_chat, name="chat"),
+    path("chatg/", views.group_chat),
+    path("chat/history/<str:room_id>/", views.get_chat_history),
+    path("chat/group/create/", views.create_group_chat),
+    path("chat/group/invite/", views.invite_to_group),
+    path("chat/group/join/", views.join_group_chat),
+    path("chat/group/leave/", views.leave_group_chat),
+    path("chat/group/check/", views.get_pendding_invitations),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

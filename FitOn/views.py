@@ -1,43 +1,92 @@
-from django.shortcuts import render, redirect
-from .dynamodb import (
+import asyncio
+import datetime as dt
+import json
+import os
+import ssl
+import uuid
+from collections import defaultdict
+from datetime import datetime, timedelta
+from time import time
+
+import boto3
+import pandas as pd
+import pytz
+import requests
+
+# from django.utils.encoding import force_bytes
+# from django.utils.html import strip_tags
+# from django.utils.http import urlsafe_base64_encode
+# import os
+from asgiref.sync import sync_to_async
+from channels.layers import get_channel_layer
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import authenticate
+from django.contrib.auth import login as auth_login
+from django.contrib.auth import logout
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.models import User
+from django.contrib.auth.tokens import default_token_generator
+
+# from django.core.files.storage import FileSystemStorage
+from django.core.mail import EmailMessage, get_connection, send_mail
+from django.core.mail.backends.locmem import EmailBackend
+
+# from django.core.mail import EmailMultiAlternatives
+from django.http import Http404, HttpResponseForbidden, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.html import strip_tags
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.views.decorators.http import require_GET, require_http_methods
+
+# from google import Things
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+
+from .dynamodb import (  # create_post,; fetch_thread,; get_replies,; get_thread_details,
+    MockUser,
     add_fitness_trainer_application,
-    # create_post,
-    post_comment,
-    create_thread,
     create_reply,
+    create_thread,
     create_user,
+    delete_post,
+    delete_reply,
     delete_user_by_username,
+    dynamodb,
+    fetch_all_threads,
+    fetch_all_users,
+    fetch_filtered_threads,
     fetch_posts_for_thread,
-    # fetch_thread,
+    fetch_reported_threads_and_comments,
+    get_chat_history_from_db,
+    get_fitness_data,
     get_fitness_trainer_applications,
+    get_fitness_trainers,
     get_last_reset_request_time,
-    # get_replies,
-    # get_thread_details,
     get_user,
     get_user_by_email,
     get_user_by_uid,
     get_user_by_username,
+    get_users_without_specific_username,
+    like_comment,
+    make_fitness_trainer,
+    mark_thread_as_reported,
+    post_comment,
+    posts_table,
+    remove_fitness_trainer,
+    report_comment,
+    threads_table,
     update_reset_request_time,
     update_user,
     update_user_password,
     upload_profile_picture,
-    fetch_filtered_threads,
-    fetch_all_users,
-    get_fitness_data,
-    dynamodb,
-    threads_table,
-    delete_post,
-    get_fitness_trainers,
-    make_fitness_trainer,
-    remove_fitness_trainer,
-    delete_reply,
-    fetch_reported_threads_and_comments,
-    mark_thread_as_reported,
-    posts_table,
 )
-
-from .rds import rds_main
-
 from .forms import (
     FitnessTrainerApplicationForm,
     LoginForm,
@@ -46,56 +95,7 @@ from .forms import (
     SetNewPasswordForm,
     SignUpForm,
 )
-
-# from .models import PasswordResetRequest
-import datetime as dt
-from datetime import datetime
-import pytz
-from datetime import timedelta
-from django.contrib.auth.hashers import make_password, check_password
-import pandas as pd
-
-# from django.contrib.auth.models import User
-from django.contrib.auth.tokens import default_token_generator
-from django.contrib.auth import logout
-from django.contrib import messages
-from django.conf import settings
-
-# from django.core.files.storage import FileSystemStorage
-from django.core.mail import EmailMessage
-
-# from django.core.mail.backends.locmem import EmailBackend
-
-# from django.core.mail import EmailMultiAlternatives
-from django.http import JsonResponse, HttpResponseForbidden
-from django.template.loader import render_to_string
-from django.urls import reverse
-from django.utils import timezone
-
-# from django.http import Http404
-
-# from django.utils.encoding import force_bytes
-# from django.utils.html import strip_tags
-# from django.utils.http import urlsafe_base64_encode
-# import os
-from asgiref.sync import sync_to_async
-from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
-import uuid
-
-# import ssl
-import boto3
-from google_auth_oauthlib.flow import Flow
-import requests
-
-# from django.contrib.auth.decorators import login_required
-import json
-
-# from google import Things
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-import asyncio
-from collections import defaultdict
+from .models import GroupChatMember
 
 # Define metric data types
 dataTypes = {
@@ -154,44 +154,41 @@ def login(request):
             username = form.cleaned_data["username"]
             password = form.cleaned_data["password"]
 
-            # Query DynamoDB for the user by username
-            user = get_user_by_username(username)
-
-            if user:
-                # Get the hashed password from DynamoDB
-                stored_password = user["password"]
-                user_id = user["user_id"]
-
-                # Verify the password using Django's check_password
-                if check_password(password, stored_password):
-                    # Set the session and redirect to the homepage
-                    request.session["username"] = username
-                    request.session["user_id"] = user_id
-                    return redirect("homepage")
-                else:
-                    error_message = "Invalid password. Please try again."
+            # Check if password field is empty
+            if not password:
+                error_message = "Please enter a valid password."
             else:
-                error_message = "User does not exist."
+                # Query DynamoDB for the user by username
+                user = get_user_by_username(username)
+
+                if user:
+                    stored_password = user["password"]
+                    user_id = user["user_id"]
+
+                    if check_password(password, stored_password):
+                        # Create a Django User object for authentication
+                        django_user, created = User.objects.get_or_create(
+                            username=username, defaults={"password": stored_password}
+                        )
+                        # Use auth_login to set request.user
+                        auth_login(request, django_user)
+                        # Store user details in session for additional information
+                        request.session["username"] = username
+                        request.session["user_id"] = user_id
+                        return redirect("homepage")
+                    else:
+                        error_message = "Invalid password. Please try again."
+                else:
+                    error_message = "User does not exist."
+        else:
+            error_message = form.errors.get(
+                "password", ["Please fill out the form correctly."]
+            )[0]
 
     else:
         form = LoginForm()
 
     return render(request, "login.html", {"form": form, "error_message": error_message})
-
-
-def custom_logout(request):
-    # Log out the user
-    logout(request)
-
-    # Clear the entire session to ensure no data is persisted
-    request.session.flush()
-
-    # Redirect to the homepage or a specific page after logging out
-    response = redirect("login")
-    response["Cache-Control"] = "no-cache, no-store, must-revalidate"  # HTTP 1.1
-    response["Pragma"] = "no-cache"  # HTTP 1.0
-    response["Expires"] = "0"  # Proxies
-    return response
 
 
 def signup(request):
@@ -441,7 +438,6 @@ def confirm_deactivation(request):
             if delete_user_by_username(username):
                 # Log the user out and redirect to the homepage
                 logout(request)
-                request.session.flush()
                 return redirect("homepage")  # Redirect to homepage after deactivation
             else:
                 return render(
@@ -486,7 +482,7 @@ def authorize_google_fit(request):
 def callback_google_fit(request):
     user_id = request.session.get("user_id")
     print("Inside Callback")
-    print("Session: ")
+
     # Fetch user details from DynamoDB
     user = get_user(user_id)
     state = request.session.get("google_fit_state")
@@ -732,6 +728,11 @@ def reject_fitness_trainer(request):
 # -------------------------------
 
 
+# def forum_view(request):
+#     threads = fetch_all_threads()
+#     return render(request, "forums.html", {"threads": threads})
+
+
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
@@ -899,15 +900,6 @@ def thread_detail_view(request, thread_id):
 
 def new_thread_view(request):
     print("PrePost")
-    user_id = request.session.get("user_id")
-
-    # Fetch user details from DynamoDB
-    user = get_user(user_id)
-
-    if not user:
-        messages.error(request, "User not found.")
-        return redirect("login")
-
     if request.method == "POST":
         print("Post")
         title = request.POST.get("title")
@@ -969,12 +961,8 @@ def delete_post_view(request):
 
 
 def forum_view(request):
-
     user_id = request.session.get("username")
     user = get_user_by_username(user_id)
-    if not user:
-        messages.error(request, "User not found.")
-        return redirect("login")
     is_banned = user.get("is_banned")
     print(user)
     print(is_banned)
@@ -1002,9 +990,7 @@ def forum_view(request):
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
 
-    return render(
-        request, "forums.html", {"threads": threads, "users": users, "user": user}
-    )
+    return render(request, "forums.html", {"threads": threads, "users": users})
 
 
 ######################################
@@ -1187,7 +1173,6 @@ def steps_barplot(data):
             steps_data.append(d)
 
     # Pass the plot path to the template
-    print("Steps Data:", steps_data)
     context = {"steps_data_json": steps_data}
     return context
 
@@ -1510,11 +1495,7 @@ async def fetch_all_metric_data(request, duration, frequency):
 
 async def get_metric_data(request):
     credentials = await sync_to_async(lambda: request.session.get("credentials"))()
-    user_id = await sync_to_async(lambda: request.session.get("user_id"))()
-    user = get_user(user_id)
-    user_email = user.get("email")
     print("Credentials: \n", credentials)
-    print("User Email: \n", user_email)
     if credentials:
         duration = "week"
         frequency = "daily"
@@ -1526,10 +1507,9 @@ async def get_metric_data(request):
             frequency = request.GET.get("data_freq")
 
         total_data = await fetch_all_metric_data(request, duration, frequency)
-        rds_response = await rds_main(user_email, total_data)
-        print("RDS Response: \n", rds_response)
+
         context = {"data": total_data}
-        # print("Inside get metric:", context)
+        print("Inside get metric:", context)
         return await sync_to_async(render)(
             request, "display_metrics_data.html", context
         )
@@ -1551,21 +1531,15 @@ def health_data_view(request):
 
     if request.method == "POST":
         data = request.POST
-        print("Data:", data)
-        try:
-            table.put_item(
-                Item={
-                    "email": user_email,  # Use the default email
-                    "metric": data.get("metric"),
-                    "time": data.get("time"),
-                    "value": data.get("value"),
-                },
-                ConditionExpression="attribute_not_exists(email) AND attribute_not_exists(#t)",
-                ExpressionAttributeNames={"#t": "time"},
-            )
-            print("Item inserted successfully.")
-        except dynamodb_res.meta.client.exceptions.ConditionalCheckFailedException:
-            print("Item already exists and was not replaced.")
+        print(data)
+        table.put_item(
+            Item={
+                "email": user_email,  # Use the default email
+                "metric": data.get("metric"),
+                "time": data.get("time"),
+                "value": data.get("value"),
+            }
+        )
         return redirect("get_metric_data")
 
     # Fetch all the metrics data from DynamoDB
@@ -1617,12 +1591,11 @@ def add_reply(request):
             )
 
         # Create the reply data
-        tz = timezone("EST")
         reply_data = {
             "ReplyID": str(uuid.uuid4()),  # Unique ID for each reply
             "UserID": user_id,
             "Content": content,
-            "CreatedAt": datetime.now(tz).isoformat(),  # Timestamp for each reply
+            "CreatedAt": datetime.utcnow().isoformat(),  # Timestamp for each reply
         }
 
         # Save the reply to DynamoDB by appending it to the 'Replies' list for the post
@@ -1958,3 +1931,152 @@ def punishments_view(request):
 
     # Pass the punished users to the template
     return render(request, "punishments.html", {"punished_users": punished_users})
+
+
+# -------------------------------
+# Chat Functions
+# -------------------------------
+
+def private_chat(request):
+    username = request.session.get("username")
+    user = get_user_by_username(username)
+
+    dic = {
+        "data": get_users_without_specific_username(username),
+        "mine": user,
+    }
+    return render(request, "chat.html", dic)
+
+
+
+def get_chat_history(request, room_id):
+    response = get_chat_history_from_db(room_id)
+    return JsonResponse({"messages": response.get("Items", [])})
+
+
+
+def group_chat(request):
+    username = request.session.get("username")
+    user = get_user_by_username(username)
+    data = []
+    for i in GroupChatMember.objects.filter(
+        uid=user.get("user_id"), status=GroupChatMember.AgreementStatus.COMPLETED
+    ):
+        data.append({"name": i.name})
+    allUser = get_users_without_specific_username(username)
+    dic = {
+        "data": data,
+        "mine": user,
+        "allUser": allUser,
+    }
+    return render(request, "chatg.html", dic)
+
+
+
+def create_group_chat(request):
+    username = request.session.get("username")
+    user = get_user_by_username(username)
+    payload = json.loads(request.body.decode())
+    allUser = payload.get("allUser")
+    roomName = payload.get("roomName")
+    existing_group = (GroupChatMember.objects.filter)(name=roomName)
+
+    if (existing_group.exists)():
+        return JsonResponse(
+            {"code": "400", "message": "Group has already been created!"}
+        )
+
+    roomId = (GroupChatMember.objects.create)(
+        name=str(roomName),
+        uid=user["user_id"],
+        status=GroupChatMember.AgreementStatus.COMPLETED,
+    )
+    (roomId.save)()
+
+    for i in allUser:
+        try:
+            roomId = (GroupChatMember.objects.create)(
+                name=str(roomName),
+                uid=i,
+                status=GroupChatMember.AgreementStatus.COMPLETED,
+            )
+            (roomId.save)()
+        except Exception as e:
+            print(f"Error creating GroupWebSocket for {i}: {e}")
+            return JsonResponse({"code": "500", "message": "Database error"})
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+
+def invite_to_group(request):
+    payload = json.loads(request.body.decode())
+    allUser = payload.get("allUser")
+    roomName = payload.get("roomName")
+
+    for i in allUser:
+        try:
+            roomId = (GroupChatMember.objects.create)(
+                name=str(roomName),
+                uid=i,
+                status=GroupChatMember.AgreementStatus.IN_PROGRESS,
+            )
+            (roomId.save)()
+
+        except Exception as e:
+            print(f"Error creating GroupWebSocket for {i}: {e}")
+            return JsonResponse({"code": "500", "message": "Database error"})
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+
+def join_group_chat(request):
+    payload = json.loads(request.body.decode())
+    userId = payload.get("userId")
+    room = payload.get("room")
+
+    group = GroupChatMember.objects.get(uid=userId, name=room)
+    group.status = GroupChatMember.AgreementStatus.COMPLETED
+    group.save()
+
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+
+def leave_group_chat(request):
+    payload = json.loads(request.body.decode())
+    userId = payload.get("userId")
+    room = payload.get("room")
+    GroupChatMember.objects.get(uid=userId, name=room).delete()
+
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def get_pendding_invitations(request):
+    username = request.session.get("username")
+
+    # Retrieve the user ID using the `get_user_by_username` function
+    user_id = get_user_by_username(username)["user_id"]
+
+    # Fetch pending invitations for the user from the database
+    pending_invitations = GroupChatMember.objects.filter(
+        uid=user_id, status=GroupChatMember.AgreementStatus.IN_PROGRESS
+    )
+
+    # Convert GroupChatMember objects to a list of dictionaries
+    invitation_data = []
+    for invitation in pending_invitations:
+        invitation_data.append(
+            {
+                "name": invitation.name,
+                "uid": invitation.uid,
+                "status": invitation.status,
+            }
+        )
+
+    # Return the serialized data as JSON response
+    dic = {"code": "200", "message": "ok", "data": invitation_data}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
