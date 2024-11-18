@@ -1,4 +1,5 @@
-import os, sys
+import os
+import sys
 from pathlib import Path
 from datetime import timedelta
 import boto3
@@ -16,6 +17,15 @@ def get_secrets():
     GOOGLEFIT_CLIENT_ID = response.get("GOOGLEFIT_CLIENT_ID")
     GOOGLEFIT_CLIENT_SECRET = response.get("GOOGLEFIT_CLIENT_SECRET")
     return (GOOGLEFIT_CLIENT_ID, GOOGLEFIT_CLIENT_SECRET)
+
+
+def get_aws_secrets():
+    client = boto3.client("secretsmanager", region_name="us-west-2")
+    response = client.get_secret_value(SecretId="aws_secrets")
+    response = json.loads(response["SecretString"])
+    AWS_ACCESS_KEY_ID = response.get("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = response.get("AWS_SECRET_ACCESS_KEY")
+    return (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 
 
 # Quick-start development settings - unsuitable for production
@@ -155,7 +165,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "EST"
 
 USE_I18N = True
 
@@ -163,8 +173,8 @@ USE_TZ = True
 
 
 # AWS S3 settings
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_ACCESS_KEY_ID = get_aws_secrets()[0]
+AWS_SECRET_ACCESS_KEY = get_aws_secrets()[1]
 AWS_STORAGE_BUCKET_NAME = "fiton-static-files"
 AWS_S3_REGION_NAME = "us-west-2"
 

@@ -1,29 +1,19 @@
 dist: focal
-
 language: python
 python:
 - "3.11"
-
-
 install:
 - pip install -r requirements.txt
-
-
-
 script:
 - black --check .
-- flake8 --max-line-length=150 --exclude=venv --ignore=E261,F821,W293,W503,F401,E501,F841,F811,E401 .
+- flake8 --max-line-length=150 --exclude=venv --ignore=W503,F811 .
 - coverage run manage.py test FitOn
-
 env:
   global:
     - AWS_ACCESS_KEY_ID=$AWS_ID
     - AWS_SECRET_ACCESS_KEY=$AWS_KEY
-
-
 after_scripts:
 - coveralls
-
 deploy:
   provider: elasticbeanstalk
   access_key_id: $AWS_ID

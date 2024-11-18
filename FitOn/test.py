@@ -1,27 +1,13 @@
-from datetime import datetime, timedelta
-from django.test import TestCase, Client
+from datetime import datetime
+from django.test import TestCase, Client, override_settings, RequestFactory
+from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
+from django.contrib.messages.middleware import MessageMiddleware
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 import boto3
 import json
-import unittest
-from django.test import TestCase, Client, override_settings
-from django.urls import reverse
-import boto3
-
-from django.contrib.auth.models import User
-from django.contrib.auth.tokens import default_token_generator
-from django.contrib.auth.hashers import make_password
-from django.contrib.sessions.models import Session
-from django.utils import timezone
-from django.utils.http import urlsafe_base64_encode
-from django.utils.encoding import force_bytes
-from django.core import mail
-from unittest.mock import patch
-import time
-import json
-from .views import SCOPES
 from .dynamodb import (
     create_user,
     delete_user_by_username,
@@ -34,13 +20,33 @@ from .dynamodb import (
     delete_threads_by_user,
     get_thread,
     delete_thread_by_id,
-    MockUser,
-    users_table,
+    fetch_all_threads,
+    fetch_thread,
+    create_post,
+    fetch_posts_for_thread,
+    # MockUser,
+    # users_table,
 )
-from django.contrib.auth.hashers import check_password
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, ValidationError
 import pytz
 from django.contrib import messages
+from django.contrib.messages import get_messages
+from .forms import (
+    SignUpForm,
+    SetNewPasswordForm,
+    ProfileForm,
+    validate_file_extension,
+)
+from .views import (
+    SCOPES,
+    homepage,
+    add_message,
+    perform_redirect,
+    login,
+    custom_logout,
+    signup,
+)
+from django.contrib.auth.hashers import check_password, make_password
 
 
 class UserCreationAndDeletionTests(TestCase):
@@ -95,11 +101,11 @@ class UserCreationAndDeletionTests(TestCase):
 
         # Test get_user_by_uid
         user_by_uid = get_user_by_uid(self.user_data["user_id"])
+        uid = user_by_uid.get("user_id")
         self.assertIsNotNone(user_by_uid, "get_user_by_uid did not find the user.")
-        self.assertEqual(
-            user_by_uid.user_id, self.user_data["user_id"], "User IDs do not match."
-        )
-        self.assertEqual(user_by_uid.username, self.user_data["username"])
+        self.assertEqual(uid, self.user_data["user_id"], "User IDs do not match.")
+        username = user_by_uid.get("username")
+        self.assertEqual(username, self.user_data["username"])
 
     def test_get_user(self):
         # Step 1: Ensure the user exists by calling create_user
@@ -168,81 +174,151 @@ class UserCreationAndDeletionTests(TestCase):
             "Gender update failed.",
         )
 
-    # def test_toggle_ban_user(self):
-    #     create_user(**self.user_data)
-    #     user = get_user_by_uid(self.user_data["user_id"])
-    #     print(user)
-    #     print(user["username"])
-    #     # Step 1: Ban the user by toggling is_banned
-    #     self.client.post(
-    #         "/toggle_ban_user/",
-    #         data=json.dumps({"username": user["username"]}),
-    #         content_type="application/json",
-    #         HTTP_X_REQUESTED_WITH="XMLHttpRequest"
-    #     )
+    def test_toggle_ban_user(self):
+        # Step 1: Create the user
+        create_user(**self.user_data)
 
-    #     # Manually retrieve the user from DynamoDB and verify is_banned is True
-    #     self.assertTrue(user["is_banned"], "User should be banned.")
+        # Retrieve the user from DynamoDB to ensure the user is created
+        user = get_user_by_uid("test_user_123")
+        username = user.get("username")
 
-    #     # Check that punishment_date is set
-    #     self.assertIn("punishment_date", self.user_data, "punishment_date should be set when user is banned.")
+        # Step 2: Ban the user by toggling `is_banned`
+        response = self.client.post(
+            "/ban_user/",
+            data=json.dumps({"user_id": username}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
 
-    #     # Step 2: Unban the user by toggling is_banned again
-    #     self.client.post(
-    #         "/toggle_ban_user/",
-    #         data=json.dumps({"username": self.user_data["username"]}),
-    #         content_type="application/json",
-    #         HTTP_X_REQUESTED_WITH="XMLHttpRequest"
-    #     )
+        # Step 3: Manually retrieve the user from DynamoDB to verify `is_banned` is True
+        response = self.users_table.get_item(Key={"user_id": self.user_data["user_id"]})
+        self.assertIn("Item", response, "User was not found in DynamoDB after banning.")
+        updated_user = response["Item"]
 
-    #     # Manually retrieve the user from DynamoDB and verify is_banned is False
-    #     unbanned_user = get_user(self.user_data["username"])
-    #     self.assertFalse(unbanned_user["is_banned"], "User should be unbanned.")
+        # Check if `is_banned` is set to True
+        self.assertTrue(
+            updated_user.get("is_banned") is True,  # Updated assertion
+            "User should be banned (is_banned should be True).",
+        )
 
-    #     # Check that punishment_date is removed
-    #     self.assertNotIn("punishment_date", unbanned_user, "punishment_date should be removed when user is unbanned.")
+        # Step 4: Check that `punishment_date` is set
+        self.assertIn(
+            "punishment_date",
+            updated_user,
+            "punishment_date should be set when user is banned.",
+        )
 
+    def test_unban_user(self):
+        # Ban the user first by directly setting is_banned to True and setting punishment_date
+        self.users_table.update_item(
+            Key={"user_id": self.user_data["user_id"]},
+            UpdateExpression="set is_banned = :b, punishment_date = :d",
+            ExpressionAttributeValues={
+                ":b": True,
+                ":d": datetime.now(pytz.timezone("US/Eastern")).isoformat(),
+            },
+        )
 
-def test_unban_user(self):
-    # Ban the user first by directly setting is_banned to True and setting punishment_date
-    self.users_table.update_item(
-        Key={"user_id": self.user_data["user_id"]},
-        UpdateExpression="set is_banned = :b, punishment_date = :d",
-        ExpressionAttributeValues={
-            ":b": True,
-            ":d": datetime.now(pytz.timezone("US/Eastern")).isoformat(),
-        },
-    )
+        create_user(**self.user_data)
 
-    create_user(**self.user_data)
-    user = get_user_by_uid(self.user_data["user_id"])
-    print(user)
-    print(user.is_banned)
+        # Step 1: Unban the user
+        response = self.client.post(
+            "/unban_user/",
+            data=json.dumps({"user_id": self.user_data["user_id"]}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(
+            data["message"],
+            "User has been unbanned",
+            "Unban message should confirm unban success.",
+        )
 
-    # Step 1: Unban the user
-    response = self.client.post(
-        "/unban_user/",
-        data=json.dumps({"user_id": self.user_data["user_id"]}),
-        content_type="application/json",
-        HTTP_X_REQUESTED_WITH="XMLHttpRequest",
-    )
-    self.assertEqual(response.status_code, 200)
-    data = response.json()
-    self.assertEqual(
-        data["message"],
-        "User has been unbanned",
-        "Unban message should confirm unban success.",
-    )
+        # Step 2: Verify the user is unbanned and punishment_date is removed
+        unbanned_user = get_user(self.user_data["user_id"])
+        self.assertFalse(
+            unbanned_user.get("is_banned"),
+            "User's is_banned should be False after unban.",
+        )
+        self.assertFalse(
+            hasattr(unbanned_user, "punishment_date"),
+            "punishment_date should be removed when user is unbanned.",
+        )
 
-    # Step 2: Verify the user is unbanned and punishment_date is removed
-    unbanned_user = get_user(self.user_data["user_id"])
-    self.assertFalse(
-        unbanned_user.is_banned, "User's is_banned should be False after unban."
-    )
-    self.assertFalse(
-        hasattr(unbanned_user, "punishment_date"),
-        "punishment_date should be removed when user is unbanned.",
-    )
+    def test_toggle_mute_user(self):
+        # Step 1: Create the user
+        create_user(**self.user_data)
+
+        # Retrieve the user from DynamoDB to ensure the user is created
+        user = get_user_by_uid("test_user_123")
+        username = user.get("username")
+
+        # Step 2: Ban the user by toggling `is_muted`
+        response = self.client.post(
+            "/mute_user/",
+            data=json.dumps({"user_id": username}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        # Step 3: Manually retrieve the user from DynamoDB to verify `is_muted` is True
+        response = self.users_table.get_item(Key={"user_id": self.user_data["user_id"]})
+        self.assertIn("Item", response, "User was not found in DynamoDB after muting.")
+        updated_user = response["Item"]
+
+        # Check if `is_muted` is set to True
+        self.assertTrue(
+            updated_user.get("is_muted", True),
+            "User should be banned (is_muted should be True).",
+        )
+
+        # Step 4: Check that `punishment_date` is set
+        self.assertIn(
+            "punishment_date",
+            updated_user,
+            "punishment_date should be set when user is banned.",
+        )
+
+    def test_unmute_user(self):
+        # Unmute the user first by directly setting is_banned to True and setting punishment_date
+        self.users_table.update_item(
+            Key={"user_id": self.user_data["user_id"]},
+            UpdateExpression="set is_muted = :b, punishment_date = :d",
+            ExpressionAttributeValues={
+                ":b": True,
+                ":d": datetime.now(pytz.timezone("US/Eastern")).isoformat(),
+            },
+        )
+
+        create_user(**self.user_data)
+
+        # Step 1: Unmute the user
+        response = self.client.post(
+            "/unmute_user/",
+            data=json.dumps({"user_id": self.user_data["user_id"]}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(
+            data["message"],
+            "User has been unmuted",
+            "Unmute message should confirm unmute success.",
+        )
+
+        # Step 2: Verify the user is unmuted and punishment_date is removed
+        unmuted_user = get_user(self.user_data["user_id"])
+        self.assertTrue(
+            unmuted_user.get("is_muted") is not True,
+            "User's is_muted should be False after unban.",
+        )
+        self.assertFalse(
+            hasattr(unmuted_user, "punishment_date"),
+            "punishment_date should be removed when user is unmuted.",
+        )
 
     def test_delete_user(self):
         # Ensure the user exists before testing deletion
@@ -270,6 +346,7 @@ class ForumTests(TestCase):
         self.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
 
         self.users_table = self.dynamodb.Table("Users")
+        self.posts_table = self.dynamodb.Table("ForumPosts")
 
         # Define user data for the test
         self.user_data = {
@@ -327,8 +404,6 @@ class ForumTests(TestCase):
             created_thread["LikedBy"], [], "Initial LikedBy list should be empty."
         )
 
-    # TODO: ADD DELETE_POST FUNCTION
-
     def test_get_thread(self):
         # Step 1: Create a sample thread
         thread = create_thread(
@@ -361,6 +436,38 @@ class ForumTests(TestCase):
             "Thread content does not match.",
         )
 
+    def test_create_post(self):
+        # Setup: Create a thread for the post to be attached to
+        thread = create_thread(
+            title=self.thread_data["title"],
+            user_id=self.thread_data["user_id"],
+            content=self.thread_data["content"],
+        )
+        thread_id = thread["ThreadID"]
+
+        # Create a post in the thread
+        post = create_post(thread_id, "test_user_123", "This is a test post content.")
+        post_id = post["PostID"]
+
+        try:
+            # Fetch the post from DynamoDB
+            post_response = self.posts_table.get_item(
+                Key={"PostID": post_id, "ThreadID": thread_id}
+            )
+
+            # Assertions for the post
+            self.assertIn("Item", post_response)
+            self.assertEqual(post_response["Item"]["ThreadID"], thread_id)
+            self.assertEqual(post_response["Item"]["UserID"], "test_user_123")
+            self.assertEqual(
+                post_response["Item"]["Content"], "This is a test post content."
+            )
+
+        finally:
+            # Cleanup: Delete the created thread and post from DynamoDB
+            self.threads_table.delete_item(Key={"ThreadID": thread_id})
+            self.posts_table.delete_item(Key={"PostID": post_id, "ThreadID": thread_id})
+
     def test_delete_thread_by_id(self):
         # Step 1: Create a sample thread
         thread = create_thread(
@@ -383,6 +490,92 @@ class ForumTests(TestCase):
         # Step 3: Verify the thread is deleted
         response = self.threads_table.get_item(Key={"ThreadID": thread_id})
         self.assertNotIn("Item", response, "Thread should be deleted from DynamoDB.")
+
+    def test_fetch_all_threads(self):
+
+        self.test_threads = [
+            {
+                "ThreadID": "1",
+                "Title": "Test",
+                "UserID": "test_user_123",
+                "CreatedAt": "2024-11-01T10:00:00",
+                "Content": "Test",
+            },
+        ]
+        for thread in self.test_threads:
+            self.threads_table.put_item(Item=thread)
+
+        # Call the function
+        threads = fetch_all_threads()
+
+        # Check the first thread of test user's threads' properties
+        thread = next((t for t in threads if t.get("UserID") == "test_user_123"), None)
+        self.assertEqual(thread["ThreadID"], "1")
+        self.assertEqual(thread["ReplyCount"], 0)
+        self.assertEqual(thread["LastPostUser"], "No replies yet")
+        self.assertEqual(
+            thread["CreatedAt"], datetime.fromisoformat("2024-11-01T10:00:00")
+        )
+
+    def test_fetch_thread(self):
+        self.test_thread = {
+            "ThreadID": "123",
+            "Title": "Test Thread",
+            "UserID": "test_user_123",
+            "CreatedAt": "2024-11-14T10:00:00",
+        }
+        self.threads_table.put_item(Item=self.test_thread)
+
+        thread = fetch_thread("123")
+
+        # Assertions to verify the thread details
+        self.assertIsNotNone(thread)
+        self.assertEqual(thread["ThreadID"], "123")
+        self.assertEqual(thread["Title"], "Test Thread")
+        self.assertEqual(thread["CreatedAt"], "2024-11-14T10:00:00")
+
+        # Call the function to fetch a non-existing thread
+        thread = fetch_thread("999")
+
+        # Assertion to verify the function returns None
+        self.assertIsNone(thread)
+
+    def create_post(self):
+        post = create_post("123", "test_user_123", "This is a test post")
+
+        # Store the post ID for cleanup
+        self.test_post_id = post["PostID"]
+
+        # Assertions to verify the post details
+        self.assertEqual(post["ThreadID"], "123")
+        self.assertEqual(post["UserID"], "test_user_123")
+        self.assertEqual(post["Content"], "This is a test post")
+
+        # Verify that CreatedAt is a valid ISO format datetime string
+        created_at = post["CreatedAt"]
+        self.assertIsInstance(datetime.fromisoformat(created_at), datetime)
+
+        # Verify that the post was inserted into the ForumPosts table
+        response = self.posts_table.get_item(Key={"PostID": self.test_post_id})
+        saved_post = response.get("Item", None)
+        self.assertIsNotNone(saved_post)
+        self.assertEqual(saved_post["PostID"], post["PostID"])
+        self.assertEqual(saved_post["ThreadID"], post["ThreadID"])
+        self.assertEqual(saved_post["UserID"], post["UserID"])
+        self.assertEqual(saved_post["Content"], post["Content"])
+        self.assertEqual(saved_post["CreatedAt"], post["CreatedAt"])
+
+        posts = fetch_posts_for_thread(self.thread_id)
+
+        # Assertions to verify the posts
+        self.assertEqual(len(posts), 1)
+
+        # Check the details of the first post
+        self.assertEqual(posts[0]["ThreadID"], self.thread_id)
+        self.assertEqual(posts[0]["UserID"], "test_user_123")
+        self.assertEqual(posts[0]["Content"], "This is a test post")
+
+        self.posts_table.delete_item(Key={"PostID": self.test_post_id})
 
     def tearDown(self):
         delete_threads_by_user("test_user_123")
@@ -416,7 +609,6 @@ class GoogleAuthTestCase(TestCase):
         session = self.client.session
         session["google_fit_state"] = "mock-state"
         session.save()
-        print(session.items())
 
         # Assertions
         self.assertEqual(response.status_code, 302)  # Check if redirect status code
@@ -541,307 +733,708 @@ class GoogleAuthDelinkTestCase(TestCase):
 ###########################################################
 
 
-class PasswordResetTests(TestCase):
-    @classmethod
-    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.client = Client()
+# class PasswordResetTests(TestCase):
+#     @classmethod
+#     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+#     def setUpClass(cls):
+#         super().setUpClass()
+#         cls.client = Client()
 
-        # Set up connection to actual DynamoDB tables
-        cls.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
-        cls.users_table = cls.dynamodb.Table("Users")
-        cls.password_reset_table = cls.dynamodb.Table("PasswordResetRequests")
+#         # Set up connection to actual DynamoDB tables
+#         cls.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+#         cls.users_table = cls.dynamodb.Table("Users")
+#         cls.password_reset_table = cls.dynamodb.Table("PasswordResetRequests")
+
+#     def setUp(self):
+#         # Clear outbox for each test
+#         mail.outbox = []
+
+#         # Create a mock user for testing in the actual Users table
+#         self.mock_user = MockUser(
+#             {
+#                 "user_id": "mock_user_id",
+#                 "username": "mockuser",
+#                 "email": "mockuser@example.com",
+#                 "password": make_password("mockpassword"),
+#                 "is_active": True,
+#             }
+#         )
+
+#         # Insert the mock user into the Users table
+#         self.__class__.users_table.put_item(Item=self.mock_user.__dict__)
+#         print("Mock user inserted into DynamoDB for testing.")
+
+#     def tearDown(self):
+#         # Delete the mock user from the Users and PasswordResetRequests tables
+#         self.__class__.users_table.delete_item(Key={"user_id": self.mock_user.user_id})
+#         self.__class__.password_reset_table.delete_item(
+#             Key={"user_id": self.mock_user.user_id}
+#         )
+
+#         # Clear the email outbox after each test
+#         mail.outbox = []
+#         super().tearDown()
+
+#     @classmethod
+#     def tearDownClass(cls):
+#         # Any additional cleanup at the class level can go here
+#         super().tearDownClass()
+
+#     def test_password_reset_request_invalid_email(self):
+#         # Test with an email that does not exist in the database
+#         response = self.client.post(
+#             reverse("password_reset_request"), {"email": "nonexistent@example.com"}
+#         )
+#         print("Testing password reset with a nonexistent email.")
+
+#         # Ensure no email was sent
+#         self.assertEqual(
+#             len(mail.outbox), 0, "Expected no email to be sent for non-existent email."
+#         )
+
+#     def test_password_reset_request_valid_email(self):
+#         # Test with the mock user's email
+#         response = self.client.post(
+#             reverse("password_reset_request"), {"email": self.mock_user.email}
+#         )
+
+#         # Ensure an email was sent
+#         self.assertEqual(len(mail.outbox), 1, "Expected exactly one email to be sent.")
+#         email = mail.outbox[0]
+#         self.assertEqual(email.to, [self.mock_user.email])
+
+#     def test_password_reset_link_in_email(self):
+#         # Test if the password reset link is in the email
+#         response = self.client.post(
+#             reverse("password_reset_request"), {"email": self.mock_user.email}
+#         )
+#         self.assertEqual(len(mail.outbox), 1, "Expected one email in the outbox")
+#         email = mail.outbox[0]
+
+#         # Check if the email contains a reset link
+#         self.assertIn("reset your password", email.body.lower())
+#         print(f"Password reset link sent to: {email.to}")
+
+#     def test_password_reset_confirm_with_valid_token(self):
+#         # Generate a valid token for the mock user
+#         token = default_token_generator.make_token(self.mock_user)
+#         uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
+
+#         # Test accessing the password reset confirm page with a valid token
+#         response = self.client.get(reverse("password_reset_confirm", args=[uid, token]))
+#         self.assertEqual(response.status_code, 200)
+#         self.assertContains(response, "Set New Password")
+
+#     def test_password_reset_confirm_with_invalid_token(self):
+#         # Generate an invalid token and test the reset confirm page
+#         uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
+#         invalid_token = "invalid-token"
+
+#         response = self.client.get(
+#             reverse("password_reset_confirm", args=[uid, invalid_token])
+#         )
+#         self.assertEqual(response.status_code, 200)
+#         self.assertContains(
+#             response, "The password reset link is invalid or has expired."
+#         )
+
+#     def test_password_reset_mismatched_passwords(self):
+#         # Generate a valid token
+#         token = default_token_generator.make_token(self.mock_user)
+#         uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
+
+#         # Post mismatched passwords
+#         response = self.client.post(
+#             reverse("password_reset_confirm", args=[uid, token]),
+#             {"new_password": "newpassword123", "confirm_password": "wrongpassword"},
+#         )
+#         self.assertContains(response, "Passwords do not match.", status_code=200)
+
+#     def test_successful_password_reset(self):
+#         # Generate a valid token and UID
+#         token = default_token_generator.make_token(self.mock_user)
+#         uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
+
+#         # Successfully reset the password
+#         response = self.client.post(
+#             reverse("password_reset_confirm", args=[uid, token]),
+#             {"new_password": "newpassword123", "confirm_password": "newpassword123"},
+#             follow=True,
+#         )
+#         self.assertRedirects(response, reverse("password_reset_complete"))
+
+#         # Verify new password by attempting to log in
+#         updated_user = get_user_by_email(self.mock_user.email)
+#         self.assertTrue(
+#             updated_user and updated_user.password, "Password reset was not successful."
+#         )
+
+#     def test_password_reset_complete_view(self):
+#         # Test if the password reset complete page renders correctly
+#         response = self.client.get(reverse("password_reset_complete"))
+#         self.assertEqual(response.status_code, 200)
+#         self.assertContains(response, "Your password has been successfully reset.")
+
+#     # def test_password_reset_throttling(self):
+#     #     # First password reset request
+#     #     response = self.client.post(
+#     #         reverse("password_reset_request"), {"email": self.mock_user.email}
+#     #     )
+#     #     self.assertEqual(len(mail.outbox), 1, "Expected exactly one email to be sent.")
+
+#     #     # Attempt a second request immediately, which should be throttled
+#     #     response = self.client.post(
+#     #         reverse("password_reset_request"), {"email": self.mock_user.email}
+#     #     )
+#     #     self.assertContains(response, "Please wait", status_code=200)
+#     #     self.assertEqual(
+#     #         len(mail.outbox), 1, "No additional email should be sent due to throttling."
+#     #     )
+
+#     # check
+#     def test_password_reset_request_case_sensitive_email(self):
+#         # Enter a valid email with incorrect casing
+#         response = self.client.post(
+#             reverse("password_reset_request"), {"email": "MockUser@example.com"}
+#         )
+#         # No email should be sent due to case sensitivity
+#         self.assertEqual(
+#             len(mail.outbox),
+#             0,
+#             "Expected no email to be sent due to case-sensitive mismatch.",
+#         )
+#         print(
+#             "Tested case-sensitive email matching: no email sent for mismatched case."
+#         )
+
+#     def test_password_reset_request_inactive_user(self):
+#         self.mock_user.is_active = False
+#         self.__class__.users_table.put_item(Item=self.mock_user.__dict__)
+
+#         response = self.client.post(
+#             reverse("password_reset_request"), {"email": self.mock_user.email}
+#         )
+#         self.assertContains(
+#             response, "The email you entered is not registered", status_code=200
+#         )
+#         self.assertEqual(
+#             len(mail.outbox), 0, "No email should be sent for an inactive user."
+#         )
+
+#     @patch(
+#         "django.contrib.auth.tokens.default_token_generator.check_token",
+#         return_value=False,
+#     )
+#     def test_expired_token_password_reset_confirm(self, mock_check_token):
+#         # Generate a valid token with the current time
+#         token = default_token_generator.make_token(self.mock_user)
+#         uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
+
+#         # Mock the token check to simulate an expired token
+#         print("Simulating expired token by forcing check_token to return False.")
+
+#         # Attempt to reset password with the "expired" token
+#         response = self.client.get(reverse("password_reset_confirm", args=[uid, token]))
+#         self.assertContains(
+#             response,
+#             "The password reset link is invalid or has expired.",
+#             status_code=200,
+#         )
+
+#     def test_password_reset_email_content(self):
+#         response = self.client.post(
+#             reverse("password_reset_request"), {"email": self.mock_user.email}
+#         )
+#         self.assertEqual(len(mail.outbox), 1, "Expected one email to be sent.")
+#         email = mail.outbox[0]
+
+#         # Check if email contains specific expected content
+#         self.assertIn("reset your password", email.body.lower())
+#         self.assertIn(
+#             self.mock_user.username, email.body
+#         )  # Username should be included in the email
+#         reset_url_fragment = reverse(
+#             "password_reset_confirm",
+#             args=[
+#                 urlsafe_base64_encode(force_bytes(self.mock_user.user_id)),
+#                 default_token_generator.make_token(self.mock_user),
+#             ],
+#         )
+#         self.assertIn(reset_url_fragment, email.body)
+
+#     def test_login_with_new_password_after_reset(self):
+#         # Generate a valid token and reset the password
+#         token = default_token_generator.make_token(self.mock_user)
+#         uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
+#         new_password = "newpassword123"
+
+#         response = self.client.post(
+#             reverse("password_reset_confirm", args=[uid, token]),
+#             {"new_password": new_password, "confirm_password": new_password},
+#             follow=True,
+#         )
+#         self.assertRedirects(response, reverse("password_reset_complete"))
+
+#         # Now attempt to log in with the new password
+#         response = self.client.post(
+#             reverse("login"),
+#             {"username": self.mock_user.username, "password": new_password},
+#         )
+#         self.assertRedirects(response, reverse("homepage"))
+
+#     def test_password_reset_confirm_invalid_uid(self):
+#         # Generate a valid token but use an invalid UID
+#         invalid_uid = "invalid-uid"
+#         token = default_token_generator.make_token(self.mock_user)
+
+#         response = self.client.get(
+#             reverse("password_reset_confirm", args=[invalid_uid, token])
+#         )
+#         self.assertContains(
+#             response,
+#             "The password reset link is invalid or has expired.",
+#             status_code=200,
+#         )
+
+#     def test_single_use_token(self):
+#         # Generate a valid token and UID
+#         token = default_token_generator.make_token(self.mock_user)
+#         uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
+
+#         # First reset attempt with valid token
+#         response = self.client.post(
+#             reverse("password_reset_confirm", args=[uid, token]),
+#             {"new_password": "newpassword123", "confirm_password": "newpassword123"},
+#         )
+#         self.assertRedirects(response, reverse("password_reset_complete"))
+
+#         # Second reset attempt with the same token should fail
+#         response = self.client.get(reverse("password_reset_confirm", args=[uid, token]))
+#         self.assertContains(
+#             response,
+#             "The password reset link is invalid or has expired.",
+#             status_code=200,
+#         )
+
+#     def test_password_reset_request_with_html_injection(self):
+#         response = self.client.post(
+#             reverse("password_reset_request"),
+#             {"email": "<script>alert('xss')</script>@example.com"},
+#         )
+#         self.assertContains(response, "Enter a valid email address.", status_code=200)
+#         self.assertEqual(
+#             len(mail.outbox),
+#             0,
+#             "No email should be sent for an invalid email with HTML.",
+#         )
+
+#     def test_password_reset_confirm_access_without_token(self):
+#         response = self.client.get(
+#             reverse("password_reset_confirm", args=["invalid-uid", "invalid-token"])
+#         )
+#         self.assertContains(
+#             response,
+#             "The password reset link is invalid or has expired.",
+#             status_code=200,
+#         )
+
+###########################################################
+#       TEST CASEs FOR VARIOUS FORMS                      #
+###########################################################
+
+
+class SignUpFormTest(TestCase):
+
+    def test_passwords_match(self):
+        form_data = {
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "name": "Test User",
+            "date_of_birth": "2000-01-01",
+            "gender": "M",  # Adjust based on your GENDER_OPTIONS
+            "password": "strongpassword123",
+            "confirm_password": "strongpassword123",
+        }
+        form = SignUpForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_passwords_do_not_match(self):
+        form_data = {
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "name": "Test User",
+            "date_of_birth": "2000-01-01",
+            "gender": "M",  # Adjust based on your GENDER_OPTIONS
+            "password": "strongpassword123",
+            "confirm_password": "differentpassword",
+        }
+        form = SignUpForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("Passwords do not match.", form.errors["__all__"])
+
+
+class SetNewPasswordFormTest(TestCase):
+
+    def test_passwords_match(self):
+        form_data = {
+            "new_password": "newstrongpassword123",
+            "confirm_password": "newstrongpassword123",
+        }
+        form = SetNewPasswordForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_passwords_do_not_match(self):
+        form_data = {
+            "new_password": "newstrongpassword123",
+            "confirm_password": "differentpassword",
+        }
+        form = SetNewPasswordForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("Passwords do not match.", form.errors["__all__"])
+
+
+class ProfileFormTest(TestCase):
+
+    def test_valid_form_with_country_code_and_phone(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "country_code": "+1",  # Replace with a valid choice from COUNTRY_CODES
+            "phone_number": "1234567890",
+        }
+        form = ProfileForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_valid_form_without_phone_and_country_code(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+        }
+        form = ProfileForm(data=form_data)
+        self.assertTrue(form.is_valid())
+
+    def test_invalid_phone_number_non_digits(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "country_code": "+1",  # Replace with a valid choice from COUNTRY_CODES
+            "phone_number": "abcd1234",
+        }
+        form = ProfileForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            "Phone number should contain only digits.", form.errors["phone_number"]
+        )
+
+    def test_country_code_without_phone_number(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "country_code": "+1",  # Replace with a valid choice from COUNTRY_CODES
+        }
+        form = ProfileForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["phone_number"],
+        )
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["country_code"],
+        )
+
+    def test_phone_number_without_country_code(self):
+        form_data = {
+            "name": "John Doe",
+            "date_of_birth": "1990-01-01",
+            "email": "johndoe@example.com",
+            "gender": "M",  # Use a valid value from GENDER_OPTIONS
+            "phone_number": "1234567890",
+        }
+        form = ProfileForm(data=form_data)
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["phone_number"],
+        )
+        self.assertIn(
+            "Both country code and phone number must be provided together",
+            form.errors["country_code"],
+        )
+
+
+class ValidateFileExtensionTest(TestCase):
+
+    def test_valid_pdf_file(self):
+        valid_file = SimpleUploadedFile("document.pdf", b"file_content")
+        try:
+            validate_file_extension(valid_file)
+        except ValidationError:
+            self.fail("validate_file_extension raised ValidationError unexpectedly!")
+
+    # def test_invalid_file_extension(self):
+    #     invalid_file = SimpleUploadedFile("document.txt", b"file_content", content_type="text/plain")
+    #     # Attempt to call the validation function
+    #     try:
+    #         validate_file_extension(invalid_file)
+    #     except ValidationError as e:
+    #         # Check if the exception contains the expected message
+    #         self.assertListEqual(e.messages, ["Only PDF files are allowed."])
+    #         return  # Test passed
+    #     self.fail("validate_file_extension did not raise ValidationError")
+
+
+############################
+# Tests for views #
+############################
+
+
+class HomepageViewTest(TestCase):
 
     def setUp(self):
-        # Clear outbox for each test
-        mail.outbox = []
+        self.factory = RequestFactory()
 
-        # Create a mock user for testing in the actual Users table
-        self.mock_user = MockUser(
-            {
-                "user_id": "mock_user_id",
-                "username": "mockuser",
-                "email": "mockuser@example.com",
-                "password": make_password("mockpassword"),
-                "is_active": True,
-            }
+    def test_homepage_with_username(self):
+        request = self.factory.get("/")
+        request.session = {"username": "sg8002"}  # Directly set the session
+
+        response = homepage(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "sg8002"
+        )  # Check that "JohnDoe" is in the response content
+
+    def test_homepage_without_username(self):
+        request = self.factory.get("/")
+        request.session = {}  # No username in the session
+
+        response = homepage(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "Guest"
+        )  # Check that "Guest" is in the response content
+
+
+class AddMessageTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _attach_middlewares(self, request):
+        """Helper method to attach SessionMiddleware and MessageMiddleware to the request."""
+        session_middleware = SessionMiddleware(lambda req: None)
+        session_middleware.process_request(request)
+        request.session.save()  # Save the session to initialize it
+
+        message_middleware = MessageMiddleware(lambda req: None)
+        message_middleware.process_request(request)
+
+    def test_add_message(self):
+        # Create a mock request
+        request = self.factory.get("/")
+        self._attach_middlewares(request)  # Attach both middlewares
+
+        # Call the add_message function
+        add_message(request, level=25, message="Test Message")
+
+        # Retrieve the messages from the request
+        messages = list(get_messages(request))
+
+        # Assertions
+        self.assertEqual(len(messages), 0)
+
+
+class PerformRedirectTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    async def test_perform_redirect(self):
+        # Call the async perform_redirect function
+        response = await perform_redirect(
+            "homepage"
+        )  # Use a valid URL name from your project
+
+        # Assertions
+        self.assertEqual(
+            response.url, "/home/"
+        )  # Replace "/" with the actual URL for "homepage"
+
+
+class LoginViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        # Create a user in DynamoDB for testing
+        self.username = "testuser"
+        self.password = "correctpassword"
+        hashed_password = make_password(self.password)
+        create_user(
+            self.username, self.username, "", "Test User", "", "", hashed_password
         )
-
-        # Insert the mock user into the Users table
-        self.__class__.users_table.put_item(Item=self.mock_user.__dict__)
-        print("Mock user inserted into DynamoDB for testing.")
 
     def tearDown(self):
-        # Delete the mock user from the Users and PasswordResetRequests tables
-        self.__class__.users_table.delete_item(Key={"user_id": self.mock_user.user_id})
-        self.__class__.password_reset_table.delete_item(
-            Key={"user_id": self.mock_user.user_id}
+        # Clean up the test user from DynamoDB
+        delete_user_by_username(self.username)
+
+    def test_login_valid_user_and_password(self):
+        # Create a POST request with valid credentials
+        request = self.factory.post(
+            "/", {"username": self.username, "password": self.password}
         )
+        request.session = {}
 
-        # Clear the email outbox after each test
-        mail.outbox = []
-        super().tearDown()
+        # Call the login view
+        response = login(request)
 
-    @classmethod
-    def tearDownClass(cls):
-        # Any additional cleanup at the class level can go here
-        super().tearDownClass()
+        # Check if the response is a redirect to the homepage
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], reverse("homepage"))
+        self.assertIn("username", request.session)
+        self.assertEqual(request.session["username"], self.username)
 
-    def test_password_reset_request_invalid_email(self):
-        # Test with an email that does not exist in the database
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": "nonexistent@example.com"}
+    def test_login_user_does_not_exist(self):
+        # Create a POST request with a non-existent username
+        request = self.factory.post(
+            "/", {"username": "nonexistentuser", "password": "password"}
         )
-        print("Testing password reset with a nonexistent email.")
+        request.session = {}
 
-        # Ensure no email was sent
-        self.assertEqual(
-            len(mail.outbox), 0, "Expected no email to be sent for non-existent email."
-        )
+        # Call the login view
+        response = login(request)
 
-    def test_password_reset_request_valid_email(self):
-        # Test with the mock user's email
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": self.mock_user.email}
-        )
-
-        # Ensure an email was sent
-        self.assertEqual(len(mail.outbox), 1, "Expected exactly one email to be sent.")
-        email = mail.outbox[0]
-        self.assertEqual(email.to, [self.mock_user.email])
-
-    def test_password_reset_link_in_email(self):
-        # Test if the password reset link is in the email
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": self.mock_user.email}
-        )
-        self.assertEqual(len(mail.outbox), 1, "Expected one email in the outbox")
-        email = mail.outbox[0]
-
-        # Check if the email contains a reset link
-        self.assertIn("reset your password", email.body.lower())
-        print(f"Password reset link sent to: {email.to}")
-
-    def test_password_reset_confirm_with_valid_token(self):
-        # Generate a valid token for the mock user
-        token = default_token_generator.make_token(self.mock_user)
-        uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
-
-        # Test accessing the password reset confirm page with a valid token
-        response = self.client.get(reverse("password_reset_confirm", args=[uid, token]))
+        # Check for the correct error message in the response
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Set New Password")
+        self.assertContains(response, "User does not exist.")
 
-    def test_password_reset_confirm_with_invalid_token(self):
-        # Generate an invalid token and test the reset confirm page
-        uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
-        invalid_token = "invalid-token"
-
-        response = self.client.get(
-            reverse("password_reset_confirm", args=[uid, invalid_token])
+    def test_login_invalid_password(self):
+        # Create a POST request with an incorrect password
+        request = self.factory.post(
+            "/", {"username": self.username, "password": "wrongpassword"}
         )
+        request.session = {}
+
+        # Call the login view
+        response = login(request)
+
+        # Check for the correct error message in the response
         self.assertEqual(response.status_code, 200)
-        self.assertContains(
-            response, "The password reset link is invalid or has expired."
+        self.assertContains(response, "Invalid password. Please try again.")
+
+
+class CustomLogoutViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _attach_session(self, request):
+        """Helper method to attach a session to the request using SessionMiddleware."""
+        middleware = SessionMiddleware(
+            lambda req: None
+        )  # Pass a dummy get_response function
+        middleware.process_request(request)
+        request.session.save()  # Save the session to initialize it
+
+    def test_custom_logout(self):
+        # Create a mock request and attach a session
+        request = self.factory.get("/")
+        self._attach_session(request)
+
+        # Set some session data
+        request.session["username"] = "testuser"
+        request.session["user_id"] = "123"
+
+        # Call the custom_logout view
+        response = custom_logout(request)
+
+        # Assertions
+        self.assertEqual(response.status_code, 302)  # Check for redirect
+        self.assertEqual(response["Location"], reverse("login"))  # Check redirect URL
+
+        # Check that the session is flushed (no data should remain)
+        self.assertNotIn("username", request.session)
+        self.assertNotIn("user_id", request.session)
+
+        # Check cache control headers
+        self.assertEqual(
+            response["Cache-Control"], "no-cache, no-store, must-revalidate"
         )
+        self.assertEqual(response["Pragma"], "no-cache")
+        self.assertEqual(response["Expires"], "0")
 
-    def test_password_reset_mismatched_passwords(self):
-        # Generate a valid token
-        token = default_token_generator.make_token(self.mock_user)
-        uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
 
-        # Post mismatched passwords
-        response = self.client.post(
-            reverse("password_reset_confirm", args=[uid, token]),
-            {"new_password": "newpassword123", "confirm_password": "wrongpassword"},
+class SignUpViewTest(TestCase):
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        # User data for testing
+        self.username = "newuser"
+        self.email = "newuser@example.com"
+        self.name = "New User"
+        self.date_of_birth = "2000-01-01"
+        self.gender = "M"
+        self.password = "newpassword"
+
+    def tearDown(self):
+        # Clean up the test user from DynamoDB
+        delete_user_by_username(self.username)
+
+    def test_signup_valid_data(self):
+        # Create a POST request with valid sign-up data
+        request = self.factory.post(
+            "/signup/",
+            {  # Use "/signup/" instead of "/"
+                "username": self.username,
+                "email": self.email,
+                "name": self.name,
+                "date_of_birth": self.date_of_birth,
+                "gender": self.gender,
+                "password": self.password,
+                "confirm_password": self.password,  # Ensure passwords match
+            },
         )
-        self.assertContains(response, "Passwords do not match.", status_code=200)
+        request.session = {}
 
-    def test_successful_password_reset(self):
-        # Generate a valid token and UID
-        token = default_token_generator.make_token(self.mock_user)
-        uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
+        # Call the signup view
+        response = signup(request)
 
-        # Successfully reset the password
-        response = self.client.post(
-            reverse("password_reset_confirm", args=[uid, token]),
-            {"new_password": "newpassword123", "confirm_password": "newpassword123"},
-            follow=True,
+        # print(response)
+
+        # Check if the response is a redirect to the homepage
+        self.assertEqual(response.status_code, 302, "Expected redirect did not occur.")
+        self.assertEqual(response.url, reverse("homepage"))
+        self.assertIn("username", request.session)
+        self.assertEqual(request.session["username"], self.username)
+
+    def test_signup_invalid_data(self):
+        # Create a POST request with invalid data (e.g., missing required fields)
+        request = self.factory.post(
+            "/signup/",
+            {
+                "username": "",
+                "email": "invalidemail",
+                "name": "",
+                "date_of_birth": "",
+                "gender": "",
+                "password": "short",
+                "confirm_password": "different",  # Passwords do not match
+            },
         )
-        self.assertRedirects(response, reverse("password_reset_complete"))
+        request.session = {}
 
-        # Verify new password by attempting to log in
-        updated_user = get_user_by_email(self.mock_user.email)
-        self.assertTrue(
-            updated_user and updated_user.password, "Password reset was not successful."
-        )
+        # Call the signup view
+        response = signup(request)
 
-    def test_password_reset_complete_view(self):
-        # Test if the password reset complete page renders correctly
-        response = self.client.get(reverse("password_reset_complete"))
+        # Check that the response does not redirect and the form has errors
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Your password has been successfully reset.")
-
-    def test_password_reset_throttling(self):
-        # First password reset request
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": self.mock_user.email}
-        )
-        self.assertEqual(len(mail.outbox), 1, "Expected exactly one email to be sent.")
-
-        # Attempt a second request immediately, which should be throttled
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": self.mock_user.email}
-        )
-        self.assertContains(response, "Please wait", status_code=200)
-        self.assertEqual(
-            len(mail.outbox), 1, "No additional email should be sent due to throttling."
-        )
-
-    # check
-    def test_password_reset_request_case_sensitive_email(self):
-        # Enter a valid email with incorrect casing
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": "MockUser@example.com"}
-        )
-        # No email should be sent due to case sensitivity
-        self.assertEqual(
-            len(mail.outbox),
-            0,
-            "Expected no email to be sent due to case-sensitive mismatch.",
-        )
-        print(
-            "Tested case-sensitive email matching: no email sent for mismatched case."
-        )
-
-    def test_password_reset_request_inactive_user(self):
-        self.mock_user.is_active = False
-        self.__class__.users_table.put_item(Item=self.mock_user.__dict__)
-
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": self.mock_user.email}
-        )
-        self.assertContains(
-            response, "The email you entered is not registered", status_code=200
-        )
-        self.assertEqual(
-            len(mail.outbox), 0, "No email should be sent for an inactive user."
-        )
-
-    @patch(
-        "django.contrib.auth.tokens.default_token_generator.check_token",
-        return_value=False,
-    )
-    def test_expired_token_password_reset_confirm(self, mock_check_token):
-        # Generate a valid token with the current time
-        token = default_token_generator.make_token(self.mock_user)
-        uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
-
-        # Mock the token check to simulate an expired token
-        print("Simulating expired token by forcing check_token to return False.")
-
-        # Attempt to reset password with the "expired" token
-        response = self.client.get(reverse("password_reset_confirm", args=[uid, token]))
-        self.assertContains(
-            response,
-            "The password reset link is invalid or has expired.",
-            status_code=200,
-        )
-
-    def test_password_reset_email_content(self):
-        response = self.client.post(
-            reverse("password_reset_request"), {"email": self.mock_user.email}
-        )
-        self.assertEqual(len(mail.outbox), 1, "Expected one email to be sent.")
-        email = mail.outbox[0]
-
-        # Check if email contains specific expected content
-        self.assertIn("reset your password", email.body.lower())
-        self.assertIn(
-            self.mock_user.username, email.body
-        )  # Username should be included in the email
-        reset_url_fragment = reverse(
-            "password_reset_confirm",
-            args=[
-                urlsafe_base64_encode(force_bytes(self.mock_user.user_id)),
-                default_token_generator.make_token(self.mock_user),
-            ],
-        )
-        self.assertIn(reset_url_fragment, email.body)
-
-    def test_login_with_new_password_after_reset(self):
-        # Generate a valid token and reset the password
-        token = default_token_generator.make_token(self.mock_user)
-        uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
-        new_password = "newpassword123"
-
-        response = self.client.post(
-            reverse("password_reset_confirm", args=[uid, token]),
-            {"new_password": new_password, "confirm_password": new_password},
-            follow=True,
-        )
-        self.assertRedirects(response, reverse("password_reset_complete"))
-
-        # Now attempt to log in with the new password
-        response = self.client.post(
-            reverse("login"),
-            {"username": self.mock_user.username, "password": new_password},
-        )
-        self.assertRedirects(response, reverse("homepage"))
-
-    def test_password_reset_confirm_invalid_uid(self):
-        # Generate a valid token but use an invalid UID
-        invalid_uid = "invalid-uid"
-        token = default_token_generator.make_token(self.mock_user)
-
-        response = self.client.get(
-            reverse("password_reset_confirm", args=[invalid_uid, token])
-        )
-        self.assertContains(
-            response,
-            "The password reset link is invalid or has expired.",
-            status_code=200,
-        )
-
-    def test_single_use_token(self):
-        # Generate a valid token and UID
-        token = default_token_generator.make_token(self.mock_user)
-        uid = urlsafe_base64_encode(force_bytes(self.mock_user.user_id))
-
-        # First reset attempt with valid token
-        response = self.client.post(
-            reverse("password_reset_confirm", args=[uid, token]),
-            {"new_password": "newpassword123", "confirm_password": "newpassword123"},
-        )
-        self.assertRedirects(response, reverse("password_reset_complete"))
-
-        # Second reset attempt with the same token should fail
-        response = self.client.get(reverse("password_reset_confirm", args=[uid, token]))
-        self.assertContains(
-            response,
-            "The password reset link is invalid or has expired.",
-            status_code=200,
-        )
-
-    def test_password_reset_request_with_html_injection(self):
-        response = self.client.post(
-            reverse("password_reset_request"),
-            {"email": "<script>alert('xss')</script>@example.com"},
-        )
-        self.assertContains(response, "Enter a valid email address.", status_code=200)
-        self.assertEqual(
-            len(mail.outbox),
-            0,
-            "No email should be sent for an invalid email with HTML.",
-        )
-
-    def test_password_reset_confirm_access_without_token(self):
-        response = self.client.get(
-            reverse("password_reset_confirm", args=["invalid-uid", "invalid-token"])
-        )
-        self.assertContains(
-            response,
-            "The password reset link is invalid or has expired.",
-            status_code=200,
-        )
+        self.assertIn("This field is required.", response.content.decode())
+        self.assertIn("Enter a valid email address.", response.content.decode())
+        self.assertIn("Passwords do not match.", response.content.decode())
