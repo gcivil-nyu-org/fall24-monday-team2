@@ -27,6 +27,15 @@ def get_aws_secrets():
     return (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 
 
+def get_aws_secrets():
+    client = boto3.client("secretsmanager", region_name="us-west-2")
+    response = client.get_secret_value(SecretId="aws_secrets")
+    response = json.loads(response["SecretString"])
+    AWS_ACCESS_KEY_ID = response.get("AWS_ACCESS_KEY_ID")
+    AWS_SECRET_ACCESS_KEY = response.get("AWS_SECRET_ACCESS_KEY")
+    return (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
