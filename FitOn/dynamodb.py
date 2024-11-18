@@ -3,13 +3,13 @@ import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 from django.contrib.auth.hashers import make_password, check_password
 from datetime import datetime, timezone
-from django.conf import settings
 
 # from asgiref.sync import sync_to_async
 
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
+from pytz import timezone
 from django.conf import settings
 import uuid
 
@@ -29,6 +29,8 @@ fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
 chat_table = dynamodb.Table("UserChats")
 
+tz = timezone("EST")
+
 
 class MockUser:
     def __init__(self, user_data):
@@ -41,15 +43,15 @@ class MockUser:
             self.is_active = user_data.get("is_active", True)
             self.last_login = user_data.get("last_login", None)
             self.pk = self.user_id
-        else:
-            self.user_id = None
-            self.email = ""
-            self.username = ""
-            self.password = ""
-            self.date_of_birth = ""
-            self.is_active = True
-            self.last_login = None
-            self.pk = None
+        # else:
+        #     self.user_id = None
+        #     self.email = ""
+        #     self.username = ""
+        #     self.password = ""
+        #     self.date_of_birth = ""
+        #     self.is_active = True
+        #     self.last_login = None
+        #     self.pk = None
 
     def get_email_field_name(self):
         return "email"
@@ -181,16 +183,16 @@ def get_user_by_uid(uid):
 
 
 def get_mock_user_by_uid(uid):
-    try:
-        # Fetch from DynamoDB table
-        response = users_table.get_item(Key={"user_id": uid})
-        user_data = response.get("Item", None)
+    # try:
+    # Fetch from DynamoDB table
+    response = users_table.get_item(Key={"user_id": uid})
+    user_data = response.get("Item", None)
 
-        if user_data:
-            return MockUser(user_data)
-        return None
-    except Exception:
-        return None
+    if user_data:
+        return MockUser(user_data)
+    return None
+    # except Exception:
+    # return None
 
 
 def update_user_password(user_id, new_password):
@@ -497,7 +499,8 @@ def remove_fitness_trainer(user_id):
 
 def create_thread(title, user_id, content):
     thread_id = str(uuid.uuid4())
-    created_at = datetime.now().isoformat()
+
+    created_at = datetime.now(tz).isoformat()
 
     thread = {
         "ThreadID": thread_id,
@@ -552,7 +555,8 @@ def fetch_thread(thread_id):
 
 def create_post(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+
+    created_at = datetime.now(tz).isoformat()
 
     post = {
         "PostID": post_id,
@@ -581,7 +585,7 @@ def fetch_posts_for_thread(thread_id):
 
 def post_comment(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(tz).isoformat()
 
     reply = {
         "ThreadID": thread_id,
