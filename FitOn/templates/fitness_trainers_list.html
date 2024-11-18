@@ -48,16 +48,23 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const rejectButtons = document.querySelectorAll('.deactivate-button');
+                
             const notification = document.getElementById('notification');
-
-            const showNotification = (message) => {
-                notification.textContent = message;
+            const storedMessage = localStorage.getItem("notificationMessage");
+            if (storedMessage) {
+                notification.textContent = storedMessage;
                 notification.classList.add('show');
                 notification.style.display = 'block';
                 setTimeout(() => {
                     notification.classList.remove('show');
                     notification.style.display = 'none';
+                    localStorage.removeItem("notificationMessage");
                 }, 3000);
+            }
+
+            const showNotificationAndReload = (message) => {
+                localStorage.setItem("notificationMessage", message);
+                location.reload();
             };
 
             rejectButtons.forEach(button => {
@@ -79,7 +86,7 @@
                     .then(data => {
                         if (data.status === 'success') {
                             row.remove();
-                            showNotification(`Success: REMOVED "${username}" as a Fitness Trainer`);
+                            showNotificationAndReload(`Success: REMOVED "${username}" as a Fitness Trainer`);
                         } else {
                             alert('Error: ' + data.message);
                         }
