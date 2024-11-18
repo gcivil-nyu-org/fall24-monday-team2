@@ -517,12 +517,8 @@ def get_standard_users():
 def send_data_request_to_user(fitness_trainer_id, standard_user_id):
     try:
         # Fetch the standard user and fitness trainer from DynamoDB
-        standard_user = users_table.get_item(Key={"user_id": standard_user_id}).get(
-            "Item"
-        )
-        fitness_trainer = users_table.get_item(Key={"user_id": fitness_trainer_id}).get(
-            "Item"
-        )
+        standard_user = get_user(standard_user_id)
+        fitness_trainer = get_user(fitness_trainer_id)
 
         if not standard_user or not fitness_trainer:
             print("User(s) not found")

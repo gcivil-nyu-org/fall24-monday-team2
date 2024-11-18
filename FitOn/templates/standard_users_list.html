@@ -6,8 +6,9 @@
     <div class="table-container">
         <h2 class="page-title">All Users</h2>
         <table class="trainers-table">
-            <thead class="thead-dark">
+            <thead>
                 <tr>
+                    <th>Username</th>
                     <th>Name</th>
                     <th>Gender</th>
                     <th>Age Group</th>
@@ -17,16 +18,19 @@
             <tbody>
                 {% for user in standard_users %}
                 <tr>
+                    <td>{{ user.username }}</td>
                     <td>{{ user.name }}</td>
                     <td>{{ user.gender }}</td>
                     <td>{{ user.age }}</td>
                     <td>
-                        <button class="btn btn-primary" onclick="sendRequest('{{ user.id }}')">Request Data</button>
+                        <div class="button-container" style="margin-top: 0px;">
+                            <button class="submit-button request-button" data-userId="{{ user.user_id }}">Request Data</button>
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4" class="text-center">No standard users found</td>
+                    <td colspan="5" class="text-center">No standard users found</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -34,29 +38,35 @@
     </div>
 
     <script>
-        function sendRequest(userId) {
-            if (confirm("Are you sure you want to send a data request to this user?")) {
-                fetch("{% url 'send_data_request' %}", {
-                    method: 'POST',
-                    headers: {
-                        'X-CSRFToken': '{{ csrf_token }}',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ user_id: userId })
-                })
-                .then(response => {
-                    if (response.ok) {
-                        alert("Data request sent successfully!");
-                    } else {
-                        alert("Failed to send data request.");
-                    }
-                })
-                .catch(error => {
-                    console.error("Error:", error);
-                    alert("An unexpected error occurred. Please try again later.");
+        document.addEventListener("DOMContentLoaded", function() {
+            const buttons = document.querySelectorAll(".request-button");
+
+            buttons.forEach(function(button) {
+                button.addEventListener("click", function(event) {
+                    const userId = event.target.getAttribute("data-userId");
+                    fetch("{% url 'send_data_request' %}", {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token }}',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ user_id: userId })
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            alert("Data request sent successfully!");
+                        } else {
+                            alert("Failed to send data request.");
+                        }
+                    })
+                    .catch(error => {
+                        console.error("Error:", error);
+                        alert("An unexpected error occurred. Please try again later.");
+                    });
                 });
-            }
-        }
+            });
+        });
     </script>
 {% endblock %}
+
 

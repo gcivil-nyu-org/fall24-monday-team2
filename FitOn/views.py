@@ -743,12 +743,10 @@ def standard_users_list_view(request):
 
 def send_data_request(request):
     if request.method == "POST":
-        fitness_trainer_id = request.user.id  # Get current fitness trainer's ID
-        standard_user_id = request.POST.get(
-            "user_id"
-        )  # Get the standard user ID from the POST data
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
 
-        # Call the function to send data request
         success = send_data_request_to_user(fitness_trainer_id, standard_user_id)
 
         if success:
