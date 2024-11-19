@@ -63,6 +63,8 @@ class UserCreationAndDeletionTests(TestCase):
             "name": "Test User",
             "date_of_birth": "1990-01-01",
             "gender": "O",
+            "height": "183",
+            "weight": "83",
             "password": "hashed_password",
         }
 
@@ -1051,7 +1053,9 @@ class SignUpFormTest(TestCase):
             "email": "testuser@example.com",
             "name": "Test User",
             "date_of_birth": "2000-01-01",
-            "gender": "M",  # Adjust based on your GENDER_OPTIONS
+            "gender": "M",
+            "height": "183",
+            "weight": "80",
             "password": "strongpassword123",
             "confirm_password": "strongpassword123",
         }
@@ -1064,7 +1068,9 @@ class SignUpFormTest(TestCase):
             "email": "testuser@example.com",
             "name": "Test User",
             "date_of_birth": "2000-01-01",
-            "gender": "M",  # Adjust based on your GENDER_OPTIONS
+            "gender": "M",
+            "height": "183",
+            "weight": "80",
             "password": "strongpassword123",
             "confirm_password": "differentpassword",
         }
@@ -1278,7 +1284,15 @@ class LoginViewTest(TestCase):
         self.password = "correctpassword"
         hashed_password = make_password(self.password)
         create_user(
-            self.username, self.username, "", "Test User", "", "", hashed_password
+            self.username,
+            self.username,
+            "",
+            "Test User",
+            "",
+            "",
+            "",
+            "",
+            hashed_password,
         )
 
     def tearDown(self):
@@ -1381,6 +1395,8 @@ class SignUpViewTest(TestCase):
         self.name = "New User"
         self.date_of_birth = "2000-01-01"
         self.gender = "M"
+        self.height = ("180",)
+        self.weight = "83"
         self.password = "newpassword"
 
     def tearDown(self):
@@ -1397,6 +1413,8 @@ class SignUpViewTest(TestCase):
                 "name": self.name,
                 "date_of_birth": self.date_of_birth,
                 "gender": self.gender,
+                "height": self.height,
+                "weight": self.weight,
                 "password": self.password,
                 "confirm_password": self.password,  # Ensure passwords match
             },
@@ -1424,6 +1442,8 @@ class SignUpViewTest(TestCase):
                 "name": "",
                 "date_of_birth": "",
                 "gender": "",
+                "height": "",
+                "weight": "",
                 "password": "short",
                 "confirm_password": "different",  # Passwords do not match
             },
