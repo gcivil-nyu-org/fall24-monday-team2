@@ -72,7 +72,9 @@ def get_user_by_username(username):
     #     return None
 
 
-def create_user(user_id, username, email, name, date_of_birth, gender, height, weight, password):
+def create_user(
+    user_id, username, email, name, date_of_birth, gender, height, weight, password
+):
     # try:
     users_table.put_item(
         Item={
