@@ -44,6 +44,9 @@ class SignUpForm(forms.Form):
         choices=GENDER_CHOICES, widget=forms.Select, label="Gender"
     )
 
+    height = forms.IntegerField(label='Height', min_value=50, max_value=300, initial=170)
+    weight = forms.IntegerField(label='Weight', min_value=20, max_value=500, initial=70)
+
     password = forms.CharField(widget=forms.PasswordInput(), label="Password")
     confirm_password = forms.CharField(
         widget=forms.PasswordInput(), label="Confirm Password"
