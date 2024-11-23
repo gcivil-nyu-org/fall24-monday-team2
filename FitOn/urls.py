@@ -110,4 +110,6 @@ urlpatterns = [
     path("chat/group/join/", views.join_group_chat),
     path("chat/group/leave/", views.leave_group_chat),
     path("chat/group/check/", views.get_pendding_invitations),
+    path('search_users', views.search_users, name='search_users'),
+    path('chat/mark_messages_as_read/<str:room_id>/', views.mark_messages_as_read, name='mark_messages_as_read'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

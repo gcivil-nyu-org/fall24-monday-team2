@@ -15,9 +15,40 @@
             <button style="width: 100%;height: 60px" id="group">
                 Group Chat
             </button>
+
+            <div class="search_chat">
+                <div style="position: relative;"> <!-- Ensure relative positioning for proper alignment -->
+                    <input
+                        type="text"
+                        id="search_user"
+                        placeholder="Search for a username..."
+                        oninput="searchUser()"
+                    />
+                    <div id="search_results" class="search-popup"></div> <!-- Popup for search results -->
+                </div>
+            </div>
+            
+            <div id="user_list">
+                {% for i in data %}
+                <div class="chatlist" data-user-id="{{ i.user_id }}" data-user-name="{{ i.username }}">
+                    <div class="block">
+                        <div class="details">
+                            <div class="listHead">
+                                <h4>{{ i.username }}</h4>
+                                {% if i.unread_count > 0 %}
+                                <span class="unread-badge">{{ i.unread_count }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            
             <!--ChatList-->
 
-            {% for i in data %}
+            <!-- {% for i in data %}
             <div class="chatlist" data-user-id="{{ i.user_id }}" data-user-name="{{ i.username }}">
                 <div class="block">
                     <div class="details">
@@ -27,129 +58,433 @@
                     </div>
                 </div>
             </div>
-            {% endfor %}
+            {% endfor %} -->
         </div>
 
-        <div id="rightBar" class="rightSide" style="visibility: hidden">
+        <!-- Right Chat Area -->
+        <div id="rightBar" class="rightSide">
             <div class="header">
-
+                <h3 id="chatHeader">Chat</h3>
             </div>
-            <!--chatbox-->
-            <div class="chatBox" id="chatBox">
-
-            </div>
-            <!--chat input-->
+            <div class="chatBox" id="chatBox"></div>
             <div class="chatbox_input">
-                <div>
-                    <input id="input_message" type="text">
-                    <button id="submit" style="width: 40px">
-                        Send
-                    </button>
-                </div>
-
+                <input id="input_message" type="text" placeholder="Type your message here...">
+                <button id="submit">Send</button>
             </div>
         </div>
     </div>
 
     <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== "") {
+                const cookies = document.cookie.split(";");
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === name + "=") {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        let chatSocket = null; // Global WebSocket variable
 
-        document.addEventListener('DOMContentLoaded', function () {
-            const chatListItems = document.querySelectorAll('.chatlist');
+        document.addEventListener("DOMContentLoaded", function () {
+            const chatListItems = document.querySelectorAll(".chatlist");
 
-            chatListItems.forEach(item => {
-                item.addEventListener('click', function () {
+            chatListItems.forEach((item) => {
+                item.addEventListener("click", function () {
                     startChat(this);
                 });
             });
 
-            const group = document.getElementById('group')
-            group.addEventListener('click', function () {
+            const group = document.getElementById("group");
+            group.addEventListener("click", function () {
                 window.location.href = "/chatg";
-            })
+            });
+
+            const submitButton = document.getElementById("submit");
+            const inputField = document.getElementById("input_message");
+
+            submitButton.addEventListener("click", function () {
+                if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                    submitMessage();
+                } else {
+                    console.error("WebSocket is not connected or ready");
+                }
+            });
+
+            // Send message when pressing Enter in the input field
+            inputField.addEventListener("keydown", function (e) {
+                if (e.key === "Enter" && !e.shiftKey) { // Check for Enter key and exclude Shift+Enter
+                    e.preventDefault(); // Prevent the default action of Enter (e.g., adding a new line)
+                    if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                        submitMessage();
+                    } else {
+                        console.error("WebSocket is not connected or ready");
+                    }
+                }
+            });
+
+            const chatBox = document.getElementById("chatBox");
+            // Add hover event listeners to display the timestamp bubble
+            chatBox.addEventListener("mouseover", function (e) {
+            const messageDiv = e.target.closest(".message");
+            if (!messageDiv || e.target.tagName !== "P") return;
+
+            const timestamp = messageDiv.getAttribute("data-timestamp");
+            if (!timestamp) return;
+
+            // Avoid duplicate bubbles
+            if (messageDiv.querySelector(".timestamp-bubble")) return;
+
+            // Create the bubble
+            const bubble = document.createElement("div");
+            bubble.classList.add("timestamp-bubble");
+            bubble.textContent = timestamp;
+
+            // Append the bubble to the message div
+            messageDiv.appendChild(bubble);
+
+            // Dynamically position the bubble
+            const bubbleRect = bubble.getBoundingClientRect();
+            const messageRect = messageDiv.getBoundingClientRect();
+
+            bubble.style.left = `${(messageRect.width - bubbleRect.width) / 2}px`; // Center horizontally
+            bubble.style.top = `${messageRect.height + 8}px`; // Add margin below the message
+            });
+
+            chatBox.addEventListener("mouseout", function (e) {
+                const messageDiv = e.target.closest(".message");
+                if (!messageDiv) return;
+
+                const bubble = messageDiv.querySelector(".timestamp-bubble");
+                if (bubble) bubble.remove();
+            });
+            
         });
 
         function createRoomId(uidA, uidB) {
             const ids = [uidA, uidB].sort();
             return `${ids[0]}and${ids[1]}`;
         }
-        let submitListener = null;
+
 
         function startChat(chatElement) {
-            const element = document.getElementById("rightBar");
-            element.style.visibility = 'visible';
-
-            if (window.chatSocket != null) {
-                window.chatSocket.close(1000, 'Closing connection');
-                window.chatSocket.onclose = null;
-                window.chatSocket = null;
-            }
-
+            const rightBar = document.getElementById("rightBar");
             const chatBox = document.getElementById("chatBox");
-            if (chatBox) {
-                chatBox.innerHTML = '';
+            const chatHeader = document.getElementById("chatHeader");
+
+            // Activate the right bar and clear the previous chat
+            rightBar.classList.add("active");
+            chatBox.innerHTML = ""; // Clear previous chat
+
+            // Temporarily show a loading indicator instead of the "No messages yet" state
+            const loadingIndicator = document.createElement("p");
+            loadingIndicator.textContent = "Loading chat...";
+            loadingIndicator.style.textAlign = "center";
+            loadingIndicator.style.color = "#999";
+            chatBox.appendChild(loadingIndicator);
+
+            // Update the header with the username
+            const username = chatElement.getAttribute("data-user-name");
+            chatHeader.textContent = `Chat with ${username}`;
+
+            // Highlight the active chat
+            document.querySelectorAll(".block").forEach((block) => block.classList.remove("active"));
+            chatElement.querySelector(".block").classList.add("active");
+
+            // Get user and room details
+            const userId = chatElement.getAttribute("data-user-id");
+            const roomId = createRoomId("{{ mine.user_id }}", userId);
+
+            // Clear "new messages" count when opening the chat
+            const unreadBadge = chatElement.querySelector(".unread-badge");
+            if (unreadBadge) {
+                unreadBadge.remove(); // Remove the unread badge
             }
 
-            const blockListItems = document.querySelectorAll('.block');
-            blockListItems.forEach(item => {
-                item.classList.remove("active");
-            });
-
-            const block = chatElement.querySelector('.block');
-            block.classList.add("active");
-
-            const userId = chatElement.getAttribute('data-user-id');
-            const roomId = createRoomId("{{ mine.user_id }}", userId);
-            fetch(`/chat/history/${roomId}/`)
-                .then(response => response.json())
-                .then(data => {
-                    data.messages.forEach(message => {
-                        const messageDiv = document.createElement('div');
-                        if (message.sender === '{{ mine.user_id }}') {
-                            messageDiv.classList.add('message', 'my_message');
-                        } else {
-                            messageDiv.classList.add('message', 'frnd_message');
-                        }
-                        messageDiv.innerHTML = `<p>${message.message}<br></p>`;
-                        chatBox.appendChild(messageDiv);
-                    });
+            // Mark messages as read when opening the chat
+            fetch(`/chat/mark_messages_as_read/${roomId}/`, {
+                method: "POST",
+                headers: { "X-CSRFToken": getCookie("csrftoken") },
+            })
+                .then((response) => response.json())
+                .then((data) => {
+                    if (!data.success) {
+                        console.error("Failed to mark messages as read:", data.error);
+                    }
                 })
-                .catch(error => {
-                    console.error('Error fetching chat history:', error);
+                .catch((error) => console.error("Error marking messages as read:", error));
+
+            // Fetch chat history
+            fetch(`/chat/history/${roomId}/`)
+                .then((response) => response.json())
+                .then((data) => {
+                    chatBox.innerHTML = ""; // Clear the loading indicator or previous state
+                    if (data.messages.length > 0) {
+                        data.messages.forEach((message) => {
+                            const messageDiv = document.createElement("div");
+                            messageDiv.classList.add("message");
+                            messageDiv.classList.add(
+                                message.sender === "{{ mine.user_id }}" ? "my_message" : "frnd_message"
+                            );
+                            messageDiv.setAttribute(
+                                "data-timestamp",
+                                new Date(message.timestamp * 1000).toLocaleString()
+                            );
+                            messageDiv.innerHTML = `<p>${message.message}</p>`;
+                            chatBox.appendChild(messageDiv);
+                        });
+                        scrollToBottom();
+                    } else {
+                        // If no messages are found, show the "No messages yet" state
+                        const noMessages = document.createElement("p");
+                        noMessages.textContent = "No messages yet";
+                        noMessages.style.textAlign = "center";
+                        noMessages.style.color = "#999";
+                        chatBox.appendChild(noMessages);
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error fetching chat history:", error);
+                    chatBox.innerHTML = ""; // Clear the loading indicator
+                    const errorMsg = document.createElement("p");
+                    errorMsg.textContent = "Error loading chat history.";
+                    errorMsg.style.textAlign = "center";
+                    errorMsg.style.color = "red";
+                    chatBox.appendChild(errorMsg);
                 });
 
-            window.chatSocket = new WebSocket('ws://' + window.location.host + '/ws/chat/' + roomId + '/');
-
-            window.chatSocket.onmessage = function (e) {
-                const data = JSON.parse(e.data);
-                const messageDiv = document.createElement('div');
-                if (data.sender === '{{ mine.user_id }}') {
-                    messageDiv.classList.add('message', 'my_message');
-                } else {
-                    messageDiv.classList.add('message', 'frnd_message');
-                }
-                messageDiv.innerHTML = `<p>${data.message}<br></p>`;
-                document.getElementsByClassName('chatBox')[0].appendChild(messageDiv);
-            };
-
-            if (submitListener) {
-                document.getElementById('submit').removeEventListener('click', submitListener);
+            // Close any existing WebSocket connection
+            if (chatSocket) {
+                chatSocket.onmessage = null;
+                chatSocket.onclose = null;
+                chatSocket.close();
             }
 
-            submitListener = function () {
-                submitMessage(this, window.chatSocket);
+            // Create a new WebSocket connection
+            chatSocket = new WebSocket("ws://" + window.location.host + "/ws/chat/" + roomId + "/");
+
+            chatSocket.onopen = function () {
+                console.log("WebSocket connection established");
             };
-            document.getElementById('submit').addEventListener('click', submitListener);
 
-            console.log(userId);
+            chatSocket.onmessage = function (e) {
+                const data = JSON.parse(e.data);
+
+                const messageDiv = document.createElement("div");
+                messageDiv.classList.add("message");
+                messageDiv.classList.add(
+                    data.sender === "{{ mine.user_id }}" ? "my_message" : "frnd_message"
+                );
+                messageDiv.innerHTML = `<p>${data.message}</p>`;
+                chatBox.appendChild(messageDiv);
+                chatBox.classList.remove("empty");
+                scrollToBottom();
+
+                // Move the active chat to the top of the user list if the message is from another user
+                if (data.sender !== "{{ mine.user_id }}") {
+                    moveActiveChatToTop(data.sender, data.sender_name || "Unknown");
+                }
+            };
+
+            chatSocket.onclose = function () {
+                console.log("WebSocket connection closed");
+            };
         }
 
-        function submitMessage(element, chatSocket) {
-            var inputValue = document.getElementById('input_message').value;
-            chatSocket.send(JSON.stringify({
-                'message': inputValue,
-                'sender': '{{ mine.user_id }}'
-            }));
+
+        function submitMessage() {
+            const inputField = document.getElementById("input_message");
+            const inputValue = inputField.value.trim();
+
+            if (inputValue === "") {
+                return; // Don't send empty messages
+            }
+
+            if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                const activeChatElement = document.querySelector(".chatlist .block.active");
+                const recipientId = activeChatElement
+                    ? activeChatElement.parentElement.getAttribute("data-user-id")
+                    : null;
+                const recipientName = activeChatElement
+                    ? activeChatElement.parentElement.getAttribute("data-user-name")
+                    : "Unknown";
+
+                chatSocket.send(
+                    JSON.stringify({
+                        message: inputValue,
+                        sender: "{{ mine.user_id }}",
+                    })
+                );
+
+                if (recipientId && recipientName) {
+                    moveActiveChatToTop(recipientId, recipientName);
+                }
+
+                // Clear the input field
+                inputField.value = "";
+            } else {
+                console.error("WebSocket is not ready to send messages");
+            }
         }
+
+        function scrollToBottom() {
+            const chatBox = document.getElementById("chatBox");
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        let debounceTimer;
+
+        function searchUser() {
+            const query = document.getElementById("search_user").value.trim();
+            const searchResultsDiv = document.getElementById("search_results");
+
+            if (query === "") {
+                searchResultsDiv.style.display = "none"; // Hide the popup when the input is empty
+                return;
+            }
+
+            fetch(`/search_users?query=${query}`)
+                .then((response) => response.json())
+                .then((data) => {
+                    searchResultsDiv.innerHTML = ""; // Clear old results
+
+                    if (data.length > 0) {
+                        // Populate the results
+                        data.forEach((user) => {
+                            const resultDiv = document.createElement("div");
+                            resultDiv.className = "search-result";
+                            resultDiv.textContent = user.username;
+                            resultDiv.dataset.userId = user.user_id;
+
+                            // Add click event to start a chat
+                            resultDiv.addEventListener("click", function () {
+                                addActiveChat(this.dataset.userId, this.textContent);
+                                searchResultsDiv.style.display = "none"; // Hide popup
+                                document.getElementById("search_user").value = ""; // Clear search input
+                            });
+
+                            searchResultsDiv.appendChild(resultDiv);
+                        });
+
+                        searchResultsDiv.style.display = "block"; // Show the results box
+                    } else {
+                        searchResultsDiv.innerHTML = "<div class='search-result'>No results found</div>";
+                        searchResultsDiv.style.display = "block"; // Show even if no results
+                    }
+                })
+                .catch((error) => {
+                    console.error("Error searching users:", error);
+                    searchResultsDiv.style.display = "none"; // Hide the popup on error
+                });
+        }
+
+// Hide the popup if clicking outside
+document.addEventListener("click", (event) => {
+    const searchResultsDiv = document.getElementById("search_results");
+    const searchInput = document.getElementById("search_user");
+
+    if (!searchResultsDiv.contains(event.target) && event.target !== searchInput) {
+        searchResultsDiv.style.display = "none"; // Hide the popup
+    }
+});
+
+
+        function addActiveChat(userId, username) {
+            const userList = document.getElementById("user_list");
+
+            // Check if chat already exists
+            const existingChat = document.querySelector(`.chatlist[data-user-id="${userId}"]`);
+            if (existingChat) {
+                existingChat.scrollIntoView();
+                existingChat.click();
+                return;
+            }
+
+            // Create a new temporary chat
+            const newChat = document.createElement("div");
+            newChat.className = "chatlist";
+            newChat.dataset.userId = userId;
+            newChat.dataset.userName = username;
+            newChat.dataset.temp = "true"; // Mark as temporary
+
+            newChat.innerHTML = `
+                <div class="block">
+                    <div class="details">
+                        <div class="listHead">
+                            <h4>${username}</h4>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            newChat.addEventListener("click", function () {
+                startChat(this); // Start chat when clicked
+                this.dataset.temp = "false"; // Mark as permanent if a message is sent
+            });
+
+            userList.prepend(newChat);
+            newChat.click();
+
+            // Remove temporary chat if not used
+            document.addEventListener("click", (event) => {
+                if (
+                    !newChat.contains(event.target) &&
+                    newChat.dataset.temp === "true"
+                ) {
+                    newChat.remove(); // Delete inactive temporary chat
+                }
+            });
+        }
+        function moveActiveChatToTop(userId, username) {
+            const userList = document.getElementById("user_list");
+            const chatItem = document.querySelector(`.chatlist[data-user-id="${userId}"]`);
+
+            if (chatItem) {
+                // Remove the existing chat item
+                userList.removeChild(chatItem);
+
+                // Prepend it to the top
+                userList.prepend(chatItem);
+
+                // Ensure the username is updated
+                const nameElement = chatItem.querySelector(".listHead h4");
+                if (nameElement) {
+                    nameElement.textContent = username;
+                }
+            } else {
+                // Create a new chat item if it doesn't exist
+                const newChatItem = document.createElement("div");
+                newChatItem.classList.add("chatlist");
+                newChatItem.setAttribute("data-user-id", userId);
+                newChatItem.setAttribute("data-user-name", username);
+                newChatItem.innerHTML = `
+                    <div class="block">
+                        <div class="details">
+                            <div class="listHead">
+                                <h4>${username}</h4>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                newChatItem.addEventListener("click", function () {
+                    startChat(newChatItem);
+                });
+                userList.prepend(newChatItem);
+            }
+        }
+
+        chatSocket.onmessage = function (e) {
+            const data = JSON.parse(e.data);
+            handleNewMessage(data);
+            // Dynamically move the conversation to the top of the user list
+            moveActiveChatToTop(data.sender, data.sender_name || "Unknown");
+        };
+
     </script>
 </body>
 

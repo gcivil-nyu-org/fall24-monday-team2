@@ -220,8 +220,8 @@
         <!--chat input-->
         <div class="chatbox_input">
             <div>
-                <input id="input_message" type="text">
-                <button id="submit" style="width: 40px">
+                <input id="input_message" type="text" placeholder="Type your message here...">
+                <button id="submit">
                     Send
                 </button>
 
@@ -481,12 +481,19 @@
         }
 
         function submitMessage(element, chatSocket) {
-            var inputValue = document.getElementById('input_message').value;
+            var inputField = document.getElementById('input_message');
+            var inputValue = inputField.value.trim(); // Get the input value and trim whitespace
+
+            if (inputValue === "") {
+                return; // Don't send empty messages
+            }
+
             chatSocket.send(JSON.stringify({
                 'message': inputValue,
                 'sender': '{{ mine.user_id }}'
             }));
 
+            inputField.value = ""; // Clear the input field after sending the message
         }
 
         function requestCheckInvitations() {

@@ -968,18 +968,16 @@ def save_chat_message(sender, message, room_name, sender_name):
 def get_users_without_specific_username(exclude_username):
     try:
         response = users_table.scan(
-            FilterExpression=Attr("username").ne(
-                exclude_username
-            )  # Exclude the specified username
+            FilterExpression=Attr("username").ne(exclude_username),
+            ProjectionExpression="user_id, username"  # Fetch only required fields
         )
         users = response.get("Items", [])
-        return users  # Return all matched users
+        return users
     except Exception as e:
         print(
             f"Error querying DynamoDB for users excluding username '{exclude_username}': {e}"
         )
-        return None
-
+        return []
 
 def get_chat_history_from_db(room_id):
     response = chat_table.query(
@@ -987,3 +985,57 @@ def get_chat_history_from_db(room_id):
         ScanIndexForward=True,
     )
     return response
+
+def get_users_with_chat_history(user_id):
+    try:
+        # Scan the table to find chat history involving the given user
+        response = chat_table.scan(
+            FilterExpression=Attr("user_id").eq(user_id) | Attr("other_user_id").eq(user_id)
+        )
+
+        chat_history = response.get("Items", [])
+
+        # Debug: Check the raw chat history
+        print(f"Chat history raw response: {chat_history}")
+
+        # Extract unique user IDs and their chat information
+        users_with_activity = {}
+        for chat in chat_history:
+            # Identify the other participant in the chat
+            other_user_id = (
+                chat["other_user_id"] if chat["user_id"] == user_id else chat["user_id"]
+            )
+            room_name = chat.get("room_name", "")
+            last_activity = chat.get("timestamp", 0)  # Assuming `timestamp` indicates last activity
+
+            # Store the latest activity for each user
+            if other_user_id not in users_with_activity:
+                users_with_activity[other_user_id] = {
+                    "user_id": other_user_id,
+                    "room_name": room_name,
+                    "last_activity": last_activity,
+                }
+            else:
+                # Update the last activity if this message is more recent
+                users_with_activity[other_user_id]["last_activity"] = max(
+                    users_with_activity[other_user_id]["last_activity"], last_activity
+                )
+
+        # Convert dictionary to a list and sort by last activity
+        sorted_users = sorted(
+            users_with_activity.values(), key=lambda x: x["last_activity"], reverse=True
+        )
+
+        # Fetch usernames for the users
+        for user in sorted_users:
+            user_details = get_user_by_uid(user["user_id"])
+            user["username"] = user_details.username if user_details else "Unknown"
+
+        # Debug: Check sorted users with usernames
+        print(f"Sorted users with chat activity: {sorted_users}")
+
+        return sorted_users
+
+    except Exception as e:
+        print(f"Error fetching users with chat history: {e}")
+        return []
