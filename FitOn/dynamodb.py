@@ -106,7 +106,9 @@ def get_users_by_username_query(query):
         return []
 
 
-def create_user(user_id, username, email, name, date_of_birth, gender, password):
+def create_user(
+    user_id, username, email, name, date_of_birth, gender, height, weight, password
+):
     # try:
     users_table.put_item(
         Item={
@@ -116,6 +118,8 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
             "name": name,
             "date_of_birth": str(date_of_birth),
             "gender": gender,
+            "height": height,
+            "weight": weight,
             "password": password,  # Hashed password
             "is_admin": False,
             "is_fitness_trainer": False,

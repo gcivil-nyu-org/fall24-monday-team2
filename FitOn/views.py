@@ -203,6 +203,9 @@ def signup(request):
             name = form.cleaned_data["name"]
             date_of_birth = form.cleaned_data["date_of_birth"]
             gender = form.cleaned_data["gender"]
+            height = form.cleaned_data["height"]
+            weight = form.cleaned_data["weight"]
+
             password = form.cleaned_data["password"]
 
             # Hash the password before saving it
@@ -213,7 +216,15 @@ def signup(request):
 
             # Sync data with DynamoDB
             if create_user(
-                user_id, username, email, name, date_of_birth, gender, hashed_password
+                user_id,
+                username,
+                email,
+                name,
+                date_of_birth,
+                gender,
+                height,
+                weight,
+                hashed_password,
             ):
                 request.session["username"] = username
                 request.session["user_id"] = user_id
@@ -392,6 +403,8 @@ def profile_view(request):
                 "name": {"Value": form.cleaned_data["name"]},
                 "date_of_birth": {"Value": form.cleaned_data["date_of_birth"]},
                 "gender": {"Value": form.cleaned_data["gender"]},
+                "height": {"Value": form.cleaned_data["height"]},
+                "weight": {"Value": form.cleaned_data["weight"]},
                 "bio": {"Value": form.cleaned_data["bio"]},
                 "address": {"Value": form.cleaned_data["address"]},
             }
@@ -418,6 +431,8 @@ def profile_view(request):
                 "email": user.get("email", ""),
                 "gender": user.get("gender", ""),
                 "phone_number": user.get("phone_number", ""),
+                "height": user.get("height", ""),
+                "weight": user.get("weight", ""),
                 "address": user.get("address", ""),
                 "bio": user.get("bio", ""),
                 "country_code": user.get("country_code", ""),  # Default country code

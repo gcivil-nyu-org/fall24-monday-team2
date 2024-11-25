@@ -72,6 +72,22 @@
                     {% endif %}
                 </div>
 
+                <div class="form-group">
+                    <label for="height">Height (cm) </label>
+                    {{ form.height }}
+                    {% if form.height.errors %}
+                        <span class="error">{{ form.height.errors }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="weight">Weight (kg)</label>
+                    {{ form.weight }}
+                    {% if form.weight.errors %}
+                        <span class="error">{{ form.weight.errors }}</span>
+                    {% endif %}
+                </div>
+
                 <!-- Phone Number with Country Code -->
                 <div class="form-group">
                     <label for="phone_number">Phone Number</label>
