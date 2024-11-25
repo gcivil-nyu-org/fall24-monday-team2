@@ -41,7 +41,7 @@ from .dynamodb import (
     delete_thread_by_id,
 )
 
-from .rds import rds_main, fetch_user_data, show_tables
+from .rds import rds_main, fetch_user_data
 
 from .forms import (
     FitnessTrainerApplicationForm,
