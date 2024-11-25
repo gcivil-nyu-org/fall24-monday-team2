@@ -4,9 +4,54 @@
 
 {% block content %}
     <div id="notification" class="notification" style="display:none;"></div>
+
+    {% if my_trainers %}
+        <div class="table-container">
+            <h2 class="page-title">My Trainers</h2>
+            <table class="trainers-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Gender</th>
+                        <th>Past Experience</th>
+                        <th>Resume</th>
+                        <th>Certifications</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for trainer in my_trainers %}
+                        <tr>
+                            <td>{{ trainer.name }}</td>
+                            <td>{{ trainer.gender }}</td>
+                            <td>
+                                Trainer: {{ trainer.past_experience_trainer }}<br/>
+                                Dietician: {{ trainer.past_experience_dietician }}
+                            </td>
+                            <td><a href="{{ trainer.resume_url }}" class="file-link" target="_blank">View Resume</a></td>
+                            <td>
+                                {% if trainer.certifications_url %}
+                                    <a href="{{ trainer.certifications_url }}" class="file-link" target="_blank">View Certifications</a>
+                                {% else %}
+                                    None
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="button-container">
+                                    <button class="deactivate-button action-button" data-trainerid="{{ trainer.user_id }}" data-action="revoke">Revoke</button>
+                                    <button class="submit-button">Chat</button>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+
     {% if trainers_in_waiting_list %}
         <div class="table-container">
-            <h2 class="page-title">Trainers in Your Waiting List</h2>
+            <h2 class="page-title">Trainers in My Waiting List</h2>
             <table class="trainers-table">
                 <thead>
                     <tr>
@@ -49,7 +94,7 @@
     {% endif %}
 
     <div class="table-container">
-        <h2 class="page-title">Fitness Trainers</h2>
+        <h2 class="page-title">All Fitness Trainers</h2>
         <table class="trainers-table">
             <thead>
                 <tr>
@@ -104,7 +149,7 @@
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const notification = document.getElementById('notification');
             const storedMessage = localStorage.getItem("notificationMessage");
             if (storedMessage) {
@@ -125,7 +170,7 @@
 
             const actionButtons = document.querySelectorAll('.action-button');
             actionButtons.forEach(button => {
-                button.addEventListener('click', function(event) {
+                button.addEventListener('click', function (event) {
                     event.preventDefault();
                     const trainerId = this.dataset.trainerid;
                     const action = this.dataset.action;
@@ -145,6 +190,10 @@
                         case 'provide':
                             endpoint = "/user/provide_access_to_trainer/";
                             successMessage = `Access granted to Trainer: ${trainerId}`;
+                            break;
+                        case 'revoke':
+                            endpoint = "/user/revoke_access_to_trainer/";
+                            successMessage = `Access revoked for Trainer: ${trainerId}`;
                             break;
                         default:
                             console.error('Invalid action:', action);
