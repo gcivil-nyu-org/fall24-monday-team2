@@ -1,12 +1,17 @@
 from boto3.dynamodb.conditions import Attr
 import boto3
-import uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 from datetime import datetime, timezone
-from django.conf import settings
+
+# from asgiref.sync import sync_to_async
+
+
+# from django.core.files.storage import default_storage
 from django.utils import timezone
 from pytz import timezone
+from django.conf import settings
+import uuid
 
 # Connect to DynamoDB
 dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
@@ -22,7 +27,19 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
+chat_table = dynamodb.Table("UserChats")
+
 tz = timezone("EST")
+
+GENDER_OPTIONS = {"M": "Male", "F": "Female", "O": "Other", "PNTS": "Prefer not to say"}
+AGE_GROUPS = [
+    (0, 12, "Child"),
+    (13, 19, "Teenager"),
+    (20, 35, "Young Adult"),
+    (36, 55, "Middle-aged"),
+    (56, 74, "Senior"),
+    (75, float("inf"), "Elderly"),
+]
 
 
 class MockUser:
@@ -36,15 +53,15 @@ class MockUser:
             self.is_active = user_data.get("is_active", True)
             self.last_login = user_data.get("last_login", None)
             self.pk = self.user_id
-        else:
-            self.user_id = None
-            self.email = ""
-            self.username = ""
-            self.password = ""
-            self.date_of_birth = ""
-            self.is_active = True
-            self.last_login = None
-            self.pk = None
+        # else:
+        #     self.user_id = None
+        #     self.email = ""
+        #     self.username = ""
+        #     self.password = ""
+        #     self.date_of_birth = ""
+        #     self.is_active = True
+        #     self.last_login = None
+        #     self.pk = None
 
     def get_email_field_name(self):
         return "email"
@@ -70,6 +87,23 @@ def get_user_by_username(username):
     # except Exception as e:
     #     print(f"Error querying DynamoDB for username '{username}': {e}")
     #     return None
+
+
+def get_users_by_username_query(query):
+    try:
+        # Scan the Users table to get all users
+        response = users_table.scan()
+        users = response.get("Items", [])
+
+        # Filter users based on case-insensitive match
+        filtered_users = [
+            user for user in users if query.lower() in user["username"].lower()
+        ]
+
+        return filtered_users
+    except Exception as e:
+        print(f"Error querying DynamoDB for usernames: {e}")
+        return []
 
 
 def create_user(
@@ -162,6 +196,19 @@ def get_user_by_uid(uid):
     #     return e
 
 
+def get_mock_user_by_uid(uid):
+    # try:
+    # Fetch from DynamoDB table
+    response = users_table.get_item(Key={"user_id": uid})
+    user_data = response.get("Item", None)
+
+    if user_data:
+        return MockUser(user_data)
+    return None
+    # except Exception:
+    # return None
+
+
 def update_user_password(user_id, new_password):
     # try:
     hashed_password = make_password(new_password)
@@ -206,10 +253,17 @@ def update_reset_request_time(user_id):
 def get_user(user_id):
     try:
         response = users_table.get_item(Key={"user_id": user_id})
-        return response.get("Item")
+        return response.get("Item") or {}
     except ClientError as e:
         print(e.response["Error"]["Message"])
         return None
+
+
+def verify_user_credentials(username, password):
+    user = get_user_by_username(username)
+    if user and check_password(password, user["password"]):
+        return user
+    return None
 
 
 def upload_profile_picture(user_id, profile_picture):
@@ -262,10 +316,9 @@ def update_user(user_id, update_data):
     )
     return response
 
-
-# except ClientError as e:
-#     print(e.response["Error"]["Message"])
-#     return None
+    # except ClientError as e:
+    #     print(e.response["Error"]["Message"])
+    #     return None
 
 
 def add_fitness_trainer_application(
@@ -409,6 +462,8 @@ def get_fitness_trainers():
 
             user = get_user(trainer["user_id"])
             trainer["username"] = user["username"] if user else "Unknown"
+            trainer["name"] = user["name"] if user else "Unknown"
+            trainer["gender"] = GENDER_OPTIONS[user["gender"]] if user else "Unknown"
 
         return trainers
 
@@ -450,6 +505,143 @@ def remove_fitness_trainer(user_id):
     except Exception as e:
         print(f"Unexpected error making updates: {e}")
         return []
+
+
+def calculate_age_group(date_of_birth):
+    try:
+        dob = datetime.strptime(
+            date_of_birth, "%Y-%m-%d"
+        )  # Assuming the date format is YYYY-MM-DD
+        today = datetime.today()
+        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
+        # Find the age group based on the age
+        for min_age, max_age, group_name in AGE_GROUPS:
+            if min_age <= age <= max_age:
+                return group_name
+    except (ValueError, TypeError):
+        return "Unknown"  # Return "Unknown" if date_of_birth is invalid or missing
+    except ClientError as e:
+        print(f"Error fetching standard users: {e.response['Error']['Message']}")
+        return ""
+
+
+def get_standard_users():
+    try:
+        # Scan the DynamoDB table to fetch all standard users
+        response = users_table.scan(
+            FilterExpression="is_fitness_trainer = :is_fitness_trainer AND is_admin = :is_admin",
+            ExpressionAttributeValues={
+                ":is_fitness_trainer": False,
+                ":is_admin": False,
+            },
+        )
+
+        # Extract users
+        standard_users = response.get("Items", [])
+
+        # Update the gender field for each user
+        for user in standard_users:
+            gender_code = user.get(
+                "gender", "PNTS"
+            )  # Default to "PNTS" if no gender is set
+            user["gender"] = GENDER_OPTIONS.get(
+                gender_code, "Unknown"
+            )  # Map gender code to description
+
+            # Update age based on date_of_birth
+            date_of_birth = user.get(
+                "date_of_birth"
+            )  # Assuming this field exists in the DynamoDB table
+            user["age"] = (
+                calculate_age_group(date_of_birth) if date_of_birth else "Unknown"
+            )
+
+        return standard_users
+
+    except ClientError as e:
+        print(f"Error fetching standard users: {e.response['Error']['Message']}")
+        return []
+
+
+def send_data_request_to_user(fitness_trainer_id, standard_user_id):
+    try:
+        standard_user = get_user(standard_user_id)
+        fitness_trainer = get_user(fitness_trainer_id)
+
+        if not standard_user or not fitness_trainer:
+            print("User(s) not found")
+            return False
+
+        if "waiting_list_of_trainers" not in standard_user:
+            standard_user["waiting_list_of_trainers"] = []
+
+        if fitness_trainer_id not in standard_user["waiting_list_of_trainers"]:
+            standard_user["waiting_list_of_trainers"].append(fitness_trainer_id)
+
+        users_table.update_item(
+            Key={"user_id": standard_user_id},
+            UpdateExpression="SET waiting_list_of_trainers = :waiting_list_of_trainers",
+            ExpressionAttributeValues={
+                ":waiting_list_of_trainers": standard_user["waiting_list_of_trainers"]
+            },
+        )
+
+        if "waiting_list_of_users" not in fitness_trainer:
+            fitness_trainer["waiting_list_of_users"] = []
+
+        if standard_user_id not in fitness_trainer["waiting_list_of_users"]:
+            fitness_trainer["waiting_list_of_users"].append(standard_user_id)
+
+        users_table.update_item(
+            Key={"user_id": fitness_trainer_id},
+            UpdateExpression="SET waiting_list_of_users = :waiting_list_of_users",
+            ExpressionAttributeValues={
+                ":waiting_list_of_users": fitness_trainer["waiting_list_of_users"]
+            },
+        )
+
+        return True
+
+    except ClientError as e:
+        print(f"Error sending data request: {e}")
+        return False
+
+
+def cancel_data_request_to_user(fitness_trainer_id, standard_user_id):
+    try:
+        standard_user = get_user(standard_user_id)
+        fitness_trainer = get_user(fitness_trainer_id)
+
+        if not standard_user or not fitness_trainer:
+            print("User(s) not found")
+            return False
+
+        if "waiting_list_of_trainers" in standard_user:
+            waiting_list_of_trainers = standard_user["waiting_list_of_trainers"]
+            if fitness_trainer_id in waiting_list_of_trainers:
+                waiting_list_of_trainers.remove(fitness_trainer_id)
+                users_table.update_item(
+                    Key={"user_id": standard_user_id},
+                    UpdateExpression="SET waiting_list_of_trainers = :new_list",
+                    ExpressionAttributeValues={":new_list": waiting_list_of_trainers},
+                )
+
+        if "waiting_list_of_users" in fitness_trainer:
+            waiting_list_of_users = fitness_trainer["waiting_list_of_users"]
+            if standard_user_id in waiting_list_of_users:
+                waiting_list_of_users.remove(standard_user_id)
+                users_table.update_item(
+                    Key={"user_id": fitness_trainer_id},
+                    UpdateExpression="SET waiting_list_of_users = :new_list",
+                    ExpressionAttributeValues={":new_list": waiting_list_of_users},
+                )
+
+        return True
+
+    except Exception as e:
+        print(f"Error in cancelling data request: {e}")
+        return False
 
 
 # -------------------------------
