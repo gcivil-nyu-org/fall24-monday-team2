@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com css2?family-Open+Sans:wght@300;400;00;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family-Open+Sans:wght@300;400;00;600;700&display=swap');
 *
 {
     margin: 0;padding: 0;
@@ -23,6 +23,7 @@ body
     box-shadow: 0 1px 1px 0 rgba(0,0,0,0.06),0 2px 5px 0 rgba(0,0,0,0.06);
     display: flex;
 } */
+
 .container {
     display: flex;
     flex-direction: row; /* Ensure left and right sections are side-by-side */
@@ -238,7 +239,7 @@ body
 {
     color: #aaa;
     display: -webkit-box;
-    -webkit-line-break: 1;
+    /* -webkit-line-break: 1; */
     font-size: 0.9em;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -408,11 +409,12 @@ body
 
 .chatbox_input {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: row; /* Stack elements vertically */
+    align-items: center; /* Align all elements to the left */
     padding: 10px;
     background: #f0f0f0;
     border-top: 1px solid #ccc;
+    gap: 10px;
 }
 /* .chatbox_input input
 {
@@ -424,26 +426,29 @@ body
 } */
 
 .chatbox_input input {
-    flex: 1;
+    flex-grow: 1; /* Make the input take up available space */
     height: 40px;
     padding: 5px 10px;
-    margin-right: 10px;
     border: 1px solid #ccc;
     border-radius: 5px;
+    font-size: 15px !important;
+    line-height: 1.2;
 }
 
 .chatbox_input input::placeholder {
     color: #999; /* Placeholder text color */
+    font-size: 15px !important; 
+    line-height: 1.2;
 }
 
 .chatbox_input button {
-    width: 80px;
     height: 40px;
     background-color: #4CAF50;
     color: white;
     border: none;
     border-radius: 5px;
     cursor: pointer;
+    padding: 0 20px; /* Adjust padding for button size */
 }
 
 .chatbox_input button:hover {

@@ -7,6 +7,7 @@
 </head>
 
 <body>
+    
     <div class="container">
         <div class="leftSide">
             <!--header-->
@@ -35,9 +36,6 @@
                         <div class="details">
                             <div class="listHead">
                                 <h4>{{ i.username }}</h4>
-                                {% if i.unread_count > 0 %}
-                                <span class="unread-badge">{{ i.unread_count }}</span>
-                                {% endif %}
                             </div>
                         </div>
                     </div>
@@ -68,7 +66,7 @@
             </div>
             <div class="chatBox" id="chatBox"></div>
             <div class="chatbox_input">
-                <input id="input_message" type="text" placeholder="Type your message here...">
+                <input id="input_message" type="text" placeholder="Type your message here..." maxlength="500">
                 <button id="submit">Send</button>
             </div>
         </div>
@@ -116,6 +114,33 @@
                 }
             });
 
+            const charCounter = document.getElementById("char_counter");
+            const maxLength = 500;
+
+            inputField.addEventListener("input", function () {
+                const remaining = maxLength - inputField.value.length;
+                charCounter.textContent = `Characters remaining: ${remaining}`;
+
+                // Change the color and behavior if limit is reached
+                if (remaining === 0) {
+                    charCounter.classList.add("red");
+                    inputField.value = inputField.value.slice(0, maxLength); // Enforce the limit
+                } else if (remaining < 0) {
+                    charCounter.classList.add("red");
+                    charCounter.style.animation = "flash 0.5s ease"; // Flash effect
+                } else {
+                    charCounter.classList.remove("red");
+                    charCounter.style.animation = ""; // Remove flash effect
+                }
+            });
+
+            // Ensure the delete key is allowed to decrease the character count
+            inputField.addEventListener("keydown", function (event) {
+                if (event.key === "Backspace" || event.key === "Delete") {
+                    charCounter.style.animation = ""; // Stop flashing when deleting
+                }
+            });
+
             // Send message when pressing Enter in the input field
             inputField.addEventListener("keydown", function (e) {
                 if (e.key === "Enter" && !e.shiftKey) { // Check for Enter key and exclude Shift+Enter
@@ -129,32 +154,61 @@
             });
 
             const chatBox = document.getElementById("chatBox");
+
             // Add hover event listeners to display the timestamp bubble
+            // chatBox.addEventListener("mouseover", function (e) {
+            //     const messageDiv = e.target.closest(".message");
+            //     if (!messageDiv || e.target.tagName !== "P") return;
+
+            //     const timestamp = messageDiv.getAttribute("data-timestamp");
+            //     if (!timestamp) return;
+
+            //     // Avoid duplicate bubbles
+            //     if (messageDiv.querySelector(".timestamp-bubble")) return;
+
+            //     // Create the bubble
+            //     const bubble = document.createElement("div");
+            //     bubble.classList.add("timestamp-bubble");
+            //     bubble.textContent = timestamp;
+            //     messageDiv.appendChild(bubble);
+
+            //     // Dynamically position the bubble
+            //     const bubbleRect = bubble.getBoundingClientRect();
+            //     const messageRect = messageDiv.getBoundingClientRect();
+
+            //     bubble.style.left = `${(messageRect.width - bubbleRect.width) / 2}px`; // Center horizontally
+            //     bubble.style.top = `${messageRect.height + 8}px`; // Add margin below the message
+            // });
             chatBox.addEventListener("mouseover", function (e) {
-            const messageDiv = e.target.closest(".message");
-            if (!messageDiv || e.target.tagName !== "P") return;
+                const messageDiv = e.target.closest(".message");
+                if (!messageDiv || e.target.tagName !== "P") return;
 
-            const timestamp = messageDiv.getAttribute("data-timestamp");
-            if (!timestamp) return;
+                const timestamp = messageDiv.getAttribute("data-timestamp");
+                if (!timestamp) return;
 
-            // Avoid duplicate bubbles
-            if (messageDiv.querySelector(".timestamp-bubble")) return;
+                // Avoid duplicate timestamp bubbles
+                if (messageDiv.querySelector(".timestamp-bubble")) return;
 
-            // Create the bubble
-            const bubble = document.createElement("div");
-            bubble.classList.add("timestamp-bubble");
-            bubble.textContent = timestamp;
+                const bubble = document.createElement("div");
+                bubble.classList.add("timestamp-bubble");
+                bubble.textContent = timestamp;
+                messageDiv.appendChild(bubble);
 
-            // Append the bubble to the message div
-            messageDiv.appendChild(bubble);
-
-            // Dynamically position the bubble
-            const bubbleRect = bubble.getBoundingClientRect();
-            const messageRect = messageDiv.getBoundingClientRect();
-
-            bubble.style.left = `${(messageRect.width - bubbleRect.width) / 2}px`; // Center horizontally
-            bubble.style.top = `${messageRect.height + 8}px`; // Add margin below the message
+                // Position the bubble dynamically
+                const bubbleRect = bubble.getBoundingClientRect();
+                const messageRect = messageDiv.getBoundingClientRect();
+                bubble.style.left = `${(messageRect.width - bubbleRect.width) / 2}px`;
+                bubble.style.top = `${messageRect.height + 8}px`;
             });
+
+            chatBox.addEventListener("mouseout", function (e) {
+                const messageDiv = e.target.closest(".message");
+                if (!messageDiv) return;
+
+                const bubble = messageDiv.querySelector(".timestamp-bubble");
+                if (bubble) bubble.remove();
+            });
+
 
             chatBox.addEventListener("mouseout", function (e) {
                 const messageDiv = e.target.closest(".message");
@@ -205,19 +259,6 @@
             if (unreadBadge) {
                 unreadBadge.remove(); // Remove the unread badge
             }
-
-            // Mark messages as read when opening the chat
-            fetch(`/chat/mark_messages_as_read/${roomId}/`, {
-                method: "POST",
-                headers: { "X-CSRFToken": getCookie("csrftoken") },
-            })
-                .then((response) => response.json())
-                .then((data) => {
-                    if (!data.success) {
-                        console.error("Failed to mark messages as read:", data.error);
-                    }
-                })
-                .catch((error) => console.error("Error marking messages as read:", error));
 
             // Fetch chat history
             fetch(`/chat/history/${roomId}/`)
@@ -274,36 +315,51 @@
 
             chatSocket.onmessage = function (e) {
                 const data = JSON.parse(e.data);
+                const chatBox = document.getElementById("chatBox");
 
-                const messageDiv = document.createElement("div");
-                messageDiv.classList.add("message");
-                messageDiv.classList.add(
-                    data.sender === "{{ mine.user_id }}" ? "my_message" : "frnd_message"
-                );
-                messageDiv.innerHTML = `<p>${data.message}</p>`;
-                chatBox.appendChild(messageDiv);
-                chatBox.classList.remove("empty");
-                scrollToBottom();
+                if (data.message) {
+                    // Find the temporary message if it exists
+                    const existingTempMessage = chatBox.querySelector(`[data-temp-id]`);
+                    if (existingTempMessage && data.sender === "{{ mine.user_id }}") {
+                        // Update the temporary message with the server timestamp
+                        existingTempMessage.setAttribute(
+                            "data-timestamp",
+                            new Date(data.timestamp * 1000).toLocaleString()
+                        );
+                        existingTempMessage.removeAttribute("data-temp-id"); // Remove temp marker
+                    } else {
+                        // Create a new message div if it's not a temporary message
+                        const messageDiv = document.createElement("div");
+                        messageDiv.classList.add("message");
+                        messageDiv.classList.add(
+                            data.sender === "{{ mine.user_id }}" ? "my_message" : "frnd_message"
+                        );
+                        const timestamp = data.timestamp
+                            ? new Date(data.timestamp * 1000).toLocaleString()
+                            : "Invalid Date"; // Fallback for missing timestamps
+                        messageDiv.setAttribute("data-timestamp", timestamp);
+                        messageDiv.innerHTML = `<p>${data.message}</p>`;
+                        chatBox.appendChild(messageDiv);
+                        chatBox.classList.remove("empty");
+                    }
 
-                // Move the active chat to the top of the user list if the message is from another user
-                if (data.sender !== "{{ mine.user_id }}") {
-                    moveActiveChatToTop(data.sender, data.sender_name || "Unknown");
+                    // Scroll to the bottom
+                    scrollToBottom();
+
+                    // Move active chat to the top if necessary
+                    if (data.sender !== "{{ mine.user_id }}") {
+                        moveActiveChatToTop(data.sender, data.sender_name || "Unknown");
+                    }
                 }
             };
 
-            chatSocket.onclose = function () {
-                console.log("WebSocket connection closed");
-            };
         }
-
 
         function submitMessage() {
             const inputField = document.getElementById("input_message");
             const inputValue = inputField.value.trim();
 
-            if (inputValue === "") {
-                return; // Don't send empty messages
-            }
+            if (inputValue === "") return; // Prevent sending empty messages
 
             if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
                 const activeChatElement = document.querySelector(".chatlist .block.active");
@@ -312,15 +368,32 @@
                     : null;
                 const recipientName = activeChatElement
                     ? activeChatElement.parentElement.getAttribute("data-user-name")
-                    : "Unknown";
+                    : null;
 
+                const tempId = `temp-${Date.now()}`;
+                const temporaryTimestamp = new Date().toLocaleString();
+
+                // Display the message immediately in the chat box
+                const chatBox = document.getElementById("chatBox");
+                const messageDiv = document.createElement("div");
+                messageDiv.classList.add("message", "my_message");
+                messageDiv.setAttribute("data-temp-id", tempId); // Temporary ID for matching
+                messageDiv.setAttribute("data-timestamp", temporaryTimestamp); // Temporary timestamp
+                messageDiv.innerHTML = `<p>${inputValue}</p>`;
+                chatBox.appendChild(messageDiv);
+                chatBox.classList.remove("empty");
+                scrollToBottom();
+
+                // Send the message to the WebSocket
                 chatSocket.send(
                     JSON.stringify({
                         message: inputValue,
                         sender: "{{ mine.user_id }}",
+                        recipient: recipientId,
                     })
                 );
 
+                // Immediately move the conversation to the top
                 if (recipientId && recipientName) {
                     moveActiveChatToTop(recipientId, recipientName);
                 }
@@ -328,9 +401,46 @@
                 // Clear the input field
                 inputField.value = "";
             } else {
-                console.error("WebSocket is not ready to send messages");
+                console.error("WebSocket is not ready to send messages.");
             }
         }
+
+        chatSocket.onmessage = function (e) {
+            const data = JSON.parse(e.data);
+            const chatBox = document.getElementById("chatBox");
+
+            if (data.message) {
+                const tempMessage = chatBox.querySelector(`[data-temp-id]`);
+                if (tempMessage && data.sender === "{{ mine.user_id }}") {
+                    // Update temporary message
+                    tempMessage.setAttribute(
+                        "data-timestamp",
+                        new Date(data.timestamp * 1000).toLocaleString()
+                    );
+                    tempMessage.removeAttribute("data-temp-id");
+                } else {
+                    // Display new message
+                    const messageDiv = document.createElement("div");
+                    messageDiv.classList.add("message");
+                    messageDiv.classList.add(
+                        data.sender === "{{ mine.user_id }}" ? "my_message" : "frnd_message"
+                    );
+                    messageDiv.setAttribute(
+                        "data-timestamp",
+                        new Date(data.timestamp * 1000).toLocaleString()
+                    );
+                    messageDiv.innerHTML = `<p>${data.message}</p>`;
+                    chatBox.appendChild(messageDiv);
+                    chatBox.classList.remove("empty");
+                }
+
+                // Scroll to the bottom to show the latest message
+                scrollToBottom();
+
+                // Move conversation to the top of the list
+                moveActiveChatToTop(data.sender, data.sender_name || "Unknown");
+            }
+        };
 
         function scrollToBottom() {
             const chatBox = document.getElementById("chatBox");
@@ -440,6 +550,7 @@ document.addEventListener("click", (event) => {
                 }
             });
         }
+
         function moveActiveChatToTop(userId, username) {
             const userList = document.getElementById("user_list");
             const chatItem = document.querySelector(`.chatlist[data-user-id="${userId}"]`);

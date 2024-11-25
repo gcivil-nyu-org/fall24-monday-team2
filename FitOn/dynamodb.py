@@ -11,6 +11,7 @@ from django.contrib.auth.hashers import check_password, make_password
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
+from django.http import JsonResponse
 
 # Connect to DynamoDB
 dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
@@ -952,6 +953,9 @@ def mark_thread_as_reported(thread_id):
 
 @sync_to_async
 def save_chat_message(sender, message, room_name, sender_name):
+    if len(message) > 500:
+        return JsonResponse({"error": "Message exceeds character limit"}, status=400)
+    
     timestamp = int(datetime.utcnow().timestamp()) 
 
     chat_table.put_item(
@@ -963,6 +967,7 @@ def save_chat_message(sender, message, room_name, sender_name):
             "timestamp": timestamp,
         }
     )
+    return JsonResponse({"success": True})
 
 
 def get_users_without_specific_username(exclude_username):
@@ -985,6 +990,28 @@ def get_chat_history_from_db(room_id):
         ScanIndexForward=True,
     )
     return response
+
+def get_unread_messages_count(receiver_id):
+    """
+    Fetch unread messages for a specific user using the GSI.
+    """
+    try:
+        response = chat_table.query(
+            IndexName="receiver-is_read-index",  # GSI name
+            KeyConditionExpression=Key("receiver").eq(receiver_id) & Key("is_read").eq(0)
+        )
+
+        # Count unread messages grouped by sender
+        unread_counts = {}
+        for item in response.get("Items", []):
+            sender = item["sender"]
+            unread_counts[sender] = unread_counts.get(sender, 0) + 1
+
+        return unread_counts
+    except Exception as e:
+        print(f"Error querying unread messages: {e}")
+        return {}
+
 
 def get_users_with_chat_history(user_id):
     try:

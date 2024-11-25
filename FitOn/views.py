@@ -2182,28 +2182,3 @@ def search_users(request):
     except Exception as e:
         print(f"Error in search_users function: {e}")
         return JsonResponse({"error": "Error occurred while searching users."}, status=500)
-
-@csrf_exempt
-def mark_messages_as_read(request, room_id):
-    username = request.session.get("username")
-    user = get_user_by_username(username)
-
-    try:
-        # Query messages for the given room_id and receiver
-        response = chat_table.query(
-            KeyConditionExpression=Key("room_name").eq(room_id) & Key("receiver").eq(user["user_id"])
-        )
-        messages = response.get("Items", [])
-
-        # Mark all messages as read
-        for message in messages:
-            if not message.get("is_read", False):
-                chat_table.update_item(
-                    Key={"room_name": room_id, "timestamp": message["timestamp"]},
-                    UpdateExpression="SET is_read = :val",
-                    ExpressionAttributeValues={":val": True},
-                )
-        return JsonResponse({"success": True})
-    except Exception as e:
-        print(f"Error marking messages as read: {e}")
-        return JsonResponse({"success": False, "error": str(e)}, status=500)
