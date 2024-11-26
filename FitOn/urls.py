@@ -77,6 +77,7 @@ urlpatterns = [
     path("delete_post/", views.delete_post_view, name="delete_post"),
     path("metrics/", views.list_metrics, name="metrics_list"),
     path("data/", views.get_metric_data, name="get_metric_data"),
+    path('store/', views.store_exercises, name='store_exercises'),
     path("submit-health-data/", views.health_data_view, name="submit_health_data"),
     path("delink/", views.delink_google_fit, name="delink_google_fit"),
     path("ban_user/", views.toggle_ban_user, name="toggle_ban_user"),

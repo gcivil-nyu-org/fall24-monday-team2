@@ -1,7 +1,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.serializers import serialize
-from models import Exercise, MuscleGroup, User
+from .models import Exercise, MuscleGroup, User
+from django.http import JsonResponse
 
 from .dynamodb import (
     add_fitness_trainer_application,
@@ -53,6 +54,7 @@ from .forms import (
 # from .models import PasswordResetRequest
 import datetime as dt
 import re
+import ast
 from datetime import datetime
 import pytz
 from datetime import timedelta
@@ -469,7 +471,8 @@ def authorize_google_fit(request):
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
         flow.redirect_uri = request.build_absolute_uri(
             reverse("callback_google_fit")
-        ).replace("http://", "https://")
+        )
+        # .replace("http://", "https://")
         print("Redirected URI: ", flow.redirect_uri)
         authorization_url, state = flow.authorization_url(
             access_type="offline", include_granted_scopes="true"
@@ -1350,13 +1353,8 @@ async def fetch_metric_data(service, metric, total_data, duration, frequency, em
     elif frequency == "monthly":
         bucket = 2592000000
 
-    # print(start_time.timestamp())
-    # print(end_time.timestamp())
-
     start_date = start_time.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     end_date = end_time.astimezone(pytz.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    # print(start_date)
-    # print(end_date)
 
     if metric == "sleep":
         data = (
@@ -1466,6 +1464,40 @@ async def fetch_metric_data(service, metric, total_data, duration, frequency, em
     else:
         print("Unknown metric")
 
+# @sync_to_async
+# async def get_sleep_scores(total_data, email):
+#     sleep_body = ""
+#     for sleep_data in total_data["sleep"]["sleep_data_json"]:
+#         duration = sleep_data['count']
+#         user = User.objects.get(email=email)
+#         age=26
+#         activity_level=70
+#         given_date = datetime.datetime.strptime(sleep_data['start'], '%b %d, %I %p')
+#         nearest_hr = min(total_data['restingHeartRate']['resting_heart_data_json'], key=lambda x: abs(datetime.datetime.strptime(x['start'], '%b %d, %I %p') - given_date))
+#         heart_rate=nearest_hr['count']
+        
+#         nearest_steps = min(total_data['steps']['steps_data_json'], key=lambda x: abs(datetime.datetime.strptime(x['start'], '%b %d, %I %p') - given_date))
+#         daily_steps=nearest_steps['count']
+        
+#         gender_female=(user.sex == "female")
+#         gender_male=(user.sex == "male")
+        
+#         sleep_body += f"{age},{duration},{activity_level},{heart_rate},{daily_steps},{gender_female},{gender_male},{True},{True},{False},{False},{False},{False}\n"
+    
+#     if sleep_body and sleep_body[-1] == '\n':
+#         sleep_body = sleep_body[:-1]
+        
+#     url = "https://9pweqg5b1i.execute-api.us-west-2.amazonaws.com/dev/inference"
+    
+#     response = requests.post(url, json=sleep_body)
+#     sleep_score = response.text.split(":")[1][:-1].strip()
+#     try:
+#         sleep_score = ast.literal_eval(sleep_score)
+#     except Exception as e:
+#         print(e)
+#     for i, sleep_data in enumerate(total_data["sleep"]["sleep_data_json"]):
+#         sleep_data["count"] = sleep_score[i]
+#     return total_data
 
 @sync_to_async
 def get_credentials(request):
@@ -1509,7 +1541,21 @@ async def fetch_all_metric_data(request, duration, frequency):
 async def get_metric_data(request):
     credentials = await sync_to_async(lambda: request.session.get("credentials"))()
     user_id = await sync_to_async(lambda: request.session.get("user_id"))()
+    if not user_id:
+        await add_message(
+            request,
+            messages.ERROR,
+            "User not logged in. Please sign in to access your data.",
+        )
+        return await perform_redirect("profile")
     user = get_user(user_id)
+    if not user:
+        await add_message(
+            request,
+            messages.ERROR,
+            "User details could not be retrieved. Please try again later.",
+        )
+        return await perform_redirect("profile")
     user_email = user.get("email")
     print("Credentials: \n", credentials)
     print("User Email: \n", user_email)
@@ -1524,7 +1570,7 @@ async def get_metric_data(request):
             frequency = request.GET.get("data_freq")
 
         total_data = await fetch_all_metric_data(request, duration, frequency)
-        rds_response = await rds_main(user_email, total_data)
+        rds_response = await sync_to_async(rds_main(user_email, total_data))()
         print("RDS Response: \n", rds_response)
         context = {"data": total_data}
         # print("Inside get metric:", context)
@@ -1983,138 +2029,138 @@ def punishments_view(request):
 # #   Sleep Score
 # # ---------------------
 
-# def store_exercises(request):
-#     post_data = json.loads(request.body)
-#     exercise_list = post_data['data_list']
-#     print("Exercises: ", exercise_list)
-#     connection = pymysql.connect(host="database-1.chu04k6u0syf.us-east-1.rds.amazonaws.com", user='admin', password='admin1234', database='exercises')
-#     user = User.objects.get(email=request.user.username)
-#     success = False
-#     try:
-#         with connection.cursor() as cursor:
-#             sql = "INSERT INTO fitness_data (timestamp, user_id, Age, gender, height, weight, heartrate, steps, exercise_id) VALUES ("
+def store_exercises(request):
+    post_data = json.loads(request.body)
+    exercise_list = post_data['data_list']
+    print("Exercises: ", exercise_list)
+    connection = pymysql.connect(host="database-1.chu04k6u0syf.us-east-1.rds.amazonaws.com", user='admin', password='admin1234', database='exercises')
+    user = User.objects.get(email=request.user.username)
+    success = False
+    try:
+        with connection.cursor() as cursor:
+            sql = "INSERT INTO fitness_data (timestamp, user_id, Age, gender, height, weight, heartrate, steps, exercise_id) VALUES ("
             
-#             ts = datetime.datetime.now()
-#             # Iterate over the list of values and execute the query for each row
-#             for value in exercise_list:
-#                 ts = ts - datetime.timedelta(seconds=1)
-#                 time = ts.strftime('%Y-%m-%d %H:%M:%S.%f')
-#                 temp_sql = str(sql)
-#                 temp_sql += f'"{time}", '
-#                 temp_sql += str(user.id)
-#                 temp_sql += f", 26, "
-#                 gender = 1 if user.sex == "male" else 0
-#                 temp_sql += f"{gender}, "
-#                 temp_sql += f"{user.height}, "
-#                 temp_sql += f"{user.weight}, "
-#                 temp_sql += f"75, "
-#                 temp_sql += f"5000, "
-#                 temp_sql += f"{value})"
+            ts = datetime.datetime.now()
+            # Iterate over the list of values and execute the query for each row
+            for value in exercise_list:
+                ts = ts - datetime.timedelta(seconds=1)
+                time = ts.strftime('%Y-%m-%d %H:%M:%S.%f')
+                temp_sql = str(sql)
+                temp_sql += f'"{time}", '
+                temp_sql += str(user.id)
+                temp_sql += f", 26, "
+                gender = 1 if user.sex == "male" else 0
+                temp_sql += f"{gender}, "
+                temp_sql += f"{user.height}, "
+                temp_sql += f"{user.weight}, "
+                temp_sql += f"75, "
+                temp_sql += f"5000, "
+                temp_sql += f"{value})"
                 
-#                 ret = cursor.execute(temp_sql)
+                ret = cursor.execute(temp_sql)
             
-#             # Commit the transaction
-#             connection.commit()
-#             print("Insertion of exercises successful")
-#             success = True
+            # Commit the transaction
+            connection.commit()
+            print("Insertion of exercises successful")
+            success = True
 
-#     finally:
-#         # Close the connection
-#         connection.close()
+    finally:
+        # Close the connection
+        connection.close()
     
-#     if success:
-#         return JsonResponse({'message': 'Data received successfully'})
-#     else:
-#         return JsonResponse({'error': 'Insertion failed'}, status=500)
+    if success:
+        return JsonResponse({'message': 'Data received successfully'})
+    else:
+        return JsonResponse({'error': 'Insertion failed'}, status=500)
 
-# def list_exercises(request):
-#     name = request.GET.get('exercise_name')
-#     level = request.GET.get('exercise_level')
-#     equipment = request.GET.get('exercise_equipment')
-#     muscle = request.GET.get('exercise_muscle')
-#     category = request.GET.get('exercise_category')
+def list_exercises(request):
+    name = request.GET.get('exercise_name')
+    level = request.GET.get('exercise_level')
+    equipment = request.GET.get('exercise_equipment')
+    muscle = request.GET.get('exercise_muscle')
+    category = request.GET.get('exercise_category')
     
-#     user = User.objects.get(email=request.user.username)
+    user = User.objects.get(email=request.user.username)
     
-#     gender = 1 if (user.sex == "male") else 0
-#     body = f"26, {gender}, {user.height}, {user.weight}, 70, 5000"
-#     url = "https://2pfeath3sg.execute-api.us-east-1.amazonaws.com/dev/recommend"
-#     response = requests.post(url, json=body).text
-#     print(response)
-#     start_index = response.index('[')
-#     end_index = response.rindex(']')
-#     list_string = response[start_index:end_index + 1]
-#     inference_list = eval(list_string)[0]
-#     if(type(inference_list) == int):
-#         inference_list = [inference_list]
-#     inference_list = [max(50+i, i) for i in inference_list]
+    gender = 1 if (user.sex == "male") else 0
+    body = f"26, {gender}, {user.height}, {user.weight}, 70, 5000"
+    url = "https://2pfeath3sg.execute-api.us-east-1.amazonaws.com/dev/recommend"
+    response = requests.post(url, json=body).text
+    print(response)
+    start_index = response.index('[')
+    end_index = response.rindex(']')
+    list_string = response[start_index:end_index + 1]
+    inference_list = eval(list_string)[0]
+    if(type(inference_list) == int):
+        inference_list = [inference_list]
+    inference_list = [max(50+i, i) for i in inference_list]
     
-#     selected_exercises = request.GET.getlist('exercise')
-#     exercises = Exercise.objects.all()
+    selected_exercises = request.GET.getlist('exercise')
+    exercises = Exercise.objects.all()
 
-#     if name:
-#         exercises = exercises.filter(name__icontains=name)
-#     if level and level != 'none':
-#         exercises = exercises.filter(level__icontains=level)
-#     if equipment and equipment != 'none':
-#         exercises = exercises.filter(equipment__icontains=equipment)
-#     if category and category != 'none':
-#         exercises = exercises.filter(category__icontains=category)
-#     if muscle and muscle != 'none':
-#         if MuscleGroup.objects.filter(name=muscle).exists():
-#             exercises = exercises.filter(primaryMuscles__name__icontains=muscle) | \
-#                     exercises.filter(secondaryMuscles__name__icontains=muscle)
+    if name:
+        exercises = exercises.filter(name__icontains=name)
+    if level and level != 'none':
+        exercises = exercises.filter(level__icontains=level)
+    if equipment and equipment != 'none':
+        exercises = exercises.filter(equipment__icontains=equipment)
+    if category and category != 'none':
+        exercises = exercises.filter(category__icontains=category)
+    if muscle and muscle != 'none':
+        if MuscleGroup.objects.filter(name=muscle).exists():
+            exercises = exercises.filter(primaryMuscles__name__icontains=muscle) | \
+                    exercises.filter(secondaryMuscles__name__icontains=muscle)
     
-#     filter_dict = {
-#         "name": name if name else "",
-#         "level": level if level else "none",
-#         "equipment": equipment if equipment else "none",
-#         "category": category if category else "none",
-#         "muscle": muscle if muscle else "none"
-#     }
+    filter_dict = {
+        "name": name if name else "",
+        "level": level if level else "none",
+        "equipment": equipment if equipment else "none",
+        "category": category if category else "none",
+        "muscle": muscle if muscle else "none"
+    }
     
-#     page_number = request.GET.get('page', 1)  # Default to page 1 if not provided
-#     paginator = Paginator(exercises, 10)
+    page_number = request.GET.get('page', 1)  # Default to page 1 if not provided
+    paginator = Paginator(exercises, 10)
     
-#     try:
-#         exercises = paginator.page(page_number)
-#     except PageNotAnInteger:
-#         exercises = paginator.page(1)
-#     except EmptyPage:
-#         exercises = paginator.page(paginator.num_pages)
+    try:
+        exercises = paginator.page(page_number)
+    except PageNotAnInteger:
+        exercises = paginator.page(1)
+    except EmptyPage:
+        exercises = paginator.page(paginator.num_pages)
 
-#     current_page_number = exercises.number
-#     page_range = paginator.page_range
-#     num_pages = paginator.num_pages
+    current_page_number = exercises.number
+    page_range = paginator.page_range
+    num_pages = paginator.num_pages
     
-#     image_urls = []
-#     for ex in exercises:
-#         name = re.sub(r"[^a-zA-Z0-9-(),']", '_', ex.name)
-#         url = {
-#             "url_0": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_0.jpg",
-#             "url_1": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_1.jpg"
-#         }
-#         image_urls.append(url)
+    image_urls = []
+    for ex in exercises:
+        name = re.sub(r"[^a-zA-Z0-9-(),']", '_', ex.name)
+        url = {
+            "url_0": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_0.jpg",
+            "url_1": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_1.jpg"
+        }
+        image_urls.append(url)
     
-#     if selected_exercises and len(selected_exercises):
-#         selected_exercises = Exercise.objects.filter(id__in=selected_exercises)
-#     else:
-#         selected_exercises = []
+    if selected_exercises and len(selected_exercises):
+        selected_exercises = Exercise.objects.filter(id__in=selected_exercises)
+    else:
+        selected_exercises = []
     
-#     if inference_list and len(inference_list) == 4:
-#         recommended_exercises = Exercise.objects.filter(id__in=inference_list)
-#     else:
-#         recommended_exercises = []
+    if inference_list and len(inference_list) == 4:
+        recommended_exercises = Exercise.objects.filter(id__in=inference_list)
+    else:
+        recommended_exercises = []
     
-#     recommended_image_urls = []
-#     for ex in recommended_exercises:
-#         name = re.sub(r"[^a-zA-Z0-9-(),']", '_', ex.name)
-#         url = {
-#             "url_0": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_0.jpg",
-#             "url_1": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_1.jpg"
-#         }
-#         recommended_image_urls.append(url)
+    recommended_image_urls = []
+    for ex in recommended_exercises:
+        name = re.sub(r"[^a-zA-Z0-9-(),']", '_', ex.name)
+        url = {
+            "url_0": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_0.jpg",
+            "url_1": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_1.jpg"
+        }
+        recommended_image_urls.append(url)
     
-#     print(recommended_exercises)
+    print(recommended_exercises)
 
-#     return render(request, 'exercise/exercise_list.html', {'exercises': zip(exercises, image_urls), 'filter_dict': filter_dict, 'current_page_number': current_page_number, 'page_range': page_range, 'num_pages': num_pages, 'selected_exercises': selected_exercises, 'recommended_exercises': zip(recommended_exercises, recommended_image_urls)})
+    return render(request, 'exercise/exercise_list.html', {'exercises': zip(exercises, image_urls), 'filter_dict': filter_dict, 'current_page_number': current_page_number, 'page_range': page_range, 'num_pages': num_pages, 'selected_exercises': selected_exercises, 'recommended_exercises': zip(recommended_exercises, recommended_image_urls)})

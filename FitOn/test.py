@@ -9,6 +9,8 @@ from django.urls import reverse
 import boto3
 import json
 # import pytest
+from asgiref.sync import sync_to_async
+from .models import User
 
 
 # import unittest
@@ -24,7 +26,11 @@ from django.utils.encoding import force_bytes
 from django.core import mail
 
 # import time
-from .views import SCOPES
+from .views import (
+    SCOPES, 
+    fetch_metric_data,
+    fetch_all_metric_data
+) 
 from .dynamodb import (
     create_user,
     delete_user_by_username,
