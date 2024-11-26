@@ -185,11 +185,17 @@
         const passwordField = document.getElementById('id_password');
         const confirmPasswordField = document.getElementById('id_confirm_password');
         const emailField = document.getElementById('id_email');
+        const usernameField = document.getElementById('id_username');
         const signupButton = document.getElementById('signupButton');
         const emailError = document.getElementById('emailError');
         const passwordError = document.createElement('div');
+        const usernameError = document.createElement('div');
+
         passwordError.className = 'error-message';
+        usernameError.className = 'error-message';
+
         confirmPasswordField.parentNode.appendChild(passwordError);
+        usernameField.parentNode.appendChild(usernameError);
 
         function validateEmail(email) {
             const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -204,10 +210,24 @@
             return passwordField.value === confirmPasswordField.value && passwordField.value !== "";
         }
 
+        function validateUsername(username) {
+            const maxLength = 20;
+            const validPattern = /^[a-zA-Z0-9_]+$/;
+
+            if (username.length > maxLength) {
+                return "Username cannot exceed 20 characters.";
+            }
+            if (!validPattern.test(username)) {
+                return "Username can only contain letters, numbers, and underscores.";
+            }
+            return "";
+        }
+
         function checkFormValidity() {
             const isEmailValid = validateEmail(emailField.value);
             const doPasswordsMatch = passwordsMatch();
             const isPasswordValid = validPassword(passwordField.value);
+            const usernameErrorMessage = validateUsername(usernameField.value);
 
             if (isEmailValid) {
                 emailError.textContent = "";
@@ -221,12 +241,20 @@
                 passwordError.textContent = isPasswordValid ? "Passwords do not match." : "Please enter a valid password";
             }
 
-            signupButton.disabled = !(isEmailValid && doPasswordsMatch && isPasswordValid);
+            if (usernameErrorMessage) {
+                usernameError.textContent = usernameErrorMessage;
+            } else {
+                usernameError.textContent = "";
+            }
+
+            signupButton.disabled = !(isEmailValid && doPasswordsMatch && isPasswordValid && usernameErrorMessage === "");
         }
 
         emailField.addEventListener('input', checkFormValidity);
         passwordField.addEventListener('input', checkFormValidity);
         confirmPasswordField.addEventListener('input', checkFormValidity);
-    </script>
+        usernameField.addEventListener('input', checkFormValidity);
+</script>
+
 </body>
 </html>
