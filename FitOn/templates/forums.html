@@ -83,7 +83,7 @@
                 <tbody>
                     {% for thread in threads %}
                     <tr>
-                        <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title }}</a></td>
+                        <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title|truncatechars:100 }}</a></td>
                         <td>{{ thread.UserID }}</td>
                         <td>{{ thread.ReplyCount }}</td>
                         <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td>
@@ -214,8 +214,10 @@
 }
 
 .forum-table td a {
-    color: #0056b3;
-    text-decoration: none;
+    white-space: normal; /* Allow line wrapping */
+    word-wrap: break-word; /* Break long words to avoid overflow */
+    max-width: 300px; /* Optional: Set a maximum width to prevent rows from expanding too much */
+    display: block; /* Ensure the link behaves like a block element */
 }
 
 .forum-table td a:hover {
