@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ section_name }} Threads</title>
+    <style>
+        .back-button {
+            display: inline-block;
+            margin-bottom: 20px;
+            background-color: #0056b3;
+            color: white;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+        }
+
+        .back-button:hover {
+            background-color: #003e8a;
+        }
+    </style>
+</head>
+<body>
+    <div class="forum-container">
+        <a href="{% url 'forum' %}" class="back-button">Back to Forums</a>
+        <h3>{{ section_name }} Threads</h3>
+        <div class="forum-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Author</th>
+                        <th>Date Created</th>
+                        <th>Replies</th>
+                        <th>Last Reply</th>
+                        <th>Likes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for thread in threads %}
+                    <tr>
+                        <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title|truncatechars:100 }}</a></td>
+                        <td>{{ thread.UserID }}</td>
+                        <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td>
+                        <td>{{ thread.ReplyCount }}</td>
+                        <td>
+                            {% if thread.LastPostTime %}
+                                User: {{ thread.LastPostUser }}<br>
+                                Last Comment: {{ thread.LastPostTime|date:"M d, Y H:i" }}
+                            {% else %}
+                                No replies yet
+                            {% endif %}
+                        </td>
+                        <td>{{ thread.Likes }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
+{% endblock %}

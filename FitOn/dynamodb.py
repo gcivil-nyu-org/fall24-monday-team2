@@ -453,7 +453,7 @@ def remove_fitness_trainer(user_id):
 # -------------------------------
 
 
-def create_thread(title, user_id, content):
+def create_thread(title, user_id, content, section):
     thread_id = str(uuid.uuid4())
 
     created_at = datetime.now(tz).isoformat()
@@ -463,6 +463,7 @@ def create_thread(title, user_id, content):
         "Title": title,
         "UserID": user_id,
         "Content": content,
+        "Section": section,
         "CreatedAt": created_at,
         "Likes": 0,
         "LikedBy": [],
@@ -597,7 +598,12 @@ def delete_post(post_id, thread_id):
 
 
 def fetch_filtered_threads(
-    username="", thread_type="all", start_date="", end_date="", search_text=""
+    section=None,
+    username="",
+    thread_type="all",
+    start_date="",
+    end_date="",
+    search_text="",
 ):
     # Start building the filter expression
     filter_expression = Attr(
@@ -616,6 +622,9 @@ def fetch_filtered_threads(
     if end_date:
         end_date_dt = datetime.strptime(end_date, "%Y-%m-%d").isoformat()
         filter_expression &= Attr("CreatedAt").lte(end_date_dt)
+
+    if section:
+        filter_expression &= Attr("Section").eq(section)
 
     # Apply search text filter if provided (checks both thread titles and content)
     if search_text:

@@ -8,7 +8,165 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FitOn Forum</title>
+    <style>
+        /* Forum Header Styling */
+        .forum-header {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 0 20px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .new-thread-btn, .reports-btn {
+            background-color: #0056b3;
+            color: white;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+        }
+
+        .new-thread-btn:hover, .reports-btn:hover {
+            background-color: #003e8a;
+        }
+
+        /* Forum Content Layout */
+        .forum-content {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        /* Forum Sections Styling */
+        .forum-sections-container {
+            flex: 1;
+        }
+
+        .forum-sections-container h3 {
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .forum-sections {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .forum-section {
+            background-color: #fff;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .forum-section h3 {
+            margin: 0;
+            font-size: 18px;
+            color: #333;
+        }
+
+        .forum-section p {
+            margin: 5px 0 10px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .forum-details {
+            display: flex;
+            gap: 15px;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .forum-latest {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .forum-latest a {
+            color: #0056b3;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .forum-latest a:hover {
+            text-decoration: underline;
+        }
+
+        /* Forum Table Styling */
+        .forum-table-container {
+            flex: 2;
+        }
+
+        .forum-table-container h3 {
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .forum-table {
+            background-color: #fff;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+            overflow-x: auto; /* Ensure horizontal scrolling for small screens */
+        }
+
+        .forum-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .forum-table th,
+        .forum-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .forum-table th {
+            background-color: #333;
+            color: white;
+        }
+
+        .forum-table td a {
+            color: #0056b3;
+            text-decoration: none;
+        }
+
+        .forum-table td a:hover {
+            text-decoration: underline;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .forum-content {
+                flex-direction: column;
+            }
+
+            .forum-sections-container,
+            .forum-table-container {
+                flex: unset;
+                width: 100%;
+            }
+        }
+    </style>
 </head>
+<body>
     {% if is_banned %}
         <!-- Display a message if the user is banned -->
         <div class="ban-message" style="color: red; font-weight: bold; text-align: center; margin-top: 20px;">
@@ -17,276 +175,122 @@
     {% else %}
     <div class="forum-container">
         <div class="forum-header">
-            <h2>Forum Threads</h2>
             <div class="button-group">
                 {% if not is_banned %}
                     <a href="{% url 'new_thread' %}" class="new-thread-btn">New Thread</a>
                 {% endif %}
-
                 {% if user.is_admin %}
-                <a href="{% url 'reports' %}" class="reports-btn">Reports</a>  <!-- Add Reports button for admin -->
+                    <a href="{% url 'reports' %}" class="reports-btn">Reports</a>
                 {% endif %}
             </div>
         </div>
-        <!-- Filters Section -->
-        <div class="forum-filters">
-            <form method="GET" action="{% url 'forum' %}">
-                <!-- Filter by username (dropdown) -->
-                <label for="username">Filter by User:</label>
-                <select id="username" name="username">
-                    <option value="">All Users</option>
-                    {% for user in users %}
-                        <option value="{{ user.username }}">{{ user.username }}</option>
-                    {% endfor %}
-                </select>
 
-                <!-- Filter by thread or reply -->
-                <label for="type">Filter by Type:</label>
-                <select id="type" name="type">
-                    <option value="all">All</option>
-                    <option value="thread">Thread</option>
-                    <option value="reply">Reply</option>
-                </select>
+        <!-- Forum Content -->
+        <div class="forum-content">
+            <!-- Forum Sections -->
+            <div class="forum-sections-container">
+                <h3>Sections</h3>
+                <div class="forum-section">
+                    <h3><a href="{% url 'forum_section' 'General' %}">General Talk</a></h3>
+                    <p>The world of general discussions</p>
+                    <div class="forum-details">
+                        <span>Threads: 10.2K</span>
+                        <span>Posts: 183.5K</span>
+                    </div>
+                    <div class="forum-latest">
+                        <span>Latest Post: <a href="#">Let us talk about fitness!</a></span>
+                        <span>48 minutes ago by <strong>Lodro</strong></span>
+                    </div>
+                </div>
+                    <div class="forum-section">
+                        <h3>Workout Suggestions</h3>
+                        <p>Talk about workout ideas and suggestions</p>
+                        <div class="forum-details">
+                            <span>Threads: 1.8K</span>
+                            <span>Posts: 70.6K</span>
+                        </div>
+                        <div class="forum-latest">
+                            <span>Latest Post: <a href="#">Best long pip player??</a></span>
+                            <span>Today at 4:31 PM by <strong>Kase</strong></span>
+                        </div>
+                    </div>
+                    <div class="forum-section">
+                        <h3>Diet Plans</h3>
+                        <p>Discuss meal plans and nutrition</p>
+                        <div class="forum-details">
+                            <span>Threads: 1.1K</span>
+                            <span>Posts: 14.1K</span>
+                        </div>
+                        <div class="forum-latest">
+                            <span>Latest Post: <a href="#">Reverse Pendulum fast carbs</a></span>
+                            <span>Nov 19, 2024 by <strong>blahness</strong></span>
+                        </div>
+                    </div>
+                    <div class="forum-section">
+                        <h3>Other</h3>
+                        <p>All other fitness topics</p>
+                        <div class="forum-details">
+                            <span>Threads: 349</span>
+                            <span>Posts: 5.9K</span>
+                        </div>
+                        <div class="forum-latest">
+                            <span>Latest Post: <a href="#">How do I start my fitness blog?</a></span>
+                            <span>Nov 16, 2024 by <strong>Tony</strong></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-                <!-- Filter by date range -->
-                <label for="start-date">From:</label>
-                <input type="date" id="start-date" name="start_date">
-
-                <label for="end-date">To:</label>
-                <input type="date" id="end-date" name="end_date">
-
-                <!-- Filter by phrase or text -->
-                <label for="search">Search by Text:</label>
-                <input type="text" id="search" name="search" placeholder="Enter keyword...">
-
-                <!-- Submit button for filters -->
-                <button type="submit" class="filter-btn">Apply Filters</button>
-            </form>
+            <!-- Forum Table -->
+            <div class="forum-table-container">
+                <h3>Latest Threads</h3>
+                <div class="forum-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Section</th>
+                                <th>Author</th>
+                                <th>Date Created</th>
+                                <th>Replies</th>
+                                <th>Last Reply</th>
+                                <th>Likes</th>
+                                {% if user.is_admin %}
+                                    <th>Delete</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for thread in threads %}
+                            <tr>
+                                <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title|truncatechars:100 }}</a></td>
+                                <td>{{ thread.Section }}</td>
+                                <td>{{ thread.UserID }}</td>
+                                <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td>
+                                <td>{{ thread.ReplyCount }}</td>
+                                <td>
+                                    {% if thread.LastPostTime %}
+                                        User: {{ thread.LastPostUser }}<br>
+                                        Last Comment: {{ thread.LastPostTime|date:"M d, Y H:i" }}
+                                    {% else %}
+                                        No replies yet
+                                    {% endif %}
+                                </td>
+                                <td>{{ thread.Likes }}</td>
+                                {% if user.is_admin %}
+                                <td>
+                                    <button class="delete-thread-btn" data-thread-id="{{ thread.ThreadID }}">Delete</button>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
-
-        <!-- Forum Table -->
-        <div class="forum-table">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Title</th>
-                        <th>Author</th>
-                        <th>Replies</th>
-                        <th>Thread Created</th>
-                        <th>Last Reply</th>
-                        <th>Likes</th>
-                        {% if user.is_admin %} <!-- Check if the user is an admin -->
-                            <th>Delete</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for thread in threads %}
-                    <tr>
-                        <td><a href="{% url 'thread_detail' thread.ThreadID %}">{{ thread.Title|truncatechars:100 }}</a></td>
-                        <td>{{ thread.UserID }}</td>
-                        <td>{{ thread.ReplyCount }}</td>
-                        <td>{{ thread.CreatedAt|date:"M d, Y H:i" }}</td>
-                        <td>
-                            {% if thread.LastPostTime %}
-                                User: {{ thread.LastPostUser }}<br>
-                                Last Comment: {{ thread.LastPostTime|date:"M d, Y H:i" }}
-                            {% else %}
-                                No replies yet
-                            {% endif %}
-                        </td>
-                        <td>{{ thread.Likes }}</td>
-                        {% if user.is_admin %}
-                        <td>
-                            <button class="delete-thread-btn" data-thread-id="{{ thread.ThreadID }}">Delete</button>
-                        </td>
-                        {% endif %}
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+    </div>
     {% endif %}
-</div>
-
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
-        document.querySelectorAll(".delete-thread-btn").forEach(button => {
-            button.addEventListener("click", function() {
-                const threadId = this.getAttribute("data-thread-id");
-
-                if (confirm("Are you sure you want to delete this thread?")) {
-                    // Proceed with the delete request
-                    fetch("/delete_thread/", {
-                        method: "POST",
-                        headers: {
-                            "X-CSRFToken": "{{ csrf_token }}",
-                            "Content-Type": "application/json",
-                            "x-requested-with": "XMLHttpRequest"
-                        },
-                        body: JSON.stringify({ "thread_id": threadId })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.status === "success") {
-                            // Show success message after deletion
-                            alert("Thread deleted successfully.");
-                            
-                            // Remove the thread row from the table after user clicks "OK" on the success message
-                            this.closest("tr").remove();
-                        } else {
-                            alert("Error: " + data.message);
-                        }
-                    })
-                    .catch(error => console.error("Error deleting thread:", error));
-                }
-            });
-        });
-    });
-</script>
-<style>
-    /* Forum Table Styles */
-.forum-container {
-    padding: 20px;
-    max-width: 1000px;
-    margin: 0 auto;
-}
-
-.forum-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-.forum-header h2 {
-    margin: 0;
-    font-size: 28px;
-}
-
-.new-thread-btn {
-    background-color: #0056b3;
-    color: #fff;
-    padding: 8px 16px;
-    text-decoration: none;
-    border-radius: 5px;
-    font-size: 14px;
-    margin-right: 5px; /* Reduce space between buttons */
-    cursor: pointer;
-}
-
-.new-thread-btn:hover {
-    background-color: #003e8a;
-}
-
-.reports-btn {
-    background-color: #0056b3;
-    color: #fff;
-    padding: 8px 16px;
-    text-decoration: none;
-    border-radius: 5px;
-    font-size: 14px;
-    margin-right: 5px; /* Reduce space between buttons */
-    cursor: pointer;
-}
-
-.reports-btn:hover {
-    background-color: #003e8a;
-}
-
-.forum-table table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-    background-color: #f9f9f9;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-
-.forum-table th, .forum-table td {
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-}
-
-.forum-table th {
-    background-color: #333;
-    color: white;
-}
-
-.forum-table td a {
-    white-space: normal; /* Allow line wrapping */
-    word-wrap: break-word; /* Break long words to avoid overflow */
-    max-width: 300px; /* Optional: Set a maximum width to prevent rows from expanding too much */
-    display: block; /* Ensure the link behaves like a block element */
-}
-
-.forum-table td a:hover {
-    text-decoration: underline;
-}
-
-/* Filters Section */
-.forum-filters {
-    margin-bottom: 20px;
-    display: flex;
-    gap: 15px;
-    flex-wrap: wrap;
-}
-
-.forum-filters label {
-    font-weight: bold;
-    margin-right: 5px;
-}
-
-.forum-filters select, .forum-filters input {
-    padding: 5px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    margin-right: 10px;
-}
-
-.filter-btn {
-    background-color: #28a745;
-    color: white;
-    padding: 8px 15px;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-}
-
-.filter-btn:hover {
-    background-color: #218838;
-}
-
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-    background-color: #f9f9f9;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-}
-th, td {
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid #ddd;
-}
-
-th {
-    background-color: #333;
-    color: white;
-}
-
-/* Responsive Design */
-@media (max-width: 768px) {
-    .navbar-links {
-        display: none;
-    }
-
-    .forum-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-}
-
-</style>
-
+</body>
+</html>
 {% endblock %}

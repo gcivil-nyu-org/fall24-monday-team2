@@ -74,6 +74,7 @@ urlpatterns = [
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),
+    path("forum/section/<str:section_name>/", views.section_view, name="forum_section"),
     path("delete_post/", views.delete_post_view, name="delete_post"),
     path("metrics/", views.list_metrics, name="metrics_list"),
     path("data/", views.get_metric_data, name="get_metric_data"),

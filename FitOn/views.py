@@ -904,11 +904,14 @@ def new_thread_view(request):
     if request.method == "POST":
         title = request.POST.get("title")
         content = request.POST.get("content")
+        section = request.POST.get("section")
         user_id = request.session.get("username")  # Assuming the user is logged in
 
         if title and content and user_id:
             # Call your DynamoDB function to create a new thread
-            create_thread(title=title, user_id=user_id, content=content)
+            create_thread(
+                title=title, user_id=user_id, content=content, section=section
+            )
 
             # Redirect to the forums page after successfully creating the thread
             return redirect("forum")
@@ -987,6 +990,29 @@ def forum_view(request):
 
     return render(
         request, "forums.html", {"threads": threads, "users": users, "user": user}
+    )
+
+
+def section_view(request, section_name):
+    user_id = request.session.get("username")
+    user = get_user_by_username(user_id)
+
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
+
+    is_banned = user.get("is_banned")
+    if is_banned:
+        return render(request, "forums.html", {"is_banned": is_banned})
+
+    # Fetch threads only for the specified section
+    threads = fetch_filtered_threads(section=section_name)
+    threads = sorted(threads, key=lambda t: t.get("CreatedAt"), reverse=True)
+
+    return render(
+        request,
+        "section_threads.html",
+        {"threads": threads, "section_name": section_name},
     )
 
 
