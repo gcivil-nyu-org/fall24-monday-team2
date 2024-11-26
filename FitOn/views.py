@@ -31,6 +31,8 @@ from .dynamodb import (
     get_standard_users,
     send_data_request_to_user,
     cancel_data_request_to_user,
+    add_to_list,
+    remove_from_list,
     delete_reply,
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
@@ -39,7 +41,7 @@ from .dynamodb import (
     delete_thread_by_id,
 )
 
-from .rds import rds_main
+from .rds import rds_main, fetch_user_data
 
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -732,22 +734,21 @@ def accept_trainer(request):
         data = json.loads(request.body)
 
         trainer_id = data.get("trainer_id")
-        trainer = get_user(trainer_id)
-
         user_id = request.session.get("user_id")
+
+        trainer = get_user(trainer_id)
         user = get_user(user_id)
 
         if not user or not trainer:
             return JsonResponse({"status": "error", "message": "User is not found"})
 
-        user["trainers_with_access"].append(trainer_id)
-        trainer["users_with_access"].append(user_id)
+        # Update access lists in DynamoDB
+        add_to_list(user_id, "trainers_with_access", trainer_id)
+        add_to_list(trainer_id, "users_with_access", user_id)
 
-        user["waiting_list_of_trainers"].remove(trainer_id)
-        trainer["waiting_list_of_users"].remove(user_id)
-
-        update_user(user_id, user)
-        update_user(trainer_id, trainer)
+        # # Remove trainer from the user's waiting list
+        remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
+        remove_from_list(trainer_id, "waiting_list_of_users", user_id)
 
         return JsonResponse({"status": "success"})
     return JsonResponse({"status": "error", "message": "Invalid request"})
@@ -758,19 +759,17 @@ def deny_trainer(request):
         data = json.loads(request.body)
 
         trainer_id = data.get("trainer_id")
-        trainer = get_user(trainer_id)
-
         user_id = request.session.get("user_id")
+
+        trainer = get_user(trainer_id)
         user = get_user(user_id)
 
         if not user or not trainer:
             return JsonResponse({"status": "error", "message": "User is not found"})
 
-        user["waiting_list_of_trainers"].remove(trainer_id)
-        trainer["waiting_list_of_users"].remove(user_id)
-
-        update_user(user_id, user)
-        update_user(trainer_id, trainer)
+        # Remove trainer from the user's waiting list
+        remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
+        remove_from_list(trainer_id, "waiting_list_of_users", user_id)
 
         return JsonResponse({"status": "success"})
     return JsonResponse({"status": "error", "message": "Invalid request"})
@@ -781,22 +780,46 @@ def provide_access_to_trainer(request):
         data = json.loads(request.body)
 
         trainer_id = data.get("trainer_id")
-        trainer = get_user(trainer_id)
-
         user_id = request.session.get("user_id")
+
+        trainer = get_user(trainer_id)
         user = get_user(user_id)
 
         if not user or not trainer:
             return JsonResponse({"status": "error", "message": "User is not found"})
 
-        user["trainers_with_access"].append(trainer_id)
-        trainer["users_with_access"].append(user_id)
-
-        update_user(user_id, user)
-        update_user(trainer_id, trainer)
+        # Update user and trainer records in DynamoDB
+        add_to_list(user_id, "trainers_with_access", trainer_id)
+        add_to_list(trainer_id, "users_with_access", user_id)
 
         return JsonResponse({"status": "success"})
     return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def revoke_access_to_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+
+        if not user_id or not trainer_id:
+            return JsonResponse({"status": "error", "message": "Invalid data"})
+
+        try:
+            remove_from_list(user_id, "trainers_with_access", trainer_id)
+            remove_from_list(trainer_id, "users_with_access", user_id)
+
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "message": f"Revoked access for Trainer: {trainer_id}",
+                }
+            )
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)})
+    else:
+        return JsonResponse({"status": "error", "message": "Invalid request method"})
 
 
 def fitness_trainers_list_view(request):
@@ -809,26 +832,33 @@ def fitness_trainers_list_view(request):
     # Retrieve list of trainers from DynamoDB
     trainers = get_fitness_trainers()
 
+    # Extract lists from the user's data
     waiting_list_of_trainers = user.get("waiting_list_of_trainers", [])
+    trainers_with_access = user.get("trainers_with_access", [])
+
+    # Separate trainers into categories
     trainers_in_waiting_list = [
         trainer
         for trainer in trainers
         if trainer["user_id"] in waiting_list_of_trainers
     ]
+    my_trainers = [
+        trainer for trainer in trainers if trainer["user_id"] in trainers_with_access
+    ]
     remaining_trainers = [
         trainer
         for trainer in trainers
         if trainer["user_id"] not in waiting_list_of_trainers
+        and trainer["user_id"] not in trainers_with_access
     ]
 
-    return render(
-        request,
-        "fitness_trainers_list.html",
-        {
-            "trainers_in_waiting_list": trainers_in_waiting_list,
-            "remaining_trainers": remaining_trainers,
-        },
-    )
+    # Pass the categorized trainers to the template
+    context = {
+        "trainers_in_waiting_list": trainers_in_waiting_list,
+        "my_trainers": my_trainers,
+        "remaining_trainers": remaining_trainers,
+    }
+    return render(request, "fitness_trainers_list.html", context)
 
 
 def standard_users_list_view(request):
@@ -845,8 +875,12 @@ def standard_users_list_view(request):
     users_in_waiting_list = [
         user for user in standard_users if user["user_id"] in waiting_list_of_users
     ]
+    users_with_access = user.get("users_with_access", [])
+    my_users = [user for user in standard_users if user["user_id"] in users_with_access]
     remaining_users = [
-        user for user in standard_users if user["user_id"] not in waiting_list_of_users
+        user
+        for user in standard_users
+        if user["user_id"] not in waiting_list_of_users + users_with_access
     ]
 
     return render(
@@ -854,6 +888,7 @@ def standard_users_list_view(request):
         "standard_users_list.html",
         {
             "users_in_waiting_list": users_in_waiting_list,
+            "my_users": my_users,
             "remaining_users": remaining_users,
         },
     )
@@ -893,6 +928,86 @@ def cancel_data_request(request):
             return JsonResponse({"error": "Failed to cancel the request"}, status=400)
     else:
         return JsonResponse({"error": "Invalid method"}, status=405)
+
+
+def view_user_data(request):
+    print("view_user_data is being called")
+    try:
+        # Retrieve the data from the session
+        user_data = request.session.get("user_data")
+        print("User data in session:", user_data)
+
+        if not user_data:
+            # Handle missing session data
+            raise ValueError("User data is not available in the session.")
+
+        # Render the HTML template with the session data
+        return render(
+            request,
+            "view_user_data.html",
+            {
+                "user_data": user_data,
+            },
+        )
+    except Exception as e:
+        # Handle errors
+        return render(
+            request,
+            "view_user_data.html",
+            {
+                "error": str(e),
+            },
+        )
+
+
+def store_session_data(request, user_data):
+    # Store data in the session
+    request.session["user_data"] = user_data
+    request.session.modified = True  # Ensure the session is marked as modified
+    print(request.session.get("user_data"))
+    return
+
+
+def serialize_data(data):
+    # Handle dictionaries
+    if isinstance(data, dict):
+        return {key: serialize_data(value) for key, value in data.items()}
+
+    # Handle lists and tuples
+    elif isinstance(data, list) or isinstance(data, tuple):
+        return [serialize_data(item) for item in data]
+
+    # Handle dates: Convert datetime.date to ISO format string
+    elif isinstance(data, dt.date):
+        return data.isoformat()
+
+    # Handle other types that can be directly serialized to JSON
+    elif isinstance(data, (str, int, float, bool)):
+        return data
+
+    # If we can't serialize the type, return it as a string
+    return str(data)
+
+
+# Updated code for async_view_user_data
+async def async_view_user_data(request, user_id):
+    try:
+        # Fetch the user data asynchronously
+        user = await sync_to_async(get_user)(user_id)
+        user_email = user.get("email")
+        user_data = await fetch_user_data(user_email)
+
+        # Serialize user data
+        serialized_data = serialize_data(user_data)
+
+        # Store the data in the session
+        await sync_to_async(store_session_data)(request, serialized_data)
+
+        # Send serialized user_data in JSON response
+        return JsonResponse({"success": True, "user_data": serialized_data})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 # -------------------------------

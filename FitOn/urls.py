@@ -84,12 +84,27 @@ urlpatterns = [
         views.cancel_data_request,
         name="cancel_data_request",
     ),
+    path(
+        "trainer/view_user_data/async/<str:user_id>/data/",
+        views.async_view_user_data,
+        name="async_view_user_data",
+    ),
+    path(
+        "trainer/view_user_data/<str:user_id>/data/",
+        views.view_user_data,
+        name="view_user_data",
+    ),
     path("user/accept_trainer/", views.accept_trainer, name="accept_trainer"),
     path("user/deny_trainer/", views.deny_trainer, name="deny_trainer"),
     path(
         "user/provide_access_to_trainer/",
         views.provide_access_to_trainer,
         name="provide_access_to_trainer",
+    ),
+    path(
+        "user/revoke_access_to_trainer/",
+        views.revoke_access_to_trainer,
+        name="revoke_access_to_trainer",
     ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
