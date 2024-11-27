@@ -453,7 +453,7 @@ def remove_fitness_trainer(user_id):
 # -------------------------------
 
 
-def create_thread(title, user_id, content, section):
+def create_thread(title, user_id, content, section = "General"):
     thread_id = str(uuid.uuid4())
 
     created_at = datetime.now(tz).isoformat()
