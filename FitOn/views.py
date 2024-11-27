@@ -249,6 +249,21 @@ def login(request):
     return render(request, "login.html", {"form": form, "error_message": error_message})
 
 
+def custom_logout(request):
+    # Log out the user
+    logout(request)
+
+    # Clear the entire session to ensure no data is persisted
+    request.session.flush()
+
+    # Redirect to the homepage or a specific page after logging out
+    response = redirect("login")
+    response["Cache-Control"] = "no-cache, no-store, must-revalidate"  # HTTP 1.1
+    response["Pragma"] = "no-cache"  # HTTP 1.0
+    response["Expires"] = "0"  # Proxies
+    return response
+
+
 def signup(request):
     if request.method == "POST":
         form = SignUpForm(request.POST)
