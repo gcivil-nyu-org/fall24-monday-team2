@@ -25,7 +25,12 @@ COUNTRY_CODES = [
 
 class LoginForm(forms.Form):
     username = forms.CharField(max_length=100, label="Username")
-    password = forms.CharField(widget=forms.PasswordInput(), label="Password")
+    password = forms.CharField(
+        widget=forms.PasswordInput(),
+        label="Password",
+        required=True,
+        error_messages={"required": "Please enter a valid password."},
+    )
 
 
 class SignUpForm(forms.Form):
@@ -44,6 +49,11 @@ class SignUpForm(forms.Form):
     gender = forms.ChoiceField(
         choices=GENDER_CHOICES, widget=forms.Select, label="Gender"
     )
+
+    height = forms.IntegerField(
+        label="Height", min_value=50, max_value=300, initial=170
+    )
+    weight = forms.IntegerField(label="Weight", min_value=20, max_value=500, initial=70)
 
     password = forms.CharField(widget=forms.PasswordInput(), label="Password")
     confirm_password = forms.CharField(
@@ -122,6 +132,21 @@ class ProfileForm(forms.Form):
 
     address = forms.CharField(widget=forms.Textarea, required=False)
     bio = forms.CharField(widget=forms.Textarea, required=False)
+
+    height = forms.IntegerField(
+        label="Height (in cm)",
+        min_value=50,
+        max_value=300,
+        required=False,
+        widget=forms.NumberInput(),
+    )
+    weight = forms.IntegerField(
+        label="Weight (in kg)",
+        min_value=20,
+        max_value=500,
+        required=False,
+        widget=forms.NumberInput(),
+    )
 
     def clean_phone_number(self):
         phone_number = self.cleaned_data.get("phone_number")

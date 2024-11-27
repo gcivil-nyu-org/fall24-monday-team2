@@ -23,6 +23,9 @@ from django.contrib import admin
 # from django.contrib.auth import views
 from django.urls import path
 
+
+app_name = "chat"
+
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),
     path("authorize/", views.authorize_google_fit, name="authorize_google_fit"),
@@ -71,6 +74,41 @@ urlpatterns = [
         views.fitness_trainers_list_view,
         name="fitness_trainers_list",
     ),
+    path(
+        "trainer/standard-users/",
+        views.standard_users_list_view,
+        name="standard_users_list",
+    ),
+    path(
+        "trainer/send-data-request/", views.send_data_request, name="send_data_request"
+    ),
+    path(
+        "trainer/cancel-data-request/",
+        views.cancel_data_request,
+        name="cancel_data_request",
+    ),
+    path(
+        "trainer/view_user_data/async/<str:user_id>/data/",
+        views.async_view_user_data,
+        name="async_view_user_data",
+    ),
+    path(
+        "trainer/view_user_data/<str:user_id>/data/",
+        views.view_user_data,
+        name="view_user_data",
+    ),
+    path("user/accept_trainer/", views.accept_trainer, name="accept_trainer"),
+    path("user/deny_trainer/", views.deny_trainer, name="deny_trainer"),
+    path(
+        "user/provide_access_to_trainer/",
+        views.provide_access_to_trainer,
+        name="provide_access_to_trainer",
+    ),
+    path(
+        "user/revoke_access_to_trainer/",
+        views.revoke_access_to_trainer,
+        name="revoke_access_to_trainer",
+    ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),
@@ -99,4 +137,18 @@ urlpatterns = [
     path("delete_reply/", views.delete_reply_view, name="delete_reply"),
     path("delete_thread/", views.delete_thread, name="delete_thread"),
     path("reports/", views.reports_view, name="reports"),
+    path("chat/", views.private_chat, name="chat"),
+    path("chatg/", views.group_chat),
+    path("chat/history/<str:room_id>/", views.get_chat_history),
+    path("chat/group/create/", views.create_group_chat),
+    path("chat/group/invite/", views.invite_to_group),
+    path("chat/group/join/", views.join_group_chat),
+    path("chat/group/leave/", views.leave_group_chat),
+    path("chat/group/check/", views.get_pending_invitations),
+    path("search_users", views.search_users, name="search_users"),
+    path(
+        "pending_invitations/",
+        views.get_pending_invitations,
+        name="pending_invitations",
+    ),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

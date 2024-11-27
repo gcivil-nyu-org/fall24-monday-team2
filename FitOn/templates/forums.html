@@ -315,6 +315,44 @@
         </div>
     </div>
     {% endif %}
+</div>
 </body>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        document.querySelectorAll(".delete-thread-btn").forEach(button => {
+            button.addEventListener("click", function() {
+                const threadId = this.getAttribute("data-thread-id");
+
+                if (confirm("Are you sure you want to delete this thread?")) {
+                    // Proceed with the delete request
+                    fetch("/delete_thread/", {
+                        method: "POST",
+                        headers: {
+                            "X-CSRFToken": "{{ csrf_token }}",
+                            "Content-Type": "application/json",
+                            "x-requested-with": "XMLHttpRequest"
+                        },
+                        body: JSON.stringify({ "thread_id": threadId })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.status === "success") {
+                            // Show success message after deletion
+                            alert("Thread deleted successfully.");
+                            
+                            // Remove the thread row from the table after user clicks "OK" on the success message
+                            this.closest("tr").remove();
+                        } else {
+                            alert("Error: " + data.message);
+                        }
+                    })
+                    .catch(error => console.error("Error deleting thread:", error));
+                }
+            });
+        });
+    });
+</script>
 </html>
+
 {% endblock %}

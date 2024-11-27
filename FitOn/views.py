@@ -34,9 +34,17 @@ from .dynamodb import (
     posts_table,
     delete_thread_by_id,
     get_section_stats,
+    get_users_without_specific_username,
+    get_chat_history_from_db,
+    chat_table,
+    get_standard_users,
+    send_data_request_to_user,
+    add_to_list,
+    remove_from_list,
+    cancel_data_request_to_user,
+    get_mock_user_by_uid,
 )
-
-from .rds import rds_main
+from .rds import rds_main, fetch_user_data
 
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -46,6 +54,8 @@ from .forms import (
     SetNewPasswordForm,
     SignUpForm,
 )
+
+from .models import GroupChatMember
 
 # from .models import PasswordResetRequest
 import datetime as dt
@@ -91,6 +101,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import asyncio
 from collections import defaultdict
+from boto3.dynamodb.conditions import Key, Attr
 
 # Define metric data types
 dataTypes = {
@@ -199,6 +210,8 @@ def signup(request):
             date_of_birth = form.cleaned_data["date_of_birth"]
             gender = form.cleaned_data["gender"]
             password = form.cleaned_data["password"]
+            height = form.cleaned_data["height"]
+            weight = form.cleaned_data["weight"]
 
             # Hash the password before saving it
             hashed_password = make_password(password)
@@ -208,7 +221,15 @@ def signup(request):
 
             # Sync data with DynamoDB
             if create_user(
-                user_id, username, email, name, date_of_birth, gender, hashed_password
+                user_id,
+                username,
+                email,
+                name,
+                date_of_birth,
+                gender,
+                height,
+                weight,
+                hashed_password,
             ):
                 request.session["username"] = username
                 request.session["user_id"] = user_id
@@ -301,7 +322,7 @@ def password_reset_confirm(request, uidb64, token):
         )
     try:
         user_id = force_str(urlsafe_base64_decode(uidb64))
-        user = get_user_by_uid(user_id)
+        user = get_mock_user_by_uid(user_id)
         if user and default_token_generator.check_token(user, token):
             form = SetNewPasswordForm(request.POST or None)
             if request.method == "POST" and form.is_valid():
@@ -387,6 +408,8 @@ def profile_view(request):
                 "name": {"Value": form.cleaned_data["name"]},
                 "date_of_birth": {"Value": form.cleaned_data["date_of_birth"]},
                 "gender": {"Value": form.cleaned_data["gender"]},
+                "height": {"Value": form.cleaned_data["height"]},
+                "weight": {"Value": form.cleaned_data["weight"]},
                 "bio": {"Value": form.cleaned_data["bio"]},
                 "address": {"Value": form.cleaned_data["address"]},
             }
@@ -413,6 +436,8 @@ def profile_view(request):
                 "email": user.get("email", ""),
                 "gender": user.get("gender", ""),
                 "phone_number": user.get("phone_number", ""),
+                "height": user.get("height", ""),
+                "weight": user.get("weight", ""),
                 "address": user.get("address", ""),
                 "bio": user.get("bio", ""),
                 "country_code": user.get("country_code", ""),  # Default country code
@@ -569,6 +594,9 @@ def delink_google_fit(request):
     return redirect("profile")
 
 
+# --------------------------------- #
+# User + Fitness Trainer Functions  #
+# --------------------------------- #
 def fitness_trainer_application_view(request):
     user_id = request.session.get("user_id")
     if request.method == "POST":
@@ -582,7 +610,6 @@ def fitness_trainer_application_view(request):
             certifications = request.FILES.get("certifications")
             reference_name = form.cleaned_data.get("reference_name")
             reference_contact = form.cleaned_data.get("reference_contact")
-
             # Call the DynamoDB function, making sure all names match
             add_fitness_trainer_application(
                 user_id=user_id,
@@ -593,16 +620,13 @@ def fitness_trainer_application_view(request):
                 reference_name=reference_name,
                 reference_contact=reference_contact,
             )
-
             # Notify user and redirect
             messages.success(
                 request, "Your application has been submitted successfully!"
             )
             return redirect("profile")
-
     else:
         form = FitnessTrainerApplicationForm()
-
     return render(request, "fitness_trainer_application.html", {"form": form})
 
 
@@ -612,33 +636,13 @@ def fitness_trainer_applications_list_view(request):
     user = get_user(user_id)
     if not user or not user.get("is_admin"):
         return HttpResponseForbidden("You do not have permission to access this page.")
-
     # Retrieve applications from DynamoDB
     applications = get_fitness_trainer_applications()
-
     # Render the list of applications
     return render(
         request,
         "fitness_trainer_applications_list.html",
         {"applications": applications},
-    )
-
-
-def fitness_trainers_list_view(request):
-    # Check if the current user is an admin
-    user_id = request.session.get("user_id")
-    user = get_user(user_id)
-    if not user or not user.get("is_admin"):
-        return HttpResponseForbidden("You do not have permission to access this page")
-
-    # Retrieve list of trainers from DynamoDB
-    trainers = get_fitness_trainers()
-
-    # Render the list of trainers
-    return render(
-        request,
-        "fitness_trainers_list.html",
-        {"trainers": trainers},
     )
 
 
@@ -650,14 +654,11 @@ def approve_fitness_trainer(request):
         data = json.loads(request.body)
         username = data.get("username")
         user = get_user_by_username(username)
-
         if not user:
             return JsonResponse(
                 {"status": "error", "message": "User not found"}, status=404
             )
-
         make_fitness_trainer(user["user_id"])
-
         subject = "Fitness Trainer Application Approved"
         message = render_to_string(
             "fitness_trainer_email.html",
@@ -673,11 +674,9 @@ def approve_fitness_trainer(request):
         )
         email_message.content_subtype = "html"
         email_message.send()
-
         return JsonResponse(
             {"status": "success", "message": "Fitness Trainer has been approved"}
         )
-
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 
@@ -689,14 +688,11 @@ def reject_fitness_trainer(request):
         data = json.loads(request.body)
         username = data.get("username")
         user = get_user_by_username(username)
-
         if not user:
             return JsonResponse(
                 {"status": "error", "message": "User not found"}, status=404
             )
-
         remove_fitness_trainer(user["user_id"])
-
         subject = "Fitness Trainer Application Rejected"
         message = render_to_string(
             "fitness_trainer_email.html",
@@ -716,12 +712,249 @@ def reject_fitness_trainer(request):
         )
         email_message.content_subtype = "html"
         email_message.send()
-
         return JsonResponse(
             {"status": "success", "message": "Fitness Trainer application rejected"}
         )
-
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def accept_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+        trainer = get_user(trainer_id)
+        user = get_user(user_id)
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+        # Update access lists in DynamoDB
+        add_to_list(user_id, "trainers_with_access", trainer_id)
+        add_to_list(trainer_id, "users_with_access", user_id)
+        # # Remove trainer from the user's waiting list
+        remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
+        remove_from_list(trainer_id, "waiting_list_of_users", user_id)
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def deny_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+        trainer = get_user(trainer_id)
+        user = get_user(user_id)
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+        # Remove trainer from the user's waiting list
+        remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
+        remove_from_list(trainer_id, "waiting_list_of_users", user_id)
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def provide_access_to_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+        trainer = get_user(trainer_id)
+        user = get_user(user_id)
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+        # Update user and trainer records in DynamoDB
+        add_to_list(user_id, "trainers_with_access", trainer_id)
+        add_to_list(trainer_id, "users_with_access", user_id)
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def revoke_access_to_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+        if not user_id or not trainer_id:
+            return JsonResponse({"status": "error", "message": "Invalid data"})
+        try:
+            remove_from_list(user_id, "trainers_with_access", trainer_id)
+            remove_from_list(trainer_id, "users_with_access", user_id)
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "message": f"Revoked access for Trainer: {trainer_id}",
+                }
+            )
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)})
+    else:
+        return JsonResponse({"status": "error", "message": "Invalid request method"})
+
+
+def fitness_trainers_list_view(request):
+    # Make sure that the current user is not a fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+    # Retrieve list of trainers from DynamoDB
+    trainers = get_fitness_trainers()
+    # Extract lists from the user's data
+    waiting_list_of_trainers = user.get("waiting_list_of_trainers", [])
+    trainers_with_access = user.get("trainers_with_access", [])
+    # Separate trainers into categories
+    trainers_in_waiting_list = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] in waiting_list_of_trainers
+    ]
+    my_trainers = [
+        trainer for trainer in trainers if trainer["user_id"] in trainers_with_access
+    ]
+    remaining_trainers = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] not in waiting_list_of_trainers
+        and trainer["user_id"] not in trainers_with_access
+    ]
+    # Pass the categorized trainers to the template
+    context = {
+        "trainers_in_waiting_list": trainers_in_waiting_list,
+        "my_trainers": my_trainers,
+        "remaining_trainers": remaining_trainers,
+    }
+    return render(request, "fitness_trainers_list.html", context)
+
+
+def standard_users_list_view(request):
+    # Check if the current user is a verified fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+    # Retrieve list of standard users from DynamoDB
+    standard_users = get_standard_users()
+    waiting_list_of_users = user.get("waiting_list_of_users", [])
+    users_in_waiting_list = [
+        user for user in standard_users if user["user_id"] in waiting_list_of_users
+    ]
+    users_with_access = user.get("users_with_access", [])
+    my_users = [user for user in standard_users if user["user_id"] in users_with_access]
+    remaining_users = [
+        user
+        for user in standard_users
+        if user["user_id"] not in waiting_list_of_users + users_with_access
+    ]
+    return render(
+        request,
+        "standard_users_list.html",
+        {
+            "users_in_waiting_list": users_in_waiting_list,
+            "my_users": my_users,
+            "remaining_users": remaining_users,
+        },
+    )
+
+
+def send_data_request(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
+        success = send_data_request_to_user(fitness_trainer_id, standard_user_id)
+        if success:
+            return JsonResponse({"message": "Request sent successfully!"}, status=200)
+        else:
+            return JsonResponse({"error": "Failed to send request"}, status=400)
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+def cancel_data_request(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
+        if not standard_user_id:
+            return JsonResponse({"error": "User ID is required"}, status=400)
+        success = cancel_data_request_to_user(fitness_trainer_id, standard_user_id)
+        if success:
+            return JsonResponse(
+                {"message": "Request cancelled successfully"}, status=200
+            )
+        else:
+            return JsonResponse({"error": "Failed to cancel the request"}, status=400)
+    else:
+        return JsonResponse({"error": "Invalid method"}, status=405)
+
+
+def view_user_data(request):
+    print("view_user_data is being called")
+    try:
+        # Retrieve the data from the session
+        user_data = request.session.get("user_data")
+        print("User data in session:", user_data)
+        if not user_data:
+            # Handle missing session data
+            raise ValueError("User data is not available in the session.")
+        # Render the HTML template with the session data
+        return render(
+            request,
+            "view_user_data.html",
+            {
+                "user_data": user_data,
+            },
+        )
+    except Exception as e:
+        # Handle errors
+        return render(
+            request,
+            "view_user_data.html",
+            {
+                "error": str(e),
+            },
+        )
+
+
+def store_session_data(request, user_data):
+    # Store data in the session
+    request.session["user_data"] = user_data
+    request.session.modified = True  # Ensure the session is marked as modified
+    print(request.session.get("user_data"))
+    return
+
+
+def serialize_data(data):
+    # Handle dictionaries
+    if isinstance(data, dict):
+        return {key: serialize_data(value) for key, value in data.items()}
+    # Handle lists and tuples
+    elif isinstance(data, list) or isinstance(data, tuple):
+        return [serialize_data(item) for item in data]
+    # Handle dates: Convert datetime.date to ISO format string
+    elif isinstance(data, dt.date):
+        return data.isoformat()
+    # Handle other types that can be directly serialized to JSON
+    elif isinstance(data, (str, int, float, bool)):
+        return data
+    # If we can't serialize the type, return it as a string
+    return str(data)
+
+
+# Updated code for async_view_user_data
+async def async_view_user_data(request, user_id):
+    try:
+        # Fetch the user data asynchronously
+        user = await sync_to_async(get_user)(user_id)
+        user_email = user.get("email")
+        user_data = await fetch_user_data(user_email)
+        # Serialize user data
+        serialized_data = serialize_data(user_data)
+        # Store the data in the session
+        await sync_to_async(store_session_data)(request, serialized_data)
+        # Send serialized user_data in JSON response
+        return JsonResponse({"success": True, "user_data": serialized_data})
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 # -------------------------------
@@ -2005,3 +2238,319 @@ def punishments_view(request):
 
     # Pass the punished users to the template
     return render(request, "punishments.html", {"punished_users": punished_users})
+
+
+# -------------------------------
+# Chat Functions
+# -------------------------------
+
+# def private_chat(request):
+#     username = request.session.get("username")
+#     user = get_user_by_username(username)
+
+#     users_with_chat_history = []
+
+#     # Get all users except the logged-in user
+#     users = get_users_without_specific_username(username)
+
+#     for u in users:
+#         room_id = create_room_id(user["user_id"], u["user_id"])
+#         chat_history = get_chat_history_from_db(room_id)
+
+#         if chat_history and chat_history.get("Items"):
+#             unread_count = 0
+
+#             # Count unread messages
+#             for msg in chat_history["Items"]:
+#                 if (
+#                     msg.get("receiver") == user["user_id"]
+#                     and not msg.get("is_read", False)
+#                 ):
+#                     unread_count += 1
+
+#             # Sort by the latest message timestamp
+#             latest_message = max(
+#                 chat_history["Items"], key=lambda x: x["timestamp"]
+#             )
+#             u["last_activity"] = latest_message["timestamp"]
+#             u["unread_count"] = unread_count  # Add unread message count
+#             users_with_chat_history.append(u)
+
+#     # Sort users with chat history by the latest activity timestamp
+#     users_with_chat_history = sorted(
+#         users_with_chat_history, key=lambda x: x["last_activity"], reverse=True
+#     )
+
+#     # Handle search query if provided
+#     search_query = request.GET.get("search", "").lower()
+#     if search_query:
+#         users_with_chat_history = [
+#             u for u in users_with_chat_history if search_query in u["username"].lower()
+#         ]
+
+#     # Prepare the context for the template
+#     dic = {
+#         "data": users_with_chat_history,  # Only users with chat history
+#         "mine": user,
+#     }
+#     return render(request, "chat.html", dic)
+
+
+def private_chat(request):
+    username = request.session.get("username")
+    user = get_user_by_username(username)
+
+    users_with_chat_history = []
+
+    # Get all users except the logged-in user
+    users = get_users_without_specific_username(username)
+
+    for u in users:
+        room_id = create_room_id(user["user_id"], u["user_id"])
+        chat_history = get_chat_history_from_db(room_id)
+
+        print(chat_history)
+        if chat_history and chat_history.get("Items"):
+            # Check if there are unread messages for this user
+            unread = any(
+                msg.get("sender") == u["user_id"] and msg.get("is_read") is False
+                for msg in chat_history["Items"]
+            )
+
+            latest_message = max(chat_history["Items"], key=lambda x: x["timestamp"])
+            u["last_activity"] = latest_message["timestamp"]
+            u["unread"] = unread  # Add unread status
+            print(u["username"], u["unread"])
+            users_with_chat_history.append(u)
+
+    # Sort users with chat history by the latest activity timestamp
+    users_with_chat_history = sorted(
+        users_with_chat_history, key=lambda x: x["last_activity"], reverse=True
+    )
+
+    # Handle search query if provided
+    search_query = request.GET.get("search", "").lower()
+    if search_query:
+        users_with_chat_history = [
+            u for u in users_with_chat_history if search_query in u["username"].lower()
+        ]
+
+    # Prepare the context for the template
+    dic = {
+        "data": users_with_chat_history,  # Only users with chat history
+        "mine": user,
+    }
+    return render(request, "chat.html", dic)
+
+
+# change and t &
+def create_room_id(uid_a, uid_b):
+    """Helper function to create consistent room IDs."""
+    ids = sorted([uid_a, uid_b])
+    return f"{ids[0]}and{ids[1]}"
+
+
+# def get_chat_history(request, room_id):
+#     # Fetch chat history
+#     response = get_chat_history_from_db(room_id)
+#     items = response.get("Items", [])
+
+#     # Update each unread message to mark it as read
+#     for item in items:
+#         if item.get("receiver") == request.session.get("user_id") and not item.get("is_read", False):
+#             chat_table.update_item(
+#                 Key={
+#                     "room_name": room_id,
+#                     "timestamp": item["timestamp"],  # Ensure you include the sort key
+#                 },
+#                 UpdateExpression="SET is_read = :true",
+#                 ExpressionAttributeValues={":true": True},
+#             )
+
+#     return JsonResponse({"messages": items})
+
+
+def get_chat_history(request, room_id):
+    # Fetch chat history
+    response = get_chat_history_from_db(room_id)
+    items = response.get("Items", [])
+
+    # Mark unread messages as read
+    mark_messages_as_read(request, room_id)
+
+    return JsonResponse({"messages": items})
+
+
+def group_chat(request):
+    username = request.session.get("username")
+    user = get_user_by_username(username)
+    allUser = get_users_without_specific_username(username)
+
+    data = []
+    for i in GroupChatMember.objects.filter(
+        uid=user.get("user_id"), status=GroupChatMember.AgreementStatus.COMPLETED
+    ):
+        data.append({"name": i.name})
+
+    context = {
+        "data": data,
+        "mine": user,
+        "all_users": allUser,
+    }
+    return render(request, "chatg.html", context)
+
+
+def create_group_chat(request):
+    username = request.session.get("username")
+    user = get_user_by_username(username)
+    payload = json.loads(request.body.decode())
+    allUser = payload.get("allUser")
+    roomName = payload.get("roomName")
+    existing_group = (GroupChatMember.objects.filter)(name=roomName)
+
+    if (existing_group.exists)():
+        return JsonResponse(
+            {"code": "400", "message": "Group has already been created!"}
+        )
+
+    roomId = (GroupChatMember.objects.create)(
+        name=str(roomName),
+        uid=user["user_id"],
+        status=GroupChatMember.AgreementStatus.COMPLETED,
+    )
+    (roomId.save)()
+
+    for i in allUser:
+        try:
+            roomId = (GroupChatMember.objects.create)(
+                name=str(roomName),
+                uid=i,
+                status=GroupChatMember.AgreementStatus.COMPLETED,
+            )
+            (roomId.save)()
+        except Exception as e:
+            print(f"Error creating GroupWebSocket for {i}: {e}")
+            return JsonResponse({"code": "500", "message": "Database error"})
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def invite_to_group(request):
+    payload = json.loads(request.body.decode())
+    allUser = payload.get("allUser")
+    roomName = payload.get("roomName")
+
+    for i in allUser:
+        try:
+            roomId = (GroupChatMember.objects.create)(
+                name=str(roomName),
+                uid=i,
+                status=GroupChatMember.AgreementStatus.IN_PROGRESS,
+            )
+            (roomId.save)()
+
+        except Exception as e:
+            print(f"Error creating GroupWebSocket for {i}: {e}")
+            return JsonResponse({"code": "500", "message": "Database error"})
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def join_group_chat(request):
+    payload = json.loads(request.body.decode())
+    userId = payload.get("userId")
+    room = payload.get("room")
+
+    group = GroupChatMember.objects.get(uid=userId, name=room)
+    group.status = GroupChatMember.AgreementStatus.COMPLETED
+    group.save()
+
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def leave_group_chat(request):
+    payload = json.loads(request.body.decode())
+    userId = payload.get("userId")
+    room = payload.get("room")
+    GroupChatMember.objects.get(uid=userId, name=room).delete()
+
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def get_pending_invitations(request):
+    username = request.session.get("username")
+
+    # Retrieve the user ID using the `get_user_by_username` function
+    user_id = get_user_by_username(username)["user_id"]
+
+    # Fetch pending invitations for the user from the database
+    pending_invitations = GroupChatMember.objects.filter(
+        uid=user_id, status=GroupChatMember.AgreementStatus.IN_PROGRESS
+    )
+
+    # Convert GroupChatMember objects to a list of dictionaries
+    invitation_data = []
+    for invitation in pending_invitations:
+        invitation_data.append(
+            {
+                "name": invitation.name,
+                "uid": invitation.uid,
+                "status": invitation.status,
+            }
+        )
+
+    # Return the serialized data as JSON response
+    dic = {"code": "200", "message": "ok", "data": invitation_data}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def search_users(request):
+    query = request.GET.get(
+        "query", ""
+    ).lower()  # Convert to lowercase for case-insensitive search
+    username = request.session.get("username")
+
+    try:
+        all_users = get_users_without_specific_username(
+            username
+        )  # Exclude current user
+        matching_users = [
+            {
+                "username": user["username"],
+                "user_id": user["user_id"],
+            }
+            for user in all_users
+            if query in user["username"].lower()
+        ]
+        print(f"Search query: {query}")
+        print(f"Matching users: {matching_users}")
+        print(f"Matching users after filtering: {matching_users}")
+        return JsonResponse(matching_users, safe=False)
+    except Exception as e:
+        print(f"Error in search_users function: {e}")
+        return JsonResponse(
+            {"error": "Error occurred while searching users."}, status=500
+        )
+
+
+def mark_messages_as_read(request, room_id):
+    user_id = request.session.get("user_id")
+
+    # Fetch unread messages
+    unread_messages = chat_table.query(
+        KeyConditionExpression=Key("room_name").eq(room_id),
+        FilterExpression=Attr("sender").ne(user_id) & Attr("is_read").eq(False),
+    )
+
+    # Mark each message as read
+    for msg in unread_messages.get("Items", []):
+        chat_table.update_item(
+            Key={
+                "room_name": room_id,
+                "timestamp": msg["timestamp"],
+            },
+            UpdateExpression="SET is_read = :true",
+            ExpressionAttributeValues={":true": True},
+        )

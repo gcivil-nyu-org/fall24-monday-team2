@@ -50,3 +50,6 @@ sqlparse
 tzdata
 uritemplate
 urllib3
+daphne
+channels
+channels-redis

@@ -52,15 +52,22 @@
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const notification = document.getElementById('notification');
-    
-            const showNotification = (message) => {
-                notification.textContent = message;
+            
+            const storedMessage = localStorage.getItem("notificationMessage");
+            if (storedMessage) {
+                notification.textContent = storedMessage;
                 notification.classList.add('show');
                 notification.style.display = 'block';
                 setTimeout(() => {
                     notification.classList.remove('show');
                     notification.style.display = 'none';
+                    localStorage.removeItem("notificationMessage");
                 }, 3000);
+            }
+
+            const showNotificationAndReload = (message) => {
+                localStorage.setItem("notificationMessage", message);
+                location.reload();
             };
     
             const handleApplication = (url, username, row, successMessage) => {
@@ -77,7 +84,7 @@
                 .then(data => {
                     if (data.status === 'success') {
                         row.remove();
-                        showNotification(successMessage);
+                        showNotificationAndReload(successMessage);
                     } else {
                         alert('Error: ' + data.message);
                     }

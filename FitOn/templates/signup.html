@@ -169,6 +169,19 @@
                 {{ form.gender.errors }}
             </div>
             <div class="form-group">
+                <label for="heightSlider">Height (in cm)</label>
+                <input type="range" id="heightSlider" name="height" min="50" max="300" value="170" oninput="heightOutput.value = heightSlider.value">
+                <output id="heightOutput">170</output> cm
+            </div>
+            
+            <div class="form-group">
+                <label for="weightSlider">Weight (in kg)</label>
+                <input type="range" id="weightSlider" name="weight" min="20" max="500" value="70" oninput="weightOutput.value = weightSlider.value">
+                <output id="weightOutput">70</output> kg
+            </div>
+            
+            
+            <div class="form-group">
                 {{ form.password.label_tag }} {{ form.password }}
                 {{ form.password.errors }}
             </div>

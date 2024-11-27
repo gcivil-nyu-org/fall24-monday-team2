@@ -312,6 +312,61 @@ async def show_tables():
         conn.close()
 
 
+async def fetch_user_data(email):
+    conn = await create_connection()
+    user_data = {
+        "steps": [],
+        "heart_rate": [],
+        "resting_heart_rate": [],
+        "oxygen": [],
+        "glucose": [],
+        "pressure": [],
+    }
+
+    try:
+        async with conn.cursor(aiomysql.DictCursor) as cursor:
+            # Define queries for each table
+            queries = {
+                "steps": "SELECT start_time, end_time, count FROM STEPS WHERE email = %s",
+                "heart_rate": "SELECT start_time, end_time, count FROM HEART_RATE WHERE email = %s",
+                "resting_heart_rate": "SELECT start_time, end_time, count FROM RESTING_HEART_RATE WHERE email = %s",
+                "oxygen": "SELECT start_time, end_time, count FROM OXYGEN WHERE email = %s",
+                "glucose": "SELECT start_time, end_time, count FROM GLUCOSE WHERE email = %s",
+                "pressure": "SELECT start_time, end_time, count FROM PRESSURE WHERE email = %s",
+            }
+
+            # Check table existence dynamically
+            async def table_exists(table_name):
+                try:
+                    await cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+                    result = await cursor.fetchone()
+                    return result is not None
+                except Exception as e:
+                    print(f"Error checking table existence for {table_name}: {e}")
+                    return False
+
+            for key, query in queries.items():
+                table_name = query.split("FROM")[1].strip().split(" ")[0]
+                if await table_exists(table_name):
+                    try:
+                        await cursor.execute(query, (email,))
+                        records = await cursor.fetchall()
+                        user_data[key] = records
+                    except Exception as e:
+                        print(f"Error fetching data for table '{key}': {e}")
+                        user_data[key] = []
+                else:
+                    print(f"Table '{table_name}' does not exist. Skipping...")
+                    user_data[key] = []  # Default to an empty list
+
+    except Exception as e:
+        print(f"Error during user data fetching: {e}")
+    finally:
+        conn.close()
+
+    return user_data
+
+
 async def main(email, total_data):
 
     await insert_into_tables(email, total_data)
