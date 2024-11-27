@@ -86,10 +86,11 @@
                     <div class="block">
                         <div class="details">
                             <div class="listHead">
-                                <h4>{{ i.username }}</h4>
-                                {% if i.unread_count > 0 %}
-                                <span class="unread-badge">{{ i.unread_count }}</span>
+                                <h4>{{ i.username }}
+                                {% if i.unread == True %}
+                                <span class="unread-badge"></span>
                                 {% endif %}
+                                </h4>
                             </div>
                         </div>
                     </div>
@@ -272,13 +273,19 @@
 
         function createRoomId(uidA, uidB) {
             const ids = [uidA, uidB].sort();
-            return `${ids[0]}and${ids[1]}`;
+            return `${ids[0]}and${ids[1]}`; 
         }
 
         function startChat(chatElement) {
             const rightBar = document.getElementById("rightBar");
             const chatBox = document.getElementById("chatBox");
             const chatHeader = document.getElementById("chatHeader");
+
+            // Remove the blue badge
+            const unreadBadge = chatElement.querySelector(".unread-badge");
+            if (unreadBadge) {
+                unreadBadge.remove();
+            }
 
             // Show the right bar and clear previous chat content
             rightBar.classList.remove("hidden");
@@ -419,6 +426,15 @@
             const data = JSON.parse(e.data);
             const chatBox = document.getElementById("chatBox");
 
+            if (chatListItem && !document.querySelector("#chatBox").classList.contains("active")) {
+                // Add blue badge if not already present
+                if (!chatListItem.querySelector(".unread-badge")) {
+                    const badge = document.createElement("span");
+                    badge.classList.add("unread-badge");
+                    chatListItem.querySelector(".listHead").appendChild(badge);
+                }
+            }
+
             if (data.message) {
                 const tempMessage = chatBox.querySelector(`[data-temp-id]`);
                 if (tempMessage && data.sender === "{{ mine.user_id }}") {
@@ -544,7 +560,7 @@ document.addEventListener("click", (event) => {
 
             newChat.addEventListener("click", function () {
                 startChat(this); // Start chat when clicked
-                this.dataset.temp = "false"; // Mark as permanent if a message is sent
+                this.dataset.temp = False; // Mark as permanent if a message is sent
             });
 
             userList.prepend(newChat);

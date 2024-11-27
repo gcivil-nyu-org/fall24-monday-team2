@@ -1946,7 +1946,7 @@ def punishments_view(request):
 #     username = request.session.get("username")
 #     user = get_user_by_username(username)
 
-#     users_with_chat_history = []  # Initialize an empty list to hold users with chat history
+#     users_with_chat_history = []
 
 #     # Get all users except the logged-in user
 #     users = get_users_without_specific_username(username)
@@ -1954,15 +1954,30 @@ def punishments_view(request):
 #     for u in users:
 #         room_id = create_room_id(user["user_id"], u["user_id"])
 #         chat_history = get_chat_history_from_db(room_id)
-        
-#         if chat_history and chat_history.get("Items"):  # Check if there is any chat history
+
+#         if chat_history and chat_history.get("Items"):
+#             unread_count = 0
+
+#             # Count unread messages
+#             for msg in chat_history["Items"]:
+#                 if (
+#                     msg.get("receiver") == user["user_id"]
+#                     and not msg.get("is_read", False)
+#                 ):
+#                     unread_count += 1
+
 #             # Sort by the latest message timestamp
-#             latest_message = max(chat_history["Items"], key=lambda x: x["timestamp"])
+#             latest_message = max(
+#                 chat_history["Items"], key=lambda x: x["timestamp"]
+#             )
 #             u["last_activity"] = latest_message["timestamp"]
-#             users_with_chat_history.append(u)  # Add to the list if chat history exists
+#             u["unread_count"] = unread_count  # Add unread message count
+#             users_with_chat_history.append(u)
 
 #     # Sort users with chat history by the latest activity timestamp
-#     users_with_chat_history = sorted(users_with_chat_history, key=lambda x: x["last_activity"], reverse=True)
+#     users_with_chat_history = sorted(
+#         users_with_chat_history, key=lambda x: x["last_activity"], reverse=True
+#     )
 
 #     # Handle search query if provided
 #     search_query = request.GET.get("search", "").lower()
@@ -1978,6 +1993,7 @@ def punishments_view(request):
 #     }
 #     return render(request, "chat.html", dic)
 
+
 def private_chat(request):
     username = request.session.get("username")
     user = get_user_by_username(username)
@@ -1991,23 +2007,18 @@ def private_chat(request):
         room_id = create_room_id(user["user_id"], u["user_id"])
         chat_history = get_chat_history_from_db(room_id)
 
+        print(chat_history)
         if chat_history and chat_history.get("Items"):
-            unread_count = 0
-
-            # Count unread messages
-            for msg in chat_history["Items"]:
-                if (
-                    msg.get("receiver") == user["user_id"]
-                    and not msg.get("is_read", False)
-                ):
-                    unread_count += 1
-
-            # Sort by the latest message timestamp
-            latest_message = max(
-                chat_history["Items"], key=lambda x: x["timestamp"]
+            # Check if there are unread messages for this user
+            unread = any(
+                msg.get("sender") == u["user_id"] and msg.get("is_read") is False
+                for msg in chat_history["Items"]
             )
+
+            latest_message = max(chat_history["Items"], key=lambda x: x["timestamp"])
             u["last_activity"] = latest_message["timestamp"]
-            u["unread_count"] = unread_count  # Add unread message count
+            u["unread"] = unread  # Add unread status
+            print(u["username"], u["unread"])
             users_with_chat_history.append(u)
 
     # Sort users with chat history by the latest activity timestamp
@@ -2030,29 +2041,43 @@ def private_chat(request):
     return render(request, "chat.html", dic)
 
 
+# change and t &
 def create_room_id(uid_a, uid_b):
     """Helper function to create consistent room IDs."""
     ids = sorted([uid_a, uid_b])
     return f"{ids[0]}and{ids[1]}"
+
+
+# def get_chat_history(request, room_id):
+#     # Fetch chat history
+#     response = get_chat_history_from_db(room_id)
+#     items = response.get("Items", [])
+
+#     # Update each unread message to mark it as read
+#     for item in items:
+#         if item.get("receiver") == request.session.get("user_id") and not item.get("is_read", False):
+#             chat_table.update_item(
+#                 Key={
+#                     "room_name": room_id,
+#                     "timestamp": item["timestamp"],  # Ensure you include the sort key
+#                 },
+#                 UpdateExpression="SET is_read = :true",
+#                 ExpressionAttributeValues={":true": True},
+#             )
+
+#     return JsonResponse({"messages": items})
+
 
 def get_chat_history(request, room_id):
     # Fetch chat history
     response = get_chat_history_from_db(room_id)
     items = response.get("Items", [])
 
-    # Update each unread message to mark it as read
-    for item in items:
-        if item.get("receiver") == request.session.get("user_id") and not item.get("is_read", False):
-            chat_table.update_item(
-                Key={
-                    "room_name": room_id,
-                    "timestamp": item["timestamp"],  # Ensure you include the sort key
-                },
-                UpdateExpression="SET is_read = :true",
-                ExpressionAttributeValues={":true": True},
-            )
+    # Mark unread messages as read
+    mark_messages_as_read(request, room_id)
 
     return JsonResponse({"messages": items})
+
 
 def group_chat(request):
     username = request.session.get("username")
@@ -2071,7 +2096,6 @@ def group_chat(request):
         "all_users": allUser,
     }
     return render(request, "chatg.html", context)
-
 
 
 def create_group_chat(request):
@@ -2109,7 +2133,6 @@ def create_group_chat(request):
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
 
-
 def invite_to_group(request):
     payload = json.loads(request.body.decode())
     allUser = payload.get("allUser")
@@ -2131,7 +2154,6 @@ def invite_to_group(request):
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
 
-
 def join_group_chat(request):
     payload = json.loads(request.body.decode())
     userId = payload.get("userId")
@@ -2143,7 +2165,6 @@ def join_group_chat(request):
 
     dic = {"code": "200", "message": "ok"}
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
-
 
 
 def leave_group_chat(request):
@@ -2184,11 +2205,15 @@ def get_pending_invitations(request):
 
 
 def search_users(request):
-    query = request.GET.get("query", "").lower()  # Convert to lowercase for case-insensitive search
+    query = request.GET.get(
+        "query", ""
+    ).lower()  # Convert to lowercase for case-insensitive search
     username = request.session.get("username")
 
     try:
-        all_users = get_users_without_specific_username(username)  # Exclude current user
+        all_users = get_users_without_specific_username(
+            username
+        )  # Exclude current user
         matching_users = [
             {
                 "username": user["username"],
@@ -2203,4 +2228,27 @@ def search_users(request):
         return JsonResponse(matching_users, safe=False)
     except Exception as e:
         print(f"Error in search_users function: {e}")
-        return JsonResponse({"error": "Error occurred while searching users."}, status=500)
+        return JsonResponse(
+            {"error": "Error occurred while searching users."}, status=500
+        )
+
+
+def mark_messages_as_read(request, room_id):
+    user_id = request.session.get("user_id")
+
+    # Fetch unread messages
+    unread_messages = chat_table.query(
+        KeyConditionExpression=Key("room_name").eq(room_id),
+        FilterExpression=Attr("sender").ne(user_id) & Attr("is_read").eq(False),
+    )
+
+    # Mark each message as read
+    for msg in unread_messages.get("Items", []):
+        chat_table.update_item(
+            Key={
+                "room_name": room_id,
+                "timestamp": msg["timestamp"],
+            },
+            UpdateExpression="SET is_read = :true",
+            ExpressionAttributeValues={":true": True},
+        )

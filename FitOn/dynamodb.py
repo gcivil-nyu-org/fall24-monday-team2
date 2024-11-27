@@ -965,6 +965,7 @@ def save_chat_message(sender, message, room_name, sender_name):
             "sender_name": sender_name,
             "message": message,
             "timestamp": timestamp,
+            "is_read": False,
         }
     )
     return JsonResponse({"success": True})
@@ -1001,7 +1002,6 @@ def get_unread_messages_count(receiver_id):
             IndexName="receiver-is_read-index",  # GSI name
             KeyConditionExpression=Key("receiver").eq(receiver_id) & Key("is_read").eq(0)
         )
-
         # Count unread messages grouped by sender
         unread_counts = {}
         for item in response.get("Items", []):
@@ -1067,4 +1067,6 @@ def get_users_with_chat_history(user_id):
     except Exception as e:
         print(f"Error fetching users with chat history: {e}")
         return []
+
+
 

@@ -26,9 +26,7 @@ class LoginForm(forms.Form):
         widget=forms.PasswordInput(),
         label="Password",
         required=True,
-        error_messages={
-            'required': 'Please enter a valid password.'
-        }
+        error_messages={"required": "Please enter a valid password."},
     )
 
 

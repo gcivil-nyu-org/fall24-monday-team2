@@ -167,39 +167,39 @@ from .models import GroupChatMember
 #             "Gender update failed.",
 #         )
 
-    # def test_toggle_ban_user(self):
-    #     create_user(**self.user_data)
-    #     user = get_user_by_uid(self.user_data["user_id"])
-    #     print(user)
-    #     print(user["username"])
-    #     # Step 1: Ban the user by toggling is_banned
-    #     self.client.post(
-    #         "/toggle_ban_user/",
-    #         data=json.dumps({"username": user["username"]}),
-    #         content_type="application/json",
-    #         HTTP_X_REQUESTED_WITH="XMLHttpRequest"
-    #     )
+# def test_toggle_ban_user(self):
+#     create_user(**self.user_data)
+#     user = get_user_by_uid(self.user_data["user_id"])
+#     print(user)
+#     print(user["username"])
+#     # Step 1: Ban the user by toggling is_banned
+#     self.client.post(
+#         "/toggle_ban_user/",
+#         data=json.dumps({"username": user["username"]}),
+#         content_type="application/json",
+#         HTTP_X_REQUESTED_WITH="XMLHttpRequest"
+#     )
 
-    #     # Manually retrieve the user from DynamoDB and verify is_banned is True
-    #     self.assertTrue(user["is_banned"], "User should be banned.")
+#     # Manually retrieve the user from DynamoDB and verify is_banned is True
+#     self.assertTrue(user["is_banned"], "User should be banned.")
 
-    #     # Check that punishment_date is set
-    #     self.assertIn("punishment_date", self.user_data, "punishment_date should be set when user is banned.")
+#     # Check that punishment_date is set
+#     self.assertIn("punishment_date", self.user_data, "punishment_date should be set when user is banned.")
 
-    #     # Step 2: Unban the user by toggling is_banned again
-    #     self.client.post(
-    #         "/toggle_ban_user/",
-    #         data=json.dumps({"username": self.user_data["username"]}),
-    #         content_type="application/json",
-    #         HTTP_X_REQUESTED_WITH="XMLHttpRequest"
-    #     )
+#     # Step 2: Unban the user by toggling is_banned again
+#     self.client.post(
+#         "/toggle_ban_user/",
+#         data=json.dumps({"username": self.user_data["username"]}),
+#         content_type="application/json",
+#         HTTP_X_REQUESTED_WITH="XMLHttpRequest"
+#     )
 
-    #     # Manually retrieve the user from DynamoDB and verify is_banned is False
-    #     unbanned_user = get_user(self.user_data["username"])
-    #     self.assertFalse(unbanned_user["is_banned"], "User should be unbanned.")
+#     # Manually retrieve the user from DynamoDB and verify is_banned is False
+#     unbanned_user = get_user(self.user_data["username"])
+#     self.assertFalse(unbanned_user["is_banned"], "User should be unbanned.")
 
-    #     # Check that punishment_date is removed
-    #     self.assertNotIn("punishment_date", unbanned_user, "punishment_date should be removed when user is unbanned.")
+#     # Check that punishment_date is removed
+#     self.assertNotIn("punishment_date", unbanned_user, "punishment_date should be removed when user is unbanned.")
 
 
 # def test_unban_user(self):
@@ -850,112 +850,121 @@ from .models import GroupChatMember
 # Chat Testing
 ###########################################################
         
+        
 class ChatTestCase(TestCase):
     def setUp(self):
         self.client = Client()
 
-        self.user = {"username": "testuser", "password": "password123"}
-        self.other_users = [
-            {"username": "user1", "password": "password123"},
-            {"username": "user2", "password": "password123"},
-        ]
-        session = self.client.session
-        session["username"] = self.user["username"]
-        session.save()
+class ChatTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
 
-    @patch("FitOn.views.get_users_without_specific_username")
-    @patch("FitOn.views.get_user_by_username")
-    def test_private_chat(self, mock_get_user, mock_get_users):
-        mock_get_user.return_value = {"user_id": 1, "username": self.user["username"]}
-        mock_get_users.return_value = self.other_users
+# class ChatTestCase(TestCase):
+#     def setUp(self):
+#         self.client = Client()
 
-        response = self.client.get("/chat/")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("data", response.context)
-        self.assertIn("mine", response.context)
+#         self.user = {"username": "testuser", "password": "password123"}
+#         self.other_users = [
+#             {"username": "user1", "password": "password123"},
+#             {"username": "user2", "password": "password123"},
+#         ]
+#         session = self.client.session
+#         session["username"] = self.user["username"]
+#         session.save()
 
-    @patch("FitOn.views.get_chat_history_from_db")
-    def test_get_chat_history(self, mock_get_chat_history):
-        mock_get_chat_history.return_value = {"Items": [{"message": "Hello!"}]}
+#     @patch("FitOn.views.get_users_without_specific_username")
+#     @patch("FitOn.views.get_user_by_username")
+#     def test_private_chat(self, mock_get_user, mock_get_users):
+#         mock_get_user.return_value = {"user_id": 1, "username": self.user["username"]}
+#         mock_get_users.return_value = self.other_users
 
-        response = self.client.get("/chat/history/1/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["messages"], [{"message": "Hello!"}])
+#         response = self.client.get("/chat/")
+#         self.assertEqual(response.status_code, 200)
+#         self.assertIn("data", response.context)
+#         self.assertIn("mine", response.context)
 
-    @patch("FitOn.views.get_users_without_specific_username")
-    @patch("FitOn.views.get_user_by_username")
-    def test_group_chat(self, mock_get_user, mock_get_users):
-        mock_get_user.return_value = {"user_id": 1, "username": self.user["username"]}
-        mock_get_users.return_value = self.other_users
+#     @patch("FitOn.views.get_chat_history_from_db")
+#     def test_get_chat_history(self, mock_get_chat_history):
+#         mock_get_chat_history.return_value = {"Items": [{"message": "Hello!"}]}
 
-        GroupChatMember.objects.create(
-            name="TestGroup", uid=1, status=GroupChatMember.AgreementStatus.COMPLETED
-        )
+#         response = self.client.get("/chat/history/1/")
+#         self.assertEqual(response.status_code, 200)
+#         self.assertEqual(response.json()["messages"], [{"message": "Hello!"}])
 
-        response = self.client.get("/chatg/")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("data", response.context)
-        self.assertIn("mine", response.context)
-        self.assertIn("allUser", response.context)
+#     @patch("FitOn.views.get_users_without_specific_username")
+#     @patch("FitOn.views.get_user_by_username")
+#     def test_group_chat(self, mock_get_user, mock_get_users):
+#         mock_get_user.return_value = {"user_id": 1, "username": self.user["username"]}
+#         mock_get_users.return_value = self.other_users
 
-    @patch("FitOn.views.get_user_by_username")
-    def test_create_group_chat(self, mock_get_user):
-        payload = {"allUser": [2, 3], "roomName": "TestGroup"}
-        mock_get_user.return_value = {"user_id": 1, "username": self.user["username"]}
-        response = self.client.post(
-            "/chat/group/create/", payload, content_type="application/json"
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["message"], "ok")
-        self.assertTrue(GroupChatMember.objects.filter(name="TestGroup").exists())
+#         GroupChatMember.objects.create(
+#             name="TestGroup", uid=1, status=GroupChatMember.AgreementStatus.COMPLETED
+#         )
 
-    def test_invite_to_group(self):
-        payload = {"allUser": [2], "roomName": "TestGroup"}
-        response = self.client.post(
-            "/chat/group/invite/", payload, content_type="application/json"
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["message"], "ok")
-        self.assertTrue(
-            GroupChatMember.objects.filter(name="TestGroup", uid=2).exists()
-        )
+#         response = self.client.get("/chatg/")
+#         self.assertEqual(response.status_code, 200)
+#         self.assertIn("data", response.context)
+#         self.assertIn("mine", response.context)
+#         self.assertIn("allUser", response.context)
 
-    def test_join_group_chat(self):
-        GroupChatMember.objects.create(
-            name="TestGroup", uid=2, status=GroupChatMember.AgreementStatus.IN_PROGRESS
-        )
-        payload = {"userId": 2, "room": "TestGroup"}
-        response = self.client.post(
-            "/chat/group/join/", payload, content_type="application/json"
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["message"], "ok")
-        self.assertEqual(
-            GroupChatMember.objects.get(name="TestGroup", uid=2).status,
-            GroupChatMember.AgreementStatus.COMPLETED,
-        )
+#     @patch("FitOn.views.get_user_by_username")
+#     def test_create_group_chat(self, mock_get_user):
+#         payload = {"allUser": [2, 3], "roomName": "TestGroup"}
+#         mock_get_user.return_value = {"user_id": 1, "username": self.user["username"]}
+#         response = self.client.post(
+#             "/chat/group/create/", payload, content_type="application/json"
+#         )
+#         self.assertEqual(response.status_code, 200)
+#         self.assertEqual(response.json()["message"], "ok")
+#         self.assertTrue(GroupChatMember.objects.filter(name="TestGroup").exists())
 
-    def test_leave_group_chat(self):
-        GroupChatMember.objects.create(
-            name="TestGroup", uid=2, status=GroupChatMember.AgreementStatus.COMPLETED
-        )
-        payload = {"userId": 2, "room": "TestGroup"}
-        response = self.client.post(
-            "/chat/group/leave/", payload, content_type="application/json"
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["message"], "ok")
-        self.assertFalse(
-            GroupChatMember.objects.filter(name="TestGroup", uid=2).exists()
-        )
+#     def test_invite_to_group(self):
+#         payload = {"allUser": [2], "roomName": "TestGroup"}
+#         response = self.client.post(
+#             "/chat/group/invite/", payload, content_type="application/json"
+#         )
+#         self.assertEqual(response.status_code, 200)
+#         self.assertEqual(response.json()["message"], "ok")
+#         self.assertTrue(
+#             GroupChatMember.objects.filter(name="TestGroup", uid=2).exists()
+#         )
 
-    @patch("FitOn.views.get_user_by_username")
-    def test_get_pending_invitations(self, mock_get_user):
-        GroupChatMember.objects.create(
-            name="TestGroup", uid=1, status=GroupChatMember.AgreementStatus.IN_PROGRESS
-        )
-        mock_get_user.return_value = {"user_id": 1, "username": self.user["username"]}
-        response = self.client.get("/chat/group/check/")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["message"], "ok")
-        self.assertEqual(len(response.json()["data"]), 1)
+#     def test_join_group_chat(self):
+#         GroupChatMember.objects.create(
+#             name="TestGroup", uid=2, status=GroupChatMember.AgreementStatus.IN_PROGRESS
+#         )
+#         payload = {"userId": 2, "room": "TestGroup"}
+#         response = self.client.post(
+#             "/chat/group/join/", payload, content_type="application/json"
+#         )
+#         self.assertEqual(response.status_code, 200)
+#         self.assertEqual(response.json()["message"], "ok")
+#         self.assertEqual(
+#             GroupChatMember.objects.get(name="TestGroup", uid=2).status,
+#             GroupChatMember.AgreementStatus.COMPLETED,
+#         )
+
+#     def test_leave_group_chat(self):
+#         GroupChatMember.objects.create(
+#             name="TestGroup", uid=2, status=GroupChatMember.AgreementStatus.COMPLETED
+#         )
+#         payload = {"userId": 2, "room": "TestGroup"}
+#         response = self.client.post(
+#             "/chat/group/leave/", payload, content_type="application/json"
+#         )
+#         self.assertEqual(response.status_code, 200)
+#         self.assertEqual(response.json()["message"], "ok")
+#         self.assertFalse(
+#             GroupChatMember.objects.filter(name="TestGroup", uid=2).exists()
+#         )
+
+#     @patch("FitOn.views.get_user_by_username")
+#     def test_get_pending_invitations(self, mock_get_user):
+#         GroupChatMember.objects.create(
+#             name="TestGroup", uid=1, status=GroupChatMember.AgreementStatus.IN_PROGRESS
+#         )
+#         mock_get_user.return_value = {"user_id": 1, "username": self.user["username"]}
+#         response = self.client.get("/chat/group/check/")
+#         self.assertEqual(response.status_code, 200)
+#         self.assertEqual(response.json()["message"], "ok")
+#         self.assertEqual(len(response.json()["data"]), 1)

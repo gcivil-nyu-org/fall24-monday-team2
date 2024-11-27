@@ -388,18 +388,8 @@ body {
     box-sizing: border-box;
     display: block; /* Ensures proper alignment */
     word-wrap: break-word;
-    border: 1px solid red;
 }
-/* .chatbox_input {
-    height: 80px;
-    background: #f0f0f0;
-    display: flex;
-    align-items: center;
-    padding: 10px;
-    gap: 10px;
-    border-top: 1px solid #ccc;
-    position: relative;
-} */
+
 .chatBox.empty::before {
     content: "No messages yet";
     font-size: 1.2em;
@@ -411,6 +401,7 @@ body {
 .message {
     position: relative;
     display: flex;
+    flex-direction: column; 
     align-items: center;
     margin: 10px 0;
     word-wrap: break-word; /* Ensure wrapping of long words */
@@ -420,17 +411,18 @@ body {
 .message p {
     position: relative;
     max-width: 65%; /* Constrain the bubble width */
-    padding: 10px;
+    padding: 10px; /* Padding inside the bubble */
     font-size: 0.9em;
     border-radius: 10px;
     background: #dcf8c6; /* Background for sent messages */
     margin: 0;
-    word-wrap: break-word; /* Break long words */
-    overflow-wrap: anywhere; /* Ensure long words break anywhere */
-    white-space: normal; /* Allow text wrapping */
-    overflow: hidden; /* Prevent content overflow */
-    text-overflow: ellipsis; /* Optional: visually truncate overflowed text */
-    border: 1px solid red;
+    white-space: normal; /* Allow wrapping of long lines */
+    overflow-wrap: anywhere; /* Break unbreakable words */
+    word-break: break-word; /* Ensure breaking in long, unspaced strings */
+    box-sizing: border-box; /* Ensure consistent box model */
+    text-align: left; /* Align text inside the bubble */
+    display: inline-block; /* Ensure it behaves as a block with inline content */
+    width: auto; /* Allow the width to adjust naturally */
 }
 .message p::before
 {
@@ -452,15 +444,24 @@ body {
 .my_message
 {
     justify-content: flex-end;
+    display: flex;
 }
 .frnd_message
 {
     justify-content: flex-start;
+    display: flex;
 }
-.frnd_message p
-{
-    background: #f5f5dc;
-    text-align: left;
+.frnd_message p {
+    background: #f5f5dc; /* Yellow background */
+    text-align: left; /* Align text inside the bubble */
+    word-wrap: break-word; /* Ensure proper word wrapping */
+    overflow-wrap: anywhere; /* Break unbreakable words */
+    white-space: normal; /* Allow wrapping of long lines */
+    padding: 10px;
+    border-radius: 10px;
+    margin: 0;
+    max-width: 65%; /* Constrain the bubble width */
+    align-self: flex-start; /* Ensure it aligns to the left */
 }
 .message.frnd_message p::before
 {
@@ -473,8 +474,16 @@ body {
     background: linear-gradient(225deg, #f5f5dc 0%, #f5f5dc 50%,transparent 50%,transparent);
 }
 .my_message p {
-    background: #dcf8c6; /* Green for sent messages */
-    text-align: right;
+    background: #dcf8c6; /* Green background */
+    text-align: left; /* Align text inside the bubble */
+    word-wrap: break-word; /* Ensure proper word wrapping */
+    overflow-wrap: anywhere; /* Break unbreakable words */
+    white-space: normal; /* Allow wrapping of long lines */
+    padding: 10px;
+    border-radius: 10px;
+    margin: 0;
+    max-width: 65%; /* Constrain the bubble width */
+    align-self: flex-end; /* Ensure it aligns to the right */
 }
 .frnd_message p {
     background: #f5f5dc; /* Yellow for received messages */
@@ -511,17 +520,6 @@ body {
     transform: translateY(-50%); /* Center vertically */
 }
 
-/* .chatbox_input
-{
-    position: absolute;
-    width: 100%;
-    height: 100px;
-    background: #f0f0f0;
-    padding: 15px;
-    justify-content: space-between;
-    top: unset;
-    bottom: 0;
-} */
 
 .chatbox_input {
     display: flex;
@@ -631,7 +629,7 @@ body {
     height: 8px;
     background-color: blue; /* Blue color for unread badge */
     border-radius: 50%; /* Makes it a circle */
-    margin-left: 10px; /* Space from the username */
+    margin-left: 10px; 
 }
 .new-messages {
     font-size: 0.8em;
@@ -677,11 +675,11 @@ body {
     justify-content: space-between;
 }
 .char-counter {
-    font-size: 12px; /* Slightly smaller font */
+    font-size: 12px; 
     color: #666;
-    text-align: right; /* Align text to the right */
-    margin-top: 5px; /* Add spacing below the input */
+    text-align: right;
+    margin-top: 5px; 
 }
 .char-counter.red {
-    color: red; /* Highlight text when the character limit is reached */
+    color: red; 
 }
