@@ -23,6 +23,9 @@ from django.contrib import admin
 # from django.contrib.auth import views
 from django.urls import path
 
+
+app_name = "chat"
+
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),
     path("authorize/", views.authorize_google_fit, name="authorize_google_fit"),
@@ -133,4 +136,18 @@ urlpatterns = [
     path("delete_reply/", views.delete_reply_view, name="delete_reply"),
     path("delete_thread/", views.delete_thread, name="delete_thread"),
     path("reports/", views.reports_view, name="reports"),
+    path("chat/", views.private_chat, name="chat"),
+    path("chatg/", views.group_chat),
+    path("chat/history/<str:room_id>/", views.get_chat_history),
+    path("chat/group/create/", views.create_group_chat),
+    path("chat/group/invite/", views.invite_to_group),
+    path("chat/group/join/", views.join_group_chat),
+    path("chat/group/leave/", views.leave_group_chat),
+    path("chat/group/check/", views.get_pending_invitations),
+    path("search_users", views.search_users, name="search_users"),
+    path(
+        "pending_invitations/",
+        views.get_pending_invitations,
+        name="pending_invitations",
+    ),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

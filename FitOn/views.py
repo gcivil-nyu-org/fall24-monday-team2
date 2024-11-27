@@ -1,21 +1,76 @@
-from django.shortcuts import render, redirect
-from .dynamodb import (
+import asyncio
+import datetime as dt
+import json
+import uuid
+from collections import defaultdict
+from datetime import datetime, timedelta
+
+import boto3
+import pandas as pd
+import pytz
+import requests
+
+# from django.utils.encoding import force_bytes
+# from django.utils.html import strip_tags
+# from django.utils.http import urlsafe_base64_encode
+# import os
+from asgiref.sync import sync_to_async
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import login as auth_login
+from django.contrib.auth import logout
+
+# from django.contrib.auth.decorators import login_required
+from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.models import User
+from django.contrib.auth.tokens import default_token_generator
+
+# from django.core.files.storage import FileSystemStorage
+from django.core.mail import EmailMessage
+
+# from django.core.mail.backends.locmem import EmailBackend
+
+# from django.core.mail import EmailMultiAlternatives
+from django.http import HttpResponseForbidden, JsonResponse
+from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+
+# from google import Things
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+
+from boto3.dynamodb.conditions import Key, Attr
+
+from .dynamodb import (  # create_post,; fetch_thread,; get_replies,; get_thread_details,
     add_fitness_trainer_application,
-    # create_post,
-    post_comment,
-    create_thread,
     create_reply,
+    create_thread,
     create_user,
+    delete_post,
+    delete_reply,
     delete_user_by_username,
     delete_post,
     fetch_posts_for_thread,
     get_fitness_trainer_applications,
+    get_fitness_trainers,
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
     # get_user_by_uid,
     get_mock_user_by_uid,
     get_user_by_username,
+    get_users_without_specific_username,
+    make_fitness_trainer,
+    mark_thread_as_reported,
+    post_comment,
+    posts_table,
+    remove_fitness_trainer,
+    threads_table,
     update_reset_request_time,
     update_user,
     update_user_password,
@@ -39,6 +94,8 @@ from .dynamodb import (
     mark_comment_as_reported,
     posts_table,
     delete_thread_by_id,
+    get_chat_history_from_db,
+    chat_table,
 )
 
 from .rds import rds_main, fetch_user_data
@@ -51,6 +108,7 @@ from .forms import (
     SetNewPasswordForm,
     SignUpForm,
 )
+from .models import GroupChatMember
 
 # from .models import PasswordResetRequest
 import datetime as dt
@@ -154,24 +212,36 @@ def login(request):
             username = form.cleaned_data["username"]
             password = form.cleaned_data["password"]
 
-            # Query DynamoDB for the user by username
-            user = get_user_by_username(username)
-
-            if user:
-                # Get the hashed password from DynamoDB
-                stored_password = user["password"]
-                user_id = user["user_id"]
-
-                # Verify the password using Django's check_password
-                if check_password(password, stored_password):
-                    # Set the session and redirect to the homepage
-                    request.session["username"] = username
-                    request.session["user_id"] = user_id
-                    return redirect("homepage")
-                else:
-                    error_message = "Invalid password. Please try again."
+            # Check if password field is empty
+            if not password:
+                error_message = "Please enter a valid password."
             else:
-                error_message = "User does not exist."
+                # Query DynamoDB for the user by username
+                user = get_user_by_username(username)
+
+                if user:
+                    stored_password = user["password"]
+                    user_id = user["user_id"]
+
+                    if check_password(password, stored_password):
+                        # Create a Django User object for authentication
+                        django_user, created = User.objects.get_or_create(
+                            username=username, defaults={"password": stored_password}
+                        )
+                        # Use auth_login to set request.user
+                        auth_login(request, django_user)
+                        # Store user details in session for additional information
+                        request.session["username"] = username
+                        request.session["user_id"] = user_id
+                        return redirect("homepage")
+                    else:
+                        error_message = "Invalid password. Please try again."
+                else:
+                    error_message = "User does not exist."
+        else:
+            error_message = form.errors.get(
+                "password", ["Please fill out the form correctly."]
+            )[0]
 
     else:
         form = LoginForm()
@@ -456,7 +526,6 @@ def confirm_deactivation(request):
             if delete_user_by_username(username):
                 # Log the user out and redirect to the homepage
                 logout(request)
-                request.session.flush()
                 return redirect("homepage")  # Redirect to homepage after deactivation
             else:
                 return render(
@@ -501,7 +570,7 @@ def authorize_google_fit(request):
 def callback_google_fit(request):
     user_id = request.session.get("user_id")
     print("Inside Callback")
-    print("Session: ")
+
     # Fetch user details from DynamoDB
     user = get_user(user_id)
     state = request.session.get("google_fit_state")
@@ -1015,6 +1084,11 @@ async def async_view_user_data(request, user_id):
 # -------------------------------
 
 
+# def forum_view(request):
+#     threads = fetch_all_threads()
+#     return render(request, "forums.html", {"threads": threads})
+
+
 # View to display a single thread with its posts
 def thread_detail_view(request, thread_id):
     # Fetch thread details from DynamoDB
@@ -1243,12 +1317,8 @@ def delete_post_view(request):
 
 
 def forum_view(request):
-
     user_id = request.session.get("username")
     user = get_user_by_username(user_id)
-    if not user:
-        messages.error(request, "User not found.")
-        return redirect("login")
     is_banned = user.get("is_banned")
     if is_banned:
         return render(request, "forums.html", {"is_banned": is_banned})
@@ -1274,9 +1344,7 @@ def forum_view(request):
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
 
-    return render(
-        request, "forums.html", {"threads": threads, "users": users, "user": user}
-    )
+    return render(request, "forums.html", {"threads": threads, "users": users})
 
 
 ######################################
@@ -1468,7 +1536,6 @@ def steps_barplot(data):
             steps_data.append(d)
 
     # Pass the plot path to the template
-    print("Steps Data:", steps_data)
     context = {"steps_data_json": steps_data}
     return context
 
@@ -1832,21 +1899,15 @@ def health_data_view(request):
 
     if request.method == "POST":
         data = request.POST
-        print("Data:", data)
-        try:
-            table.put_item(
-                Item={
-                    "email": user_email,  # Use the default email
-                    "metric": data.get("metric"),
-                    "time": data.get("time"),
-                    "value": data.get("value"),
-                },
-                ConditionExpression="attribute_not_exists(email) AND attribute_not_exists(#t)",
-                ExpressionAttributeNames={"#t": "time"},
-            )
-            print("Item inserted successfully.")
-        except dynamodb_res.meta.client.exceptions.ConditionalCheckFailedException:
-            print("Item already exists and was not replaced.")
+        print(data)
+        table.put_item(
+            Item={
+                "email": user_email,  # Use the default email
+                "metric": data.get("metric"),
+                "time": data.get("time"),
+                "value": data.get("value"),
+            }
+        )
         return redirect("get_metric_data")
 
     # Fetch all the metrics data from DynamoDB
@@ -2260,3 +2321,319 @@ def punishments_view(request):
 
     # Pass the punished users to the template
     return render(request, "punishments.html", {"punished_users": punished_users})
+
+
+# -------------------------------
+# Chat Functions
+# -------------------------------
+
+# def private_chat(request):
+#     username = request.session.get("username")
+#     user = get_user_by_username(username)
+
+#     users_with_chat_history = []
+
+#     # Get all users except the logged-in user
+#     users = get_users_without_specific_username(username)
+
+#     for u in users:
+#         room_id = create_room_id(user["user_id"], u["user_id"])
+#         chat_history = get_chat_history_from_db(room_id)
+
+#         if chat_history and chat_history.get("Items"):
+#             unread_count = 0
+
+#             # Count unread messages
+#             for msg in chat_history["Items"]:
+#                 if (
+#                     msg.get("receiver") == user["user_id"]
+#                     and not msg.get("is_read", False)
+#                 ):
+#                     unread_count += 1
+
+#             # Sort by the latest message timestamp
+#             latest_message = max(
+#                 chat_history["Items"], key=lambda x: x["timestamp"]
+#             )
+#             u["last_activity"] = latest_message["timestamp"]
+#             u["unread_count"] = unread_count  # Add unread message count
+#             users_with_chat_history.append(u)
+
+#     # Sort users with chat history by the latest activity timestamp
+#     users_with_chat_history = sorted(
+#         users_with_chat_history, key=lambda x: x["last_activity"], reverse=True
+#     )
+
+#     # Handle search query if provided
+#     search_query = request.GET.get("search", "").lower()
+#     if search_query:
+#         users_with_chat_history = [
+#             u for u in users_with_chat_history if search_query in u["username"].lower()
+#         ]
+
+#     # Prepare the context for the template
+#     dic = {
+#         "data": users_with_chat_history,  # Only users with chat history
+#         "mine": user,
+#     }
+#     return render(request, "chat.html", dic)
+
+
+def private_chat(request):
+    username = request.session.get("username")
+    user = get_user_by_username(username)
+
+    users_with_chat_history = []
+
+    # Get all users except the logged-in user
+    users = get_users_without_specific_username(username)
+
+    for u in users:
+        room_id = create_room_id(user["user_id"], u["user_id"])
+        chat_history = get_chat_history_from_db(room_id)
+
+        print(chat_history)
+        if chat_history and chat_history.get("Items"):
+            # Check if there are unread messages for this user
+            unread = any(
+                msg.get("sender") == u["user_id"] and msg.get("is_read") is False
+                for msg in chat_history["Items"]
+            )
+
+            latest_message = max(chat_history["Items"], key=lambda x: x["timestamp"])
+            u["last_activity"] = latest_message["timestamp"]
+            u["unread"] = unread  # Add unread status
+            print(u["username"], u["unread"])
+            users_with_chat_history.append(u)
+
+    # Sort users with chat history by the latest activity timestamp
+    users_with_chat_history = sorted(
+        users_with_chat_history, key=lambda x: x["last_activity"], reverse=True
+    )
+
+    # Handle search query if provided
+    search_query = request.GET.get("search", "").lower()
+    if search_query:
+        users_with_chat_history = [
+            u for u in users_with_chat_history if search_query in u["username"].lower()
+        ]
+
+    # Prepare the context for the template
+    dic = {
+        "data": users_with_chat_history,  # Only users with chat history
+        "mine": user,
+    }
+    return render(request, "chat.html", dic)
+
+
+# change and t &
+def create_room_id(uid_a, uid_b):
+    """Helper function to create consistent room IDs."""
+    ids = sorted([uid_a, uid_b])
+    return f"{ids[0]}and{ids[1]}"
+
+
+# def get_chat_history(request, room_id):
+#     # Fetch chat history
+#     response = get_chat_history_from_db(room_id)
+#     items = response.get("Items", [])
+
+#     # Update each unread message to mark it as read
+#     for item in items:
+#         if item.get("receiver") == request.session.get("user_id") and not item.get("is_read", False):
+#             chat_table.update_item(
+#                 Key={
+#                     "room_name": room_id,
+#                     "timestamp": item["timestamp"],  # Ensure you include the sort key
+#                 },
+#                 UpdateExpression="SET is_read = :true",
+#                 ExpressionAttributeValues={":true": True},
+#             )
+
+#     return JsonResponse({"messages": items})
+
+
+def get_chat_history(request, room_id):
+    # Fetch chat history
+    response = get_chat_history_from_db(room_id)
+    items = response.get("Items", [])
+
+    # Mark unread messages as read
+    mark_messages_as_read(request, room_id)
+
+    return JsonResponse({"messages": items})
+
+
+def group_chat(request):
+    username = request.session.get("username")
+    user = get_user_by_username(username)
+    allUser = get_users_without_specific_username(username)
+
+    data = []
+    for i in GroupChatMember.objects.filter(
+        uid=user.get("user_id"), status=GroupChatMember.AgreementStatus.COMPLETED
+    ):
+        data.append({"name": i.name})
+
+    context = {
+        "data": data,
+        "mine": user,
+        "all_users": allUser,
+    }
+    return render(request, "chatg.html", context)
+
+
+def create_group_chat(request):
+    username = request.session.get("username")
+    user = get_user_by_username(username)
+    payload = json.loads(request.body.decode())
+    allUser = payload.get("allUser")
+    roomName = payload.get("roomName")
+    existing_group = (GroupChatMember.objects.filter)(name=roomName)
+
+    if (existing_group.exists)():
+        return JsonResponse(
+            {"code": "400", "message": "Group has already been created!"}
+        )
+
+    roomId = (GroupChatMember.objects.create)(
+        name=str(roomName),
+        uid=user["user_id"],
+        status=GroupChatMember.AgreementStatus.COMPLETED,
+    )
+    (roomId.save)()
+
+    for i in allUser:
+        try:
+            roomId = (GroupChatMember.objects.create)(
+                name=str(roomName),
+                uid=i,
+                status=GroupChatMember.AgreementStatus.COMPLETED,
+            )
+            (roomId.save)()
+        except Exception as e:
+            print(f"Error creating GroupWebSocket for {i}: {e}")
+            return JsonResponse({"code": "500", "message": "Database error"})
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def invite_to_group(request):
+    payload = json.loads(request.body.decode())
+    allUser = payload.get("allUser")
+    roomName = payload.get("roomName")
+
+    for i in allUser:
+        try:
+            roomId = (GroupChatMember.objects.create)(
+                name=str(roomName),
+                uid=i,
+                status=GroupChatMember.AgreementStatus.IN_PROGRESS,
+            )
+            (roomId.save)()
+
+        except Exception as e:
+            print(f"Error creating GroupWebSocket for {i}: {e}")
+            return JsonResponse({"code": "500", "message": "Database error"})
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def join_group_chat(request):
+    payload = json.loads(request.body.decode())
+    userId = payload.get("userId")
+    room = payload.get("room")
+
+    group = GroupChatMember.objects.get(uid=userId, name=room)
+    group.status = GroupChatMember.AgreementStatus.COMPLETED
+    group.save()
+
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def leave_group_chat(request):
+    payload = json.loads(request.body.decode())
+    userId = payload.get("userId")
+    room = payload.get("room")
+    GroupChatMember.objects.get(uid=userId, name=room).delete()
+
+    dic = {"code": "200", "message": "ok"}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def get_pending_invitations(request):
+    username = request.session.get("username")
+
+    # Retrieve the user ID using the `get_user_by_username` function
+    user_id = get_user_by_username(username)["user_id"]
+
+    # Fetch pending invitations for the user from the database
+    pending_invitations = GroupChatMember.objects.filter(
+        uid=user_id, status=GroupChatMember.AgreementStatus.IN_PROGRESS
+    )
+
+    # Convert GroupChatMember objects to a list of dictionaries
+    invitation_data = []
+    for invitation in pending_invitations:
+        invitation_data.append(
+            {
+                "name": invitation.name,
+                "uid": invitation.uid,
+                "status": invitation.status,
+            }
+        )
+
+    # Return the serialized data as JSON response
+    dic = {"code": "200", "message": "ok", "data": invitation_data}
+    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+
+
+def search_users(request):
+    query = request.GET.get(
+        "query", ""
+    ).lower()  # Convert to lowercase for case-insensitive search
+    username = request.session.get("username")
+
+    try:
+        all_users = get_users_without_specific_username(
+            username
+        )  # Exclude current user
+        matching_users = [
+            {
+                "username": user["username"],
+                "user_id": user["user_id"],
+            }
+            for user in all_users
+            if query in user["username"].lower()
+        ]
+        print(f"Search query: {query}")
+        print(f"Matching users: {matching_users}")
+        print(f"Matching users after filtering: {matching_users}")
+        return JsonResponse(matching_users, safe=False)
+    except Exception as e:
+        print(f"Error in search_users function: {e}")
+        return JsonResponse(
+            {"error": "Error occurred while searching users."}, status=500
+        )
+
+
+def mark_messages_as_read(request, room_id):
+    user_id = request.session.get("user_id")
+
+    # Fetch unread messages
+    unread_messages = chat_table.query(
+        KeyConditionExpression=Key("room_name").eq(room_id),
+        FilterExpression=Attr("sender").ne(user_id) & Attr("is_read").eq(False),
+    )
+
+    # Mark each message as read
+    for msg in unread_messages.get("Items", []):
+        chat_table.update_item(
+            Key={
+                "room_name": room_id,
+                "timestamp": msg["timestamp"],
+            },
+            UpdateExpression="SET is_read = :true",
+            ExpressionAttributeValues={":true": True},
+        )
