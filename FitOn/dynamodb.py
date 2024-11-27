@@ -693,9 +693,9 @@ def fetch_all_users():
 
 def get_fitness_data(metric, email, start_time, end_time):
     try:
-        print("Inside Fitness Data Function\n")
-        print("Start Time: \n", start_time)
-        print("End Time: \n", end_time)
+        # print("Inside Fitness Data Function\n")
+        # print("Start Time: \n", start_time)
+        # print("End Time: \n", end_time)
         response = fitness_table.scan(
             FilterExpression="metric = :m AND #t BETWEEN :start AND :end AND email = :email",
             ExpressionAttributeNames={"#t": "time"},
@@ -706,9 +706,9 @@ def get_fitness_data(metric, email, start_time, end_time):
                 ":end": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
-        print(
-            f"Metric : {metric}\nResponse: {response}\n",
-        )
+        # print(
+        #     f"Metric : {metric}\nResponse: {response}\n",
+        # )
         return response
     except Exception as e:
         print(f"Error querying DynamoDB for fitness data. {e}")
@@ -959,10 +959,10 @@ def mark_thread_as_reported(thread_id):
 
 def mark_comment_as_reported(thread_id, post_id, reporting_user):
     try:
-        print(f"Fetching comment {post_id} in thread {thread_id}")
+        # print(f"Fetching comment {post_id} in thread {thread_id}")
         response = posts_table.get_item(Key={"ThreadID": thread_id, "PostID": post_id})
         comment = response.get("Item", {})
-        print(f"Comment fetched: {comment}")
+        # print(f"Comment fetched: {comment}")
 
         if not comment:
             print(f"Comment {post_id} not found in thread {thread_id}")
@@ -970,7 +970,7 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
 
         # Initialize ReportedBy if it doesn't exist
         reported_by = comment.get("ReportedBy", [])
-        print(f"Current ReportedBy list: {reported_by}")
+        # print(f"Current ReportedBy list: {reported_by}")
 
         # Avoid duplicate reporting
         if reporting_user not in reported_by:
@@ -982,6 +982,48 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
             UpdateExpression="SET ReportedBy = :reported_by",
             ExpressionAttributeValues={":reported_by": reported_by},
         )
-        print(f"Successfully reported comment {post_id} in thread {thread_id}")
+        # print(f"Successfully reported comment {post_id} in thread {thread_id}")
     except Exception as e:
         print(f"Error reporting comment: {e}")
+
+
+def get_section_stats(section_name):
+    # Fetch threads for the section
+    threads_response = threads_table.scan(
+        FilterExpression=Attr("Section").eq(section_name)
+    )
+    threads = threads_response.get("Items", [])
+
+    # Count threads
+    thread_count = len(threads)
+
+    # Count posts (assuming each thread has a "PostCount" attribute)
+    post_count = sum(thread.get("PostCount", 0) for thread in threads)
+
+    # Find the latest thread
+    latest_thread = max(threads, key=lambda x: x.get("CreatedAt"), default=None)
+
+    if latest_thread:
+        latest_thread_title = latest_thread.get("Title", "No threads")
+        latest_thread_author = latest_thread.get("UserID", "Unknown")
+        latest_thread_id = latest_thread.get("ThreadID", None)
+        created_at_raw = latest_thread.get("CreatedAt")
+        latest_thread_created_at = (
+            datetime.fromisoformat(created_at_raw) if created_at_raw else None
+        )
+    else:
+        latest_thread_title = "No threads"
+        latest_thread_author = "N/A"
+        latest_thread_id = None
+        latest_thread_created_at = "N/A"
+
+    return {
+        "thread_count": thread_count,
+        "post_count": post_count,
+        "latest_thread": {
+            "title": latest_thread_title,
+            "author": latest_thread_author,
+            "thread_id": latest_thread_id,
+            "created_at": latest_thread_created_at,
+        },
+    }

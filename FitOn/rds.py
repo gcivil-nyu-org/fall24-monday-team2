@@ -142,7 +142,7 @@ async def insert_into_steps_table(conn, email, start_time, end_time, count):
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print("Inserted into Steps Table successfully.")
+        # print("Inserted into Steps Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -265,10 +265,10 @@ async def show_table(conn, table_name):
     try:
         async with conn.cursor() as cursor:
             await cursor.execute(f"SELECT * FROM {table_name}")
-            rows = await cursor.fetchall()
-            print(f"Data in the {table_name} table:")
-            for row in rows:
-                print(row)
+            # rows = await cursor.fetchall()
+            # # print(f"Data in the {table_name} table:")
+            # for row in rows:
+            #     print(row)
     except Exception:
         print("")
 

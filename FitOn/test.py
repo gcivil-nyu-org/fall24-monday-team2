@@ -27,6 +27,7 @@ from .dynamodb import (
     fetch_all_users,
     get_thread_details,
     delete_post,
+    get_section_stats,
     # MockUser,
     # users_table,
 )
@@ -740,6 +741,71 @@ class ForumTests(TestCase):
 
         # Assertion to verify the function returns None
         self.assertIsNone(thread)
+
+    def test_get_section_stats(self):
+        # Add threads to the DynamoDB table for testing
+        test_threads = [
+            {
+                "ThreadID": "501",
+                "Title": "Thread 1",
+                "UserID": "user_123",
+                "Section": "general",
+                "CreatedAt": "2024-11-01T10:00:00",
+                "PostCount": 5,
+            },
+            {
+                "ThreadID": "502",
+                "Title": "Thread 2",
+                "UserID": "user_456",
+                "Section": "general",
+                "CreatedAt": "2024-11-02T11:00:00",
+                "PostCount": 2,
+            },
+            {
+                "ThreadID": "503",
+                "Title": "Thread 3",
+                "UserID": "user_789",
+                "Section": "support",
+                "CreatedAt": "2024-11-03T12:00:00",
+                "PostCount": 7,
+            },
+        ]
+        for thread in test_threads:
+            self.threads_table.put_item(Item=thread)
+
+        try:
+            # Fetch stats for the "general" section
+            stats = get_section_stats("general")
+
+            # Verify thread count is greater than 1
+            self.assertGreater(stats["thread_count"], 1)
+
+            # Verify post count is greater than 6
+            self.assertGreater(stats["post_count"], 6)
+
+            # Verify the latest thread details
+            latest_thread = stats["latest_thread"]
+            self.assertEqual(latest_thread["title"], "Thread 2")
+            self.assertEqual(latest_thread["author"], "user_456")
+            self.assertEqual(latest_thread["thread_id"], "502")
+            self.assertEqual(
+                latest_thread["created_at"],
+                datetime.fromisoformat("2024-11-02T11:00:00"),
+            )
+
+            # Fetch stats for a section with no threads
+            empty_section_stats = get_section_stats("non_existing_section")
+            self.assertEqual(empty_section_stats["thread_count"], 0)
+            self.assertEqual(empty_section_stats["post_count"], 0)
+            self.assertEqual(
+                empty_section_stats["latest_thread"]["title"], "No threads"
+            )
+            self.assertEqual(empty_section_stats["latest_thread"]["author"], "N/A")
+
+        finally:
+            # Cleanup the test data
+            for thread in test_threads:
+                self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
 
     def tearDown(self):
         delete_threads_by_user("test_user_123")

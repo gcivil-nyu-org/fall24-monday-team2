@@ -33,6 +33,7 @@ from .dynamodb import (
     mark_comment_as_reported,
     posts_table,
     delete_thread_by_id,
+    get_section_stats,
 )
 
 from .rds import rds_main
@@ -976,6 +977,10 @@ def forum_view(request):
     end_date = request.GET.get("end_date", "")  # End date filter
     search_text = request.GET.get("search", "")  # Search text filter
 
+    # Fetch section stats
+    sections = ["General", "Workout Suggestions", "Diet Plans", "Other"]
+    section_stats = {section: get_section_stats(section) for section in sections}
+
     # Fetch filtered threads based on the inputs
     threads = fetch_filtered_threads(
         username=username,
@@ -991,7 +996,14 @@ def forum_view(request):
     )  # Assuming you have a function to fetch users who posted threads/replies
 
     return render(
-        request, "forums.html", {"threads": threads, "users": users, "user": user}
+        request,
+        "forums.html",
+        {
+            "threads": threads,
+            "users": users,
+            "user": user,
+            "section_stats": section_stats,
+        },
     )
 
 
