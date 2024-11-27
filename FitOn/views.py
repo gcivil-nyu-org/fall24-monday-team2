@@ -1012,7 +1012,7 @@ def section_view(request, section_name):
     return render(
         request,
         "section_threads.html",
-        {"threads": threads, "section_name": section_name},
+        {"threads": threads, "section_name": section_name, "user": user},
     )
 
 

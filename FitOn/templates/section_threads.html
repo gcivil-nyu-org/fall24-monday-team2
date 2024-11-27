@@ -26,6 +26,69 @@
         .back-button:hover {
             background-color: #003e8a;
         }
+
+        /* Forum Table Styling */
+        .forum-table {
+            background-color: #fff;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+            overflow-x: auto; /* Ensure horizontal scrolling for small screens */
+        }
+
+        .forum-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .forum-table th,
+        .forum-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .forum-table th {
+            background-color: #333;
+            color: white;
+        }
+
+        .forum-table td a {
+            color: #0056b3;
+            text-decoration: none;
+        }
+
+        .forum-table td a:hover {
+            text-decoration: underline;
+        }
+
+        .delete-thread-btn {
+            background-color: #d9534f;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .delete-thread-btn:hover {
+            background-color: #c9302c;
+        }
+
+        .forum-container h3 {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .forum-table {
+                padding: 10px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -42,6 +105,9 @@
                         <th>Replies</th>
                         <th>Last Reply</th>
                         <th>Likes</th>
+                        {% if user.is_admin %}
+                            <th>Delete</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -60,12 +126,48 @@
                             {% endif %}
                         </td>
                         <td>{{ thread.Likes }}</td>
+                        {% if user.is_admin %}
+                        <td>
+                            <button class="delete-thread-btn" data-thread-id="{{ thread.ThreadID }}">Delete</button>
+                        </td>
+                        {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            document.querySelectorAll(".delete-thread-btn").forEach(button => {
+                button.addEventListener("click", function() {
+                    const threadId = this.getAttribute("data-thread-id");
+
+                    if (confirm("Are you sure you want to delete this thread?")) {
+                        fetch("/delete_thread/", {
+                            method: "POST",
+                            headers: {
+                                "X-CSRFToken": "{{ csrf_token }}",
+                                "Content-Type": "application/json",
+                                "x-requested-with": "XMLHttpRequest"
+                            },
+                            body: JSON.stringify({ "thread_id": threadId })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.status === "success") {
+                                alert("Thread deleted successfully.");
+                                this.closest("tr").remove();
+                            } else {
+                                alert("Error: " + data.message);
+                            }
+                        })
+                        .catch(error => console.error("Error deleting thread:", error));
+                    }
+                });
+            });
+        });
+    </script>
 </body>
 </html>
 {% endblock %}
