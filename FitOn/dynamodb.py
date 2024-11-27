@@ -246,7 +246,7 @@ def update_reset_request_time(user_id):
             return None
 
         # Insert a new entry or update the existing reset request time
-        response = password_reset_table.put_item(
+        password_reset_table.put_item(
             Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
         )
         print(f"Reset request time updated for user_id '{user_id}'.")
@@ -1209,8 +1209,8 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
 def save_chat_message(sender, message, room_name, sender_name):
     if len(message) > 500:
         return JsonResponse({"error": "Message exceeds character limit"}, status=400)
-    
-    timestamp = int(datetime.utcnow().timestamp()) 
+
+    timestamp = int(datetime.utcnow().timestamp())
 
     chat_table.put_item(
         Item={
@@ -1229,7 +1229,7 @@ def get_users_without_specific_username(exclude_username):
     try:
         response = users_table.scan(
             FilterExpression=Attr("username").ne(exclude_username),
-            ProjectionExpression="user_id, username"  # Fetch only required fields
+            ProjectionExpression="user_id, username",  # Fetch only required fields
         )
         users = response.get("Items", [])
         print(f"Users fetched for search: {users}")
@@ -1240,12 +1240,14 @@ def get_users_without_specific_username(exclude_username):
         )
         return []
 
+
 def get_chat_history_from_db(room_id):
     response = chat_table.query(
         KeyConditionExpression=Key("room_name").eq(room_id),
         ScanIndexForward=True,
     )
     return response
+
 
 def get_unread_messages_count(receiver_id):
     """
@@ -1254,7 +1256,8 @@ def get_unread_messages_count(receiver_id):
     try:
         response = chat_table.query(
             IndexName="receiver-is_read-index",  # GSI name
-            KeyConditionExpression=Key("receiver").eq(receiver_id) & Key("is_read").eq(0)
+            KeyConditionExpression=Key("receiver").eq(receiver_id)
+            & Key("is_read").eq(0),
         )
         # Count unread messages grouped by sender
         unread_counts = {}
@@ -1272,7 +1275,8 @@ def get_users_with_chat_history(user_id):
     try:
         # Scan the table to find chat history involving the given user
         response = chat_table.scan(
-            FilterExpression=Attr("user_id").eq(user_id) | Attr("other_user_id").eq(user_id)
+            FilterExpression=Attr("user_id").eq(user_id)
+            | Attr("other_user_id").eq(user_id)
         )
 
         chat_history = response.get("Items", [])
@@ -1288,7 +1292,9 @@ def get_users_with_chat_history(user_id):
                 chat["other_user_id"] if chat["user_id"] == user_id else chat["user_id"]
             )
             room_name = chat.get("room_name", "")
-            last_activity = chat.get("timestamp", 0)  # Assuming `timestamp` indicates last activity
+            last_activity = chat.get(
+                "timestamp", 0
+            )  # Assuming `timestamp` indicates last activity
 
             # Store the latest activity for each user
             if other_user_id not in users_with_activity:
@@ -1321,5 +1327,3 @@ def get_users_with_chat_history(user_id):
     except Exception as e:
         print(f"Error fetching users with chat history: {e}")
         return []
-
-

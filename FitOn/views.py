@@ -1,12 +1,9 @@
 import asyncio
 import datetime as dt
 import json
-import os
-import ssl
 import uuid
 from collections import defaultdict
 from datetime import datetime, timedelta
-from time import time
 
 import boto3
 import pandas as pd
@@ -18,31 +15,29 @@ import requests
 # from django.utils.http import urlsafe_base64_encode
 # import os
 from asgiref.sync import sync_to_async
-from channels.layers import get_channel_layer
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth import authenticate
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import logout
-from django.contrib.auth.decorators import login_required
+
+# from django.contrib.auth.decorators import login_required
 from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
 
 # from django.core.files.storage import FileSystemStorage
-from django.core.mail import EmailMessage, get_connection, send_mail
-from django.core.mail.backends.locmem import EmailBackend
+from django.core.mail import EmailMessage
+
+# from django.core.mail.backends.locmem import EmailBackend
 
 # from django.core.mail import EmailMultiAlternatives
-from django.http import Http404, HttpResponseForbidden, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.http import HttpResponseForbidden, JsonResponse
+from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
-from django.utils.html import strip_tags
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.views.decorators.http import require_GET, require_http_methods
 
 # from google import Things
 from google.oauth2.credentials import Credentials
@@ -50,10 +45,8 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 
 from boto3.dynamodb.conditions import Key, Attr
-from django.views.decorators.csrf import csrf_exempt
 
 from .dynamodb import (  # create_post,; fetch_thread,; get_replies,; get_thread_details,
-    MockUser,
     add_fitness_trainer_application,
     create_reply,
     create_thread,
@@ -72,13 +65,11 @@ from .dynamodb import (  # create_post,; fetch_thread,; get_replies,; get_thread
     get_mock_user_by_uid,
     get_user_by_username,
     get_users_without_specific_username,
-    like_comment,
     make_fitness_trainer,
     mark_thread_as_reported,
     post_comment,
     posts_table,
     remove_fitness_trainer,
-    report_comment,
     threads_table,
     update_reset_request_time,
     update_user,
@@ -104,7 +95,6 @@ from .dynamodb import (  # create_post,; fetch_thread,; get_replies,; get_thread
     posts_table,
     delete_thread_by_id,
     get_chat_history_from_db,
-    get_users_with_chat_history,
     chat_table,
 )
 
@@ -1853,7 +1843,11 @@ async def fetch_all_metric_data(request, duration, frequency):
 
 async def get_metric_data(request):
     credentials = await sync_to_async(lambda: request.session.get("credentials"))()
+    user_id = await sync_to_async(lambda: request.session.get("user_id"))()
+    user = get_user(user_id)
+    user_email = user.get("email")
     print("Credentials: \n", credentials)
+    print("User Email: \n", user_email)
     if credentials:
         duration = "week"
         frequency = "daily"
@@ -1865,9 +1859,10 @@ async def get_metric_data(request):
             frequency = request.GET.get("data_freq")
 
         total_data = await fetch_all_metric_data(request, duration, frequency)
-
+        rds_response = await rds_main(user_email, total_data)
+        print("RDS Response: \n", rds_response)
         context = {"data": total_data}
-        print("Inside get metric:", context)
+        # print("Inside get metric:", context)
         return await sync_to_async(render)(
             request, "display_metrics_data.html", context
         )
