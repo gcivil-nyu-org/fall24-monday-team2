@@ -265,7 +265,8 @@ async def show_table(conn, table_name):
     try:
         async with conn.cursor() as cursor:
             await cursor.execute(f"SELECT * FROM {table_name}")
-            # rows = await cursor.fetchall()
+            #rows = 
+            await cursor.fetchall()
             # # print(f"Data in the {table_name} table:")
             # for row in rows:
             #     print(row)
