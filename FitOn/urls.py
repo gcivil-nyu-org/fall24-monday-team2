@@ -109,6 +109,7 @@ urlpatterns = [
     path("chat/group/invite/", views.invite_to_group),
     path("chat/group/join/", views.join_group_chat),
     path("chat/group/leave/", views.leave_group_chat),
-    path("chat/group/check/", views.get_pendding_invitations),
+    path("chat/group/check/", views.get_pending_invitations),
     path('search_users', views.search_users, name='search_users'),
+    path('pending_invitations/', views.get_pending_invitations, name='pending_invitations'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -1,59 +1,122 @@
-@import url('https://fonts.googleapis.com/css2?family-Open+Sans:wght@300;400;00;600;700&display=swap');
-*
-{
-    margin: 0;padding: 0;
-    box-sizing: border-box;
-    font-family: 'Open Sans' ,sans-serif;
-}
-body
-{
+/* @import url('https://fonts.googleapis.com/css2?family-Open+Sans:wght@300;400;00;600;700&display=swap'); */
+
+body {
+    margin: 0;
+    padding: 20px; /* Add padding all around */
+    background-color: #f5f5f5;
+    font-family: 'Open Sans', sans-serif;
     display: flex;
     justify-content: center;
     align-items: center;
-    min-height: 100vh;
-    background: linear-gradient(#009688 0%,#009688 130px,#d9dbd5 130px,#d9dbd5 100%)
+    height: 100vh; /* Full height of the viewport */
+    box-sizing: border-box; /* Include padding in height calculation */
 }
-/* .container
-{
-    position: relative;
-    width: 1396px;
-    max-width: 100%;
-    height: calc( 100vh - 40px);
-    background:#fff;
-    box-shadow: 0 1px 1px 0 rgba(0,0,0,0.06),0 2px 5px 0 rgba(0,0,0,0.06);
-    display: flex;
-} */
 
-.container {
-    display: flex;
-    flex-direction: row; /* Ensure left and right sections are side-by-side */
+.main-content {
+    font-family: 'Open Sans', sans-serif;
+}
+.navbar, .navbar .navbar-logo, .navbar .navbar-links a {
+    font-family: 'Times New Roman', sans-serif !important;
+    text-decoration: none;
+}
+.navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
     width: 100%;
-    height: 100vh;
-    overflow: hidden; 
+    background-color: #007bff;
+    padding: 20px 0px; /* Adjust padding for more vertical space */
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
 }
-.leftSide {
-    flex: 30%;
-    overflow-y: auto;
-    border-right: 1px solid #ccc;
-    background-color: #f6f6f6;
+.navbar-container {
     display: flex;
-    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    width: 90%;
+    margin: 0 auto;
 }
 
-/* .container .rightside
-{
-    position: relative;
-    flex: 70%;
-    background:#e5ddd5;
-} */
+.navbar-logo {
+    color: #ffffff;
+    font-size: 32px; /* Increase logo font size */
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.navbar-links {
+    list-style: none;
+    display: flex;
+    gap: 40px; /* Add space between links */
+    margin: 0;
+    padding: 0;
+}
+
+.navbar-links a {
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 18px; /* Match font size of links */
+    font-weight: normal; /* Ensure links are not bold */
+    padding: 5px 10px; /* Adjust padding for link area */
+    transition: background-color 0.3s, color 0.3s, transform 0.2s;
+}
+
+.navbar-links a:hover {
+    background-color: #0056b3;
+    color: #ffffff;
+    border-radius: 5px;
+}
+
+.navbar-links li {
+    margin: 0; /* Ensure consistent spacing controlled by gap */
+}
+/* Highlight active link */
+.navbar-links a.active {
+    background-color: #0056b3; /* Darker blue for active link */
+    color: #ffffff; /* White text */
+}
+
+/* Responsive styling for smaller screens */
+@media (max-width: 768px) {
+    .navbar-links {
+        display: none; /* Hide links on smaller screens */
+    }
+
+    .hamburger {
+        display: flex; /* Show hamburger menu */
+    }
+}
+
+.chat-container {
+    display: flex;
+    flex-direction: row;
+    width: 80%; /* Adjust the width as needed */
+    max-width: 900px; /* Limit the max width */
+    height: 80%; /* Adjust the height */
+    max-height: 700px; /* Limit the max height */
+    background: #ffffff;
+    border-radius: 8px; /* Rounded corners */
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+    overflow: hidden;
+}
+
+.leftSide {
+    flex: 35%; /* Increase size for better visibility */
+    overflow-y: auto;
+    background-color: #f6f6f6;
+    border-right: 1px solid #ccc;
+    padding: 20px;
+}
 
 .rightSide {
-    flex: 70%;
+    flex: 65%; /* Increase size */
     display: flex;
     flex-direction: column;
-    background: #e5ddd5;
-    visibility: hidden; /* Initially hidden until a chat is selected */
-    height: 100vh;
+    background: #ffffff; /* Ensure it's visible */
+    height: 100%;
+}
+.hidden {
+    display: none;
 }
 .rightSide.active {
     visibility: visible; /* Display when chat is active */
@@ -123,22 +186,24 @@ body
 {
     width: 100%;
 }
-.search_chat div input
-{
+.search_chat div input {
     width: 100%;
     outline: none;
     border: 1px solid #ccc; /* Add a subtle rim/outline */
     background: #fff;
-    padding: 6px;
     height: 38px;
     border-radius: 30px;
     font-size: 14px;
-    padding-left: 40px;
+    padding: 0 15px; /* Adjust padding: reduce left and right spacing */
+    padding-left: 20px; /* Align placeholder text more to the left */
+    line-height: 38px; /* Ensure vertical alignment */
     box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1);
 }
-.search_chat div input::placeholder
-{
+.search_chat div input::placeholder {
     color: #bbb;
+    font-size: 14px; /* Ensure consistent font size */
+    line-height: 38px; /* Ensure placeholder remains vertically aligned */
+    text-align: left; /* Explicitly align placeholder text to the left */
 }
 .search_chat div img
 {
@@ -171,28 +236,33 @@ body
 .search-popup .search-result:hover {
     background: #b2ebf2; /* Slightly darker blue on hover */
 }
-.chatlist
-{
-    position: relative;
-    height: calc(100%-110px);
-    overflow-y: auto;
+.chatlist {
+    height: 100%; /* Take up the full height of the parent container */
+    overflow-y: auto; /* Enable scrolling for the entire list */
+    padding: 5px; /* Add consistent padding */
+    scrollbar-width: thin; /* For modern browsers, slim scrollbar */
+    scrollbar-color: #ccc #f6f6f6; /* Thumb and track colors */
+
 }
-.chatlist .block
-{
-    position: relative;
-    width: 100%;
+.chatlist .block {
+    height: 50px; /* Fixed height for each block */
     display: flex;
     align-items: center;
-    padding: 15px;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    padding: 10px; /* Maintain consistent padding */
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06); /* Optional separator */
+    background-color: #f6f6f6; /* Background color */
+    transition: background-color 0.3s ease; /* Smooth hover effect */
+    overflow: hidden;
 }
-.chatlist .block.active{
-    background: #dcdcdc;
+.chatlist .block.active {
+    background: #dcdcdc; /* Highlight active block */
 }
+
 .chatlist .block:hover {
-    background: #e8e8e8; 
-    transition: background-color 0.3s ease; 
+    background: #e8e8e8; /* Slightly darker background on hover */
+    cursor: pointer; /* Indicate clickable area */
 }
+
 .chatlist .block .imgbx
 {
     position: relative;
@@ -202,10 +272,15 @@ body
     border-radius: 50%;
     margin-right: 10px;
 }
-.chatlist .block .details
-{
-    position: relative;
-    width: 100%;
+
+.chatlist .block .details {
+    font-size: 1em;
+    font-weight: 500;
+    color: #111;
+    margin: 0; /* Consistent margin */
+    overflow: hidden; /* Prevent text overflow */
+    white-space: nowrap; /* Prevent text wrapping */
+    text-overflow: ellipsis; /* Add ellipsis for overflowed text */
 }
 .chatlist .block .details .listHead
 {
@@ -228,23 +303,52 @@ body
 {
     color: #111;
 }
-
-.message_p
-{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.chatlist::-webkit-scrollbar {
+    width: 8px; /* Adjust width of scrollbar */
 }
-.message_p p
+.chatlist::-webkit-scrollbar-thumb {
+    background: #ccc; /* Scrollbar color */
+    border-radius: 10px; /* Rounded scrollbar for better aesthetics */
+}
+.chatlist::-webkit-scrollbar-thumb:hover {
+    background: #aaa; /* Darker scrollbar color on hover */
+}
+
+/* .message {
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 10px 0;
+    word-wrap: break-word; 
+    overflow-wrap: anywhere; 
+    max-width: 100%; 
+} */
+
+/* .message p {
+    position: relative;
+    max-width: 65%; 
+    padding: 10px;
+    font-size: 0.9em;
+    border-radius: 10px;
+    background: #dcf8c6; 
+    margin: 0;
+    word-wrap: break-word; 
+    overflow-wrap: anywhere; 
+    white-space: normal;
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+} */
+
+/* .message_p p
 {
     color: #aaa;
     display: -webkit-box;
-    /* -webkit-line-break: 1; */
     font-size: 0.9em;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-.message_p b
+} */
+
+/* .message_p b
 {
     background-color: red;
     color: #fff;
@@ -255,7 +359,8 @@ body
     justify-content: center;
     align-items: center;
     font-size: 0.75em;
-}
+} */
+
 .imgText
 {
     position: relative;
@@ -282,6 +387,8 @@ body
     background: #f9f9f9;
     box-sizing: border-box;
     display: block; /* Ensures proper alignment */
+    word-wrap: break-word;
+    border: 1px solid red;
 }
 /* .chatbox_input {
     height: 80px;
@@ -302,19 +409,28 @@ body
     display: block; /* Ensures placeholder is visible */
 }
 .message {
-    position: relative; /* Anchor the timestamp bubble */
-    display: flex; /* Align items inside the message */
-    align-items: center; /* Vertical alignment for consistency */
-    margin: 10px 0; /* Space between messages */
+    position: relative;
+    display: flex;
+    align-items: center;
+    margin: 10px 0;
+    word-wrap: break-word; /* Ensure wrapping of long words */
+    overflow-wrap: anywhere; /* Force breaks in long, unbreakable text */
+    max-width: 100%; /* Ensure the message container doesn't overflow */
 }
 .message p {
     position: relative;
-    max-width: 65%; /* Constrain the message bubble's width */
+    max-width: 65%; /* Constrain the bubble width */
     padding: 10px;
     font-size: 0.9em;
     border-radius: 10px;
-    background: #dcf8c6; /* Default background for green messages */
+    background: #dcf8c6; /* Background for sent messages */
     margin: 0;
+    word-wrap: break-word; /* Break long words */
+    overflow-wrap: anywhere; /* Ensure long words break anywhere */
+    white-space: normal; /* Allow text wrapping */
+    overflow: hidden; /* Prevent content overflow */
+    text-overflow: ellipsis; /* Optional: visually truncate overflowed text */
+    border: 1px solid red;
 }
 .message p::before
 {
@@ -409,46 +525,41 @@ body
 
 .chatbox_input {
     display: flex;
-    flex-direction: row; /* Stack elements vertically */
-    align-items: center; /* Align all elements to the left */
+    flex-direction: column; /* Stack elements vertically */
+    align-items: stretch; /* Ensure elements stretch to full width */
     padding: 10px;
-    background: #f0f0f0;
+    background: #f0f0f0; /* Dark gray container background */
     border-top: 1px solid #ccc;
-    gap: 10px;
+    gap: 5px; /* Space between input box and counter/button */
+    position: relative; /* Required for absolute positioning inside */
 }
-/* .chatbox_input input
-{
-    position: relative;
-    width: 80%;
-
-    border-radius: 30px;
-    font-size: 1em;
-} */
 
 .chatbox_input input {
-    flex-grow: 1; /* Make the input take up available space */
-    height: 40px;
-    padding: 5px 10px;
+    flex-grow: 1; /* Take up available width */
+    height: 50px; /* Adjust height */
+    padding: 10px;
     border: 1px solid #ccc;
     border-radius: 5px;
-    font-size: 15px !important;
-    line-height: 1.2;
+    font-size: 16px;
+    line-height: 1.5;
 }
 
 .chatbox_input input::placeholder {
-    color: #999; /* Placeholder text color */
-    font-size: 15px !important; 
+    color: #999;
+    font-size: 15px;
     line-height: 1.2;
 }
 
 .chatbox_input button {
-    height: 40px;
+    height: 50px; /* Match input height */
     background-color: #4CAF50;
     color: white;
     border: none;
     border-radius: 5px;
     cursor: pointer;
-    padding: 0 20px; /* Adjust padding for button size */
+    padding: 0 20px;
+    font-size: 16px;
+    align-self: flex-end; /* Align to the right of the container */
 }
 
 .chatbox_input button:hover {
@@ -467,8 +578,8 @@ body
 
 .overlay {
     display: flex;
-    align-items: center; /* Vertically centers the popup */
-    justify-content: center; /* Horizontally centers the popup */
+    align-items: center;
+    justify-content: center;
     position: fixed;
     top: 0;
     left: 0;
@@ -476,32 +587,101 @@ body
     height: 100%;
     background: rgba(0, 0, 0, 0.5);
     z-index: 1000;
-    overflow: auto; /* Enables scrolling when content overflows */
-    padding: 20px; /* Add padding around the popup */
+    overflow: auto;
+    padding: 40px; /* Add extra padding around the popup */
 }
-
 .popup {
     background: white;
-    padding: 20px;
+    padding: 40px; /* Increase padding for better spacing */
     border-radius: 10px;
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-    max-width: 400px; /* Limit the popup width */
-    width: 100%; /* Make it responsive */
-    max-height: 90%; /* Ensure the popup doesn't exceed the screen height */
-    overflow-y: auto; /* Add vertical scrolling inside the popup */
+    max-width: 600px; /* Increase max width for larger screens */
+    width: 70%; /* Use a larger portion of the screen width */
+    max-height: 90%; /* Keep height responsive */
+    height: 70%; /* Set initial height to a larger size */
+    overflow-y: auto; /* Add vertical scrolling for content overflow */
     position: relative;
 }
+.search-popup {
+    position: absolute;
+    top: calc(100% + 5px); /* Below the search bar */
+    left: 0;
+    width: 100%;
+    max-height: 300px; /* Limit height for scroll */
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    display: none; /* Hidden by default */
+}
+.search-popup .search-result {
+    padding: 10px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    transition: background 0.3s;
+}
+.search-popup .search-result:hover {
+    background: #f0f0f0; /* Highlight on hover */
+}
 .unread-badge {
-    font-size: 0.8em;
-    color: white;
-    background-color: red;
-    padding: 2px 6px;
-    border-radius: 12px;
-    margin-left: 10px;
+    display: inline-block;
+    width: 8px; /* Size of the badge */
+    height: 8px;
+    background-color: blue; /* Blue color for unread badge */
+    border-radius: 50%; /* Makes it a circle */
+    margin-left: 10px; /* Space from the username */
 }
 .new-messages {
     font-size: 0.8em;
     color: red;
     margin-left: 10px;
     font-weight: bold;
+}
+.button-large {
+    width: 100%;
+    height: 60px;
+    margin-top: 10px; /* Adds space between buttons */
+    font-size: 16px;
+    cursor: pointer;
+    background-color: #007bff; /* Button background color */
+    color: #fff; /* Button text color */
+    border: none;
+    border-radius: 4px;
+    transition: background-color 0.3s ease; /* Smooth hover effect */
+}
+
+.button-large:hover {
+    background-color: #0056b3; /* Darker blue on hover */
+}
+
+#selected_members {
+    margin-top: 10px;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+}
+
+#selected_members_list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#selected_members_list li {
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.char-counter {
+    font-size: 12px; /* Slightly smaller font */
+    color: #666;
+    text-align: right; /* Align text to the right */
+    margin-top: 5px; /* Add spacing below the input */
+}
+.char-counter.red {
+    color: red; /* Highlight text when the character limit is reached */
 }

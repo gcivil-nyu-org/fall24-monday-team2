@@ -2036,25 +2036,41 @@ def create_room_id(uid_a, uid_b):
     return f"{ids[0]}and{ids[1]}"
 
 def get_chat_history(request, room_id):
+    # Fetch chat history
     response = get_chat_history_from_db(room_id)
-    return JsonResponse({"messages": response.get("Items", [])})
+    items = response.get("Items", [])
 
+    # Update each unread message to mark it as read
+    for item in items:
+        if item.get("receiver") == request.session.get("user_id") and not item.get("is_read", False):
+            chat_table.update_item(
+                Key={
+                    "room_name": room_id,
+                    "timestamp": item["timestamp"],  # Ensure you include the sort key
+                },
+                UpdateExpression="SET is_read = :true",
+                ExpressionAttributeValues={":true": True},
+            )
+
+    return JsonResponse({"messages": items})
 
 def group_chat(request):
     username = request.session.get("username")
     user = get_user_by_username(username)
+    allUser = get_users_without_specific_username(username)
+
     data = []
     for i in GroupChatMember.objects.filter(
         uid=user.get("user_id"), status=GroupChatMember.AgreementStatus.COMPLETED
     ):
         data.append({"name": i.name})
-    allUser = get_users_without_specific_username(username)
-    dic = {
+
+    context = {
         "data": data,
         "mine": user,
-        "allUser": allUser,
+        "all_users": allUser,
     }
-    return render(request, "chatg.html", dic)
+    return render(request, "chatg.html", context)
 
 
 
@@ -2140,7 +2156,7 @@ def leave_group_chat(request):
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
 
-def get_pendding_invitations(request):
+def get_pending_invitations(request):
     username = request.session.get("username")
 
     # Retrieve the user ID using the `get_user_by_username` function
@@ -2171,13 +2187,19 @@ def search_users(request):
     query = request.GET.get("query", "").lower()  # Convert to lowercase for case-insensitive search
     username = request.session.get("username")
 
-    # Exclude the current user and perform a case-insensitive match
     try:
-        all_users = get_users_without_specific_username(username)
+        all_users = get_users_without_specific_username(username)  # Exclude current user
         matching_users = [
-            user for user in all_users if query in user["username"].lower()
+            {
+                "username": user["username"],
+                "user_id": user["user_id"],
+            }
+            for user in all_users
+            if query in user["username"].lower()
         ]
-
+        print(f"Search query: {query}")
+        print(f"Matching users: {matching_users}")
+        print(f"Matching users after filtering: {matching_users}")
         return JsonResponse(matching_users, safe=False)
     except Exception as e:
         print(f"Error in search_users function: {e}")

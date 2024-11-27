@@ -977,6 +977,7 @@ def get_users_without_specific_username(exclude_username):
             ProjectionExpression="user_id, username"  # Fetch only required fields
         )
         users = response.get("Items", [])
+        print(f"Users fetched for search: {users}")
         return users
     except Exception as e:
         print(
@@ -1066,3 +1067,4 @@ def get_users_with_chat_history(user_id):
     except Exception as e:
         print(f"Error fetching users with chat history: {e}")
         return []
+
