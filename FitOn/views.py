@@ -61,20 +61,15 @@ from .dynamodb import (  # create_post,; fetch_thread,; get_replies,; get_thread
     delete_post,
     delete_reply,
     delete_user_by_username,
-    dynamodb,
-    fetch_all_threads,
-    fetch_all_users,
-    fetch_filtered_threads,
+    delete_post,
     fetch_posts_for_thread,
-    fetch_reported_threads_and_comments,
-    get_chat_history_from_db,
-    get_fitness_data,
     get_fitness_trainer_applications,
     get_fitness_trainers,
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
-    get_user_by_uid,
+    # get_user_by_uid,
+    get_mock_user_by_uid,
     get_user_by_username,
     get_users_without_specific_username,
     like_comment,
@@ -89,9 +84,32 @@ from .dynamodb import (  # create_post,; fetch_thread,; get_replies,; get_thread
     update_user,
     update_user_password,
     upload_profile_picture,
+    fetch_filtered_threads,
+    fetch_all_users,
+    get_fitness_data,
+    dynamodb,
+    threads_table,
+    get_fitness_trainers,
+    make_fitness_trainer,
+    remove_fitness_trainer,
+    get_standard_users,
+    send_data_request_to_user,
+    cancel_data_request_to_user,
+    add_to_list,
+    remove_from_list,
+    delete_reply,
+    fetch_reported_threads_and_comments,
+    mark_thread_as_reported,
+    mark_comment_as_reported,
+    posts_table,
+    delete_thread_by_id,
+    get_chat_history_from_db,
     get_users_with_chat_history,
     chat_table,
 )
+
+from .rds import rds_main, fetch_user_data
+
 from .forms import (
     FitnessTrainerApplicationForm,
     LoginForm,
@@ -101,6 +119,51 @@ from .forms import (
     SignUpForm,
 )
 from .models import GroupChatMember
+
+# from .models import PasswordResetRequest
+import datetime as dt
+from datetime import datetime
+import pytz
+from datetime import timedelta
+from django.contrib.auth.hashers import make_password, check_password
+import pandas as pd
+
+# from django.contrib.auth.models import User
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth import logout
+from django.contrib import messages
+from django.conf import settings
+
+# from django.core.files.storage import FileSystemStorage
+from django.core.mail import EmailMessage
+
+# from django.core.mail.backends.locmem import EmailBackend
+# from django.core.mail import EmailMultiAlternatives
+from django.http import JsonResponse, HttpResponseForbidden
+from django.template.loader import render_to_string
+from django.urls import reverse
+from django.utils import timezone
+
+# from django.utils.encoding import force_bytes
+# from django.utils.html import strip_tags
+# from django.utils.http import urlsafe_base64_encode
+# import os
+from asgiref.sync import sync_to_async
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
+import uuid
+import boto3
+from google_auth_oauthlib.flow import Flow
+import requests
+
+# from django.contrib.auth.decorators import login_required
+import json
+
+# from google import Things
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+import asyncio
+from collections import defaultdict
 
 # Define metric data types
 dataTypes = {
@@ -205,6 +268,9 @@ def signup(request):
             name = form.cleaned_data["name"]
             date_of_birth = form.cleaned_data["date_of_birth"]
             gender = form.cleaned_data["gender"]
+            height = form.cleaned_data["height"]
+            weight = form.cleaned_data["weight"]
+
             password = form.cleaned_data["password"]
 
             # Hash the password before saving it
@@ -215,7 +281,15 @@ def signup(request):
 
             # Sync data with DynamoDB
             if create_user(
-                user_id, username, email, name, date_of_birth, gender, hashed_password
+                user_id,
+                username,
+                email,
+                name,
+                date_of_birth,
+                gender,
+                height,
+                weight,
+                hashed_password,
             ):
                 request.session["username"] = username
                 request.session["user_id"] = user_id
@@ -308,7 +382,7 @@ def password_reset_confirm(request, uidb64, token):
         )
     try:
         user_id = force_str(urlsafe_base64_decode(uidb64))
-        user = get_user_by_uid(user_id)
+        user = get_mock_user_by_uid(user_id)
         if user and default_token_generator.check_token(user, token):
             form = SetNewPasswordForm(request.POST or None)
             if request.method == "POST" and form.is_valid():
@@ -370,7 +444,7 @@ def profile_view(request):
 
     if not user:
         messages.error(request, "User not found.")
-        return redirect("homepage")
+        return redirect("login")
 
     if request.method == "POST":
         # Handle profile picture upload
@@ -394,6 +468,8 @@ def profile_view(request):
                 "name": {"Value": form.cleaned_data["name"]},
                 "date_of_birth": {"Value": form.cleaned_data["date_of_birth"]},
                 "gender": {"Value": form.cleaned_data["gender"]},
+                "height": {"Value": form.cleaned_data["height"]},
+                "weight": {"Value": form.cleaned_data["weight"]},
                 "bio": {"Value": form.cleaned_data["bio"]},
                 "address": {"Value": form.cleaned_data["address"]},
             }
@@ -420,6 +496,8 @@ def profile_view(request):
                 "email": user.get("email", ""),
                 "gender": user.get("gender", ""),
                 "phone_number": user.get("phone_number", ""),
+                "height": user.get("height", ""),
+                "weight": user.get("weight", ""),
                 "address": user.get("address", ""),
                 "bio": user.get("bio", ""),
                 "country_code": user.get("country_code", ""),  # Default country code
@@ -573,6 +651,11 @@ def delink_google_fit(request):
     return redirect("profile")
 
 
+# --------------------------------- #
+# User + Fitness Trainer Functions  #
+# --------------------------------- #
+
+
 def fitness_trainer_application_view(request):
     user_id = request.session.get("user_id")
     if request.method == "POST":
@@ -625,24 +708,6 @@ def fitness_trainer_applications_list_view(request):
         request,
         "fitness_trainer_applications_list.html",
         {"applications": applications},
-    )
-
-
-def fitness_trainers_list_view(request):
-    # Check if the current user is an admin
-    user_id = request.session.get("user_id")
-    user = get_user(user_id)
-    if not user or not user.get("is_admin"):
-        return HttpResponseForbidden("You do not have permission to access this page")
-
-    # Retrieve list of trainers from DynamoDB
-    trainers = get_fitness_trainers()
-
-    # Render the list of trainers
-    return render(
-        request,
-        "fitness_trainers_list.html",
-        {"trainers": trainers},
     )
 
 
@@ -726,6 +791,287 @@ def reject_fitness_trainer(request):
         )
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def accept_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+
+        trainer = get_user(trainer_id)
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        # Update access lists in DynamoDB
+        add_to_list(user_id, "trainers_with_access", trainer_id)
+        add_to_list(trainer_id, "users_with_access", user_id)
+
+        # # Remove trainer from the user's waiting list
+        remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
+        remove_from_list(trainer_id, "waiting_list_of_users", user_id)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def deny_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+
+        trainer = get_user(trainer_id)
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        # Remove trainer from the user's waiting list
+        remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
+        remove_from_list(trainer_id, "waiting_list_of_users", user_id)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def provide_access_to_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+
+        trainer = get_user(trainer_id)
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        # Update user and trainer records in DynamoDB
+        add_to_list(user_id, "trainers_with_access", trainer_id)
+        add_to_list(trainer_id, "users_with_access", user_id)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def revoke_access_to_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+
+        if not user_id or not trainer_id:
+            return JsonResponse({"status": "error", "message": "Invalid data"})
+
+        try:
+            remove_from_list(user_id, "trainers_with_access", trainer_id)
+            remove_from_list(trainer_id, "users_with_access", user_id)
+
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "message": f"Revoked access for Trainer: {trainer_id}",
+                }
+            )
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)})
+    else:
+        return JsonResponse({"status": "error", "message": "Invalid request method"})
+
+
+def fitness_trainers_list_view(request):
+    # Make sure that the current user is not a fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of trainers from DynamoDB
+    trainers = get_fitness_trainers()
+
+    # Extract lists from the user's data
+    waiting_list_of_trainers = user.get("waiting_list_of_trainers", [])
+    trainers_with_access = user.get("trainers_with_access", [])
+
+    # Separate trainers into categories
+    trainers_in_waiting_list = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] in waiting_list_of_trainers
+    ]
+    my_trainers = [
+        trainer for trainer in trainers if trainer["user_id"] in trainers_with_access
+    ]
+    remaining_trainers = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] not in waiting_list_of_trainers
+        and trainer["user_id"] not in trainers_with_access
+    ]
+
+    # Pass the categorized trainers to the template
+    context = {
+        "trainers_in_waiting_list": trainers_in_waiting_list,
+        "my_trainers": my_trainers,
+        "remaining_trainers": remaining_trainers,
+    }
+    return render(request, "fitness_trainers_list.html", context)
+
+
+def standard_users_list_view(request):
+    # Check if the current user is a verified fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of standard users from DynamoDB
+    standard_users = get_standard_users()
+
+    waiting_list_of_users = user.get("waiting_list_of_users", [])
+    users_in_waiting_list = [
+        user for user in standard_users if user["user_id"] in waiting_list_of_users
+    ]
+    users_with_access = user.get("users_with_access", [])
+    my_users = [user for user in standard_users if user["user_id"] in users_with_access]
+    remaining_users = [
+        user
+        for user in standard_users
+        if user["user_id"] not in waiting_list_of_users + users_with_access
+    ]
+
+    return render(
+        request,
+        "standard_users_list.html",
+        {
+            "users_in_waiting_list": users_in_waiting_list,
+            "my_users": my_users,
+            "remaining_users": remaining_users,
+        },
+    )
+
+
+def send_data_request(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
+
+        success = send_data_request_to_user(fitness_trainer_id, standard_user_id)
+
+        if success:
+            return JsonResponse({"message": "Request sent successfully!"}, status=200)
+        else:
+            return JsonResponse({"error": "Failed to send request"}, status=400)
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+def cancel_data_request(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
+
+        if not standard_user_id:
+            return JsonResponse({"error": "User ID is required"}, status=400)
+
+        success = cancel_data_request_to_user(fitness_trainer_id, standard_user_id)
+
+        if success:
+            return JsonResponse(
+                {"message": "Request cancelled successfully"}, status=200
+            )
+        else:
+            return JsonResponse({"error": "Failed to cancel the request"}, status=400)
+    else:
+        return JsonResponse({"error": "Invalid method"}, status=405)
+
+
+def view_user_data(request):
+    print("view_user_data is being called")
+    try:
+        # Retrieve the data from the session
+        user_data = request.session.get("user_data")
+        print("User data in session:", user_data)
+
+        if not user_data:
+            # Handle missing session data
+            raise ValueError("User data is not available in the session.")
+
+        # Render the HTML template with the session data
+        return render(
+            request,
+            "view_user_data.html",
+            {
+                "user_data": user_data,
+            },
+        )
+    except Exception as e:
+        # Handle errors
+        return render(
+            request,
+            "view_user_data.html",
+            {
+                "error": str(e),
+            },
+        )
+
+
+def store_session_data(request, user_data):
+    # Store data in the session
+    request.session["user_data"] = user_data
+    request.session.modified = True  # Ensure the session is marked as modified
+    print(request.session.get("user_data"))
+    return
+
+
+def serialize_data(data):
+    # Handle dictionaries
+    if isinstance(data, dict):
+        return {key: serialize_data(value) for key, value in data.items()}
+
+    # Handle lists and tuples
+    elif isinstance(data, list) or isinstance(data, tuple):
+        return [serialize_data(item) for item in data]
+
+    # Handle dates: Convert datetime.date to ISO format string
+    elif isinstance(data, dt.date):
+        return data.isoformat()
+
+    # Handle other types that can be directly serialized to JSON
+    elif isinstance(data, (str, int, float, bool)):
+        return data
+
+    # If we can't serialize the type, return it as a string
+    return str(data)
+
+
+# Updated code for async_view_user_data
+async def async_view_user_data(request, user_id):
+    try:
+        # Fetch the user data asynchronously
+        user = await sync_to_async(get_user)(user_id)
+        user_email = user.get("email")
+        user_data = await fetch_user_data(user_email)
+
+        # Serialize user data
+        serialized_data = serialize_data(user_data)
+
+        # Store the data in the session
+        await sync_to_async(store_session_data)(request, serialized_data)
+
+        # Send serialized user_data in JSON response
+        return JsonResponse({"success": True, "user_data": serialized_data})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 # -------------------------------
@@ -904,15 +1250,19 @@ def thread_detail_view(request, thread_id):
 
 
 def new_thread_view(request):
-    print("PrePost")
+    user_id = request.session.get("user_id")
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)
+
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
+
     if request.method == "POST":
-        print("Post")
         title = request.POST.get("title")
         content = request.POST.get("content")
         user_id = request.session.get("username")  # Assuming the user is logged in
-
-        # Debugging: Add print statements to confirm values
-        print(f"Title: {title}, Content: {content}, User: {user_id}")
 
         if title and content and user_id:
             # Call your DynamoDB function to create a new thread
@@ -942,10 +1292,6 @@ def delete_post_view(request):
             post_id = data.get("post_id")
             thread_id = data.get("thread_id")  # Make sure you're getting thread_id too
 
-            # Log the post_id and thread_id for debugging
-            print("post_id: {post_id}, thread_id: {thread_id}")
-            print("Hello?")
-
             if not post_id or not thread_id:
                 return JsonResponse(
                     {"status": "error", "message": "Post or Thread ID missing"},
@@ -969,8 +1315,6 @@ def forum_view(request):
     user_id = request.session.get("username")
     user = get_user_by_username(user_id)
     is_banned = user.get("is_banned")
-    print(user)
-    print(is_banned)
     if is_banned:
         return render(request, "forums.html", {"is_banned": is_banned})
 
@@ -1136,8 +1480,17 @@ def merge_data(existing_data, new_data, frequency):
             existing_item = data_index[new_start]
             # Averaging the counts, updating mins and maxs
             existing_item["count"] = (existing_item["count"] + new_item["count"]) / 2
-            existing_item["min"] = min(existing_item["min"], new_item["min"])
-            existing_item["max"] = max(existing_item["max"], new_item["max"])
+            if min in existing_item or min in new_item:
+                existing_item["min"] = (
+                    new_item["min"]
+                    if "min" not in existing_item
+                    else min(existing_item["min"], new_item["min"])
+                )
+                existing_item["max"] = (
+                    new_item["max"]
+                    if "max" not in existing_item
+                    else max(existing_item["max"], new_item["max"])
+                )
         else:
             # No overlap, append this new item
             new_item["end"] = new_end.strftime(
@@ -1560,73 +1913,82 @@ def health_data_view(request):
         metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
 
     return render(request, "display_metric_data.html", {"metrics_data": metrics_data})
-    return render(
-        request,
-        "forums.html",
-        {
-            "user": user,
-            "threads": threads,
-            "users": users,
-            "is_banned": is_banned,
-        },
-    )
+    # return render(
+    #     request,
+    #     "forums.html",
+    #     {
+    #         "user": user,
+    #         "threads": threads,
+    #         "users": users,
+    #         "is_banned": is_banned,
+    #     },
+    # )
 
 
 def add_reply(request):
+    print("Received request in add_reply")  # Debugging statement
+
     if (
         request.method == "POST"
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
     ):
-        data = json.loads(request.body.decode("utf-8"))
-        post_id = data.get("post_id")
-        content = data.get("content")
-        thread_id = data.get("thread_id")
-
-        if not post_id or not content:
-            return JsonResponse(
-                {"status": "error", "message": "Post ID and content are required."},
-                status=400,
-            )
-
-        # Get the user info from the session
-        user_id = request.session.get("username")
-        if not user_id:
-            return JsonResponse(
-                {"status": "error", "message": "User not authenticated"}, status=403
-            )
-
-        # Create the reply data
-        reply_data = {
-            "ReplyID": str(uuid.uuid4()),  # Unique ID for each reply
-            "UserID": user_id,
-            "Content": content,
-            "CreatedAt": datetime.utcnow().isoformat(),  # Timestamp for each reply
-        }
-
-        # Save the reply to DynamoDB by appending it to the 'Replies' list for the post
         try:
+            data = json.loads(request.body.decode("utf-8"))
+            print("Data received:", data)  # Debugging statement
+
+            post_id = data.get("post_id")
+            content = data.get("content")
+            thread_id = data.get("thread_id")
+
+            if not post_id or not content:
+                print("Missing post_id or content")  # Debugging statement
+                return JsonResponse(
+                    {"status": "error", "message": "Post ID and content are required."},
+                    status=400,
+                )
+
+            user_id = request.session.get("username")
+            if not user_id:
+                print("User not authenticated")  # Debugging statement
+                return JsonResponse(
+                    {"status": "error", "message": "User not authenticated"}, status=403
+                )
+
+            # tz = timezone("EST")
+            reply_data = {
+                "ReplyID": str(uuid.uuid4()),
+                "UserID": user_id,
+                "Content": content,
+                # "CreatedAt": datetime.now(tz).isoformat(),
+            }
+
+            # Simulating interaction with a database (DynamoDB, for example)
+            print("Attempting to save reply:", reply_data)  # Debugging statement
+            # Assuming 'posts_table' is configured to interact with your database
             posts_table.update_item(
                 Key={"PostID": post_id, "ThreadID": thread_id},
                 UpdateExpression="SET Replies = list_append(if_not_exists(Replies, :empty_list), :reply)",
                 ExpressionAttributeValues={":reply": [reply_data], ":empty_list": []},
                 ReturnValues="UPDATED_NEW",
             )
+
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "reply_id": reply_data["ReplyID"],
+                    "content": content,
+                    "username": user_id,
+                    # "created_at": reply_data["CreatedAt"],
+                }
+            )
+
         except Exception as e:
+            print("Exception occurred:", e)  # Debugging statement
+            # logger.error("Failed to process add_reply request", exc_info=True)
             return JsonResponse(
                 {"status": "error", "message": f"Failed to save reply: {str(e)}"},
                 status=500,
             )
-
-        # Return success response with reply details
-        return JsonResponse(
-            {
-                "status": "success",
-                "reply_id": reply_data["ReplyID"],
-                "content": content,
-                "username": user_id,
-                "created_at": reply_data["CreatedAt"],
-            }
-        )
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
@@ -1682,7 +2044,8 @@ def delete_thread(request):
 
         try:
             # Perform the deletion from DynamoDB
-            threads_table.delete_item(Key={"ThreadID": thread_id})
+            delete_thread_by_id(thread_id)
+            # threads_table.delete_item(Key={"ThreadID": thread_id})
             return JsonResponse(
                 {"status": "success", "message": "Thread deleted successfully."}
             )
@@ -1694,29 +2057,46 @@ def delete_thread(request):
 
 
 def reports_view(request):
-    # Get user details to check if they are an admin
     user = get_user(request.session.get("user_id"))
+    reporting_user = user.get("user_id")  # Get the user ID from the session
 
-    # Only allow access if the user is an admin
-    if not user.get("is_admin"):
-        return redirect("forum")  # Redirect non-admins to the main forum page
-
+    # Handle POST requests (Reporting Threads and Comments) - Available to all users
     if request.method == "POST":
         data = json.loads(request.body.decode("utf-8"))
         action = data.get("action")
         thread_id = data.get("thread_id")
+        post_id = data.get("post_id")  # Add support for comment IDs
 
-        # Check if the action is to report a thread
+        # Debugging input values
+        print(f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}")
+
+        # Allow anyone to report a thread
         if action == "report_thread" and thread_id:
             # Mark the thread as reported in DynamoDB
             mark_thread_as_reported(thread_id)
             return JsonResponse({"status": "success"})
-        else:
+
+        # Allow anyone to report a comment
+        elif action == "report_comment" and thread_id and post_id:
+            print("Reporting comment...")
+            # Pass all three arguments to the function
+            mark_comment_as_reported(thread_id, post_id, reporting_user)
             return JsonResponse(
-                {"status": "error", "message": "Invalid request"}, status=400
+                {
+                    "status": "success",
+                    "message": f"Comment {post_id} reported successfully.",
+                }
             )
 
-    # If it's a GET request, retrieve reported threads and comments
+        return JsonResponse(
+            {"status": "error", "message": "Invalid request"}, status=400
+        )
+
+    # Handle GET requests (View reported threads and comments) - Restricted to admins
+    if not user.get("is_admin"):
+        return redirect("forum")  # Redirect non-admins to the main forum page
+
+    # Retrieve reported threads and comments (Only for admins)
     reported_data = fetch_reported_threads_and_comments()
     return render(request, "reports.html", reported_data)
 
@@ -1726,6 +2106,7 @@ def reports_view(request):
 # ------------------
 
 
+# By username
 def toggle_ban_user(request):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
     users_table = dynamodb.Table("Users")
@@ -1738,7 +2119,6 @@ def toggle_ban_user(request):
         username = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
-        print(username)
 
         if not username:
             return JsonResponse(
@@ -1747,7 +2127,6 @@ def toggle_ban_user(request):
 
         # Fetch user to check if they exist
         user = get_user_by_username(username)
-        print(user)
         if not user:
             return JsonResponse(
                 {"status": "error", "message": "User not found"}, status=404
@@ -1795,7 +2174,6 @@ def toggle_mute_user(request):
         username = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
-        print(username)
 
         if not username:
             return JsonResponse(
@@ -1804,7 +2182,6 @@ def toggle_mute_user(request):
 
         # Fetch user to check if they exist
         user = get_user_by_username(username)
-        print(user)
         if not user:
             return JsonResponse(
                 {"status": "error", "message": "User not found"}, status=404
@@ -1852,7 +2229,7 @@ def unban_user(request):
         user_id = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
-        print(user_id)
+
         if not user_id:
             return JsonResponse(
                 {"status": "error", "message": "User ID is missing"}, status=400
@@ -1888,7 +2265,6 @@ def unmute_user(request):
         user_id = data.get(
             "user_id"
         )  # Ensure this matches the 'user_id' field in DynamoDB
-        print(user_id)
         if not user_id:
             return JsonResponse(
                 {"status": "error", "message": "User ID is missing"}, status=400
@@ -1932,7 +2308,6 @@ def punishments_view(request):
         ExpressionAttributeValues={":true": True},
     )
     punished_users = response.get("Items", [])
-    print(punished_users)
 
     # Pass the punished users to the template
     return render(request, "punishments.html", {"punished_users": punished_users})

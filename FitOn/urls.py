@@ -15,6 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from . import views, consumers
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
@@ -22,8 +23,6 @@ from django.contrib import admin
 # from django.contrib.auth import views
 from django.urls import path
 
-from . import consumers, views
-from .views import homepage, login, profile_view, signup, upload_profile_picture
 
 app_name = "chat"
 
@@ -74,6 +73,41 @@ urlpatterns = [
         "fitness_trainers_list/",
         views.fitness_trainers_list_view,
         name="fitness_trainers_list",
+    ),
+    path(
+        "trainer/standard-users/",
+        views.standard_users_list_view,
+        name="standard_users_list",
+    ),
+    path(
+        "trainer/send-data-request/", views.send_data_request, name="send_data_request"
+    ),
+    path(
+        "trainer/cancel-data-request/",
+        views.cancel_data_request,
+        name="cancel_data_request",
+    ),
+    path(
+        "trainer/view_user_data/async/<str:user_id>/data/",
+        views.async_view_user_data,
+        name="async_view_user_data",
+    ),
+    path(
+        "trainer/view_user_data/<str:user_id>/data/",
+        views.view_user_data,
+        name="view_user_data",
+    ),
+    path("user/accept_trainer/", views.accept_trainer, name="accept_trainer"),
+    path("user/deny_trainer/", views.deny_trainer, name="deny_trainer"),
+    path(
+        "user/provide_access_to_trainer/",
+        views.provide_access_to_trainer,
+        name="provide_access_to_trainer",
+    ),
+    path(
+        "user/revoke_access_to_trainer/",
+        views.revoke_access_to_trainer,
+        name="revoke_access_to_trainer",
     ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),

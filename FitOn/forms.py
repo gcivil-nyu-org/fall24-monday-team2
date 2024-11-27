@@ -1,6 +1,8 @@
 from django import forms
 from django.core.exceptions import ValidationError
 import datetime
+from .dynamodb import get_user_by_username
+
 
 GENDER_OPTIONS = [
     ("", "Choose gender"),
@@ -47,10 +49,26 @@ class SignUpForm(forms.Form):
         choices=GENDER_CHOICES, widget=forms.Select, label="Gender"
     )
 
+    height = forms.IntegerField(
+        label="Height", min_value=50, max_value=300, initial=170
+    )
+    weight = forms.IntegerField(label="Weight", min_value=20, max_value=500, initial=70)
+
     password = forms.CharField(widget=forms.PasswordInput(), label="Password")
     confirm_password = forms.CharField(
         widget=forms.PasswordInput(), label="Confirm Password"
     )
+
+    def clean_username(self):
+        username = self.cleaned_data.get("username")
+
+        # Query DynamoDB to check if the username already exists
+        if get_user_by_username(username):
+            raise ValidationError(
+                "This username is already taken. Please choose another."
+            )
+
+        return username
 
     def clean(self):
         cleaned_data = super().clean()
@@ -104,6 +122,21 @@ class ProfileForm(forms.Form):
     address = forms.CharField(widget=forms.Textarea, required=False)
     bio = forms.CharField(widget=forms.Textarea, required=False)
 
+    height = forms.IntegerField(
+        label="Height (in cm)",
+        min_value=50,
+        max_value=300,
+        required=False,
+        widget=forms.NumberInput(),
+    )
+    weight = forms.IntegerField(
+        label="Weight (in kg)",
+        min_value=20,
+        max_value=500,
+        required=False,
+        widget=forms.NumberInput(),
+    )
+
     def clean_phone_number(self):
         phone_number = self.cleaned_data.get("phone_number")
         if phone_number and not phone_number.isdigit():
@@ -120,6 +153,10 @@ class ProfileForm(forms.Form):
             # Add an error linked to the country_code field
             self.add_error(
                 "phone_number",
+                "Both country code and phone number must be provided together",
+            )
+            self.add_error(
+                "country_code",
                 "Both country code and phone number must be provided together",
             )
 

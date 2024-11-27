@@ -25,7 +25,7 @@ class ChatMessageConsumer(AsyncWebsocketConsumer):
         payload = json.loads(text_data)
         message = payload["message"]
         sender = payload["sender"]
-        sender_name = get_user_by_uid(sender).username
+        sender_name = get_user_by_uid(sender).get("username")
         await save_chat_message(sender, message, self.room_id, sender_name)
         await self.channel_layer.group_send(
             self.room_group_name,
