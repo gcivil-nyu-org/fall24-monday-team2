@@ -24,6 +24,9 @@ from .dynamodb import (
     fetch_thread,
     create_post,
     fetch_filtered_threads,
+    fetch_all_users,
+    get_thread_details,
+    delete_post,
     # MockUser,
     # users_table,
 )
@@ -436,6 +439,94 @@ class ForumTests(TestCase):
             "Thread content does not match.",
         )
 
+    def test_fetch_all_users(self):
+        # Add threads to the DynamoDB table for testing
+        test_threads = [
+            {
+                "ThreadID": "201",
+                "Title": "Thread 1",
+                "UserID": "user_123",
+                "CreatedAt": "2024-11-01T10:00:00",
+                "Content": "This is thread 1 content.",
+            },
+            {
+                "ThreadID": "202",
+                "Title": "Thread 2",
+                "UserID": "user_456",
+                "CreatedAt": "2024-11-02T11:00:00",
+                "Content": "This is thread 2 content.",
+            },
+            {
+                "ThreadID": "203",
+                "Title": "Thread 3",
+                "UserID": "user_123",  # Duplicate UserID
+                "CreatedAt": "2024-11-03T12:00:00",
+                "Content": "This is thread 3 content.",
+            },
+        ]
+        for thread in test_threads:
+            self.threads_table.put_item(Item=thread)
+
+        try:
+            # Fetch all unique users
+            users = fetch_all_users()
+
+            # Verify that the correct number of unique users is returned
+            self.assertGreater(len(users), 2)
+
+            # Verify the unique usernames
+            usernames = [user["username"] for user in users]
+            self.assertIn("user_123", usernames)
+            self.assertIn("user_456", usernames)
+
+        finally:
+            # Cleanup the test data
+            for thread in test_threads:
+                self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
+
+    def test_get_thread_details(self):
+        # Add posts to the DynamoDB table for testing
+        test_posts = [
+            {
+                "PostID": "301",
+                "ThreadID": "thread_123",
+                "UserID": "user_123",
+                "Content": "This is a post in thread_123.",
+                "CreatedAt": "2024-11-01T10:00:00",
+            },
+            {
+                "PostID": "302",
+                "ThreadID": "thread_456",
+                "UserID": "user_456",
+                "Content": "This is a post in thread_456.",
+                "CreatedAt": "2024-11-02T11:00:00",
+            },
+        ]
+        for post in test_posts:
+            self.posts_table.put_item(Item=post)
+
+        try:
+            # Fetch details for an existing thread
+            thread_details = get_thread_details("thread_123")
+            self.assertIsNotNone(thread_details, "Thread details should not be None.")
+            self.assertEqual(thread_details["ThreadID"], "thread_123")
+            self.assertEqual(thread_details["Content"], "This is a post in thread_123.")
+            self.assertEqual(thread_details["UserID"], "user_123")
+
+            # Fetch details for a non-existing thread
+            non_existing_thread_details = get_thread_details("non_existing_thread")
+            self.assertIsNone(
+                non_existing_thread_details,
+                "Thread details for a non-existing thread should be None.",
+            )
+
+        finally:
+            # Cleanup the test data
+            for post in test_posts:
+                self.posts_table.delete_item(
+                    Key={"PostID": post["PostID"], "ThreadID": post["ThreadID"]}
+                )
+
     def test_create_post(self):
         # Setup: Create a thread for the post to be attached to
         thread = create_thread(
@@ -524,6 +615,59 @@ class ForumTests(TestCase):
             # Cleanup the test data
             for thread in test_threads:
                 self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
+
+    def test_delete_post(self):
+        # Add a post to the DynamoDB table for testing
+        test_thread = {
+            "ThreadID": "101",
+            "Title": "General Discussion",
+            "UserID": "test_user_123",
+            "CreatedAt": "2024-09-02T10:00:00",
+            "Section": "general",
+            "Content": "This is a general discussion thread.",
+            "ReplyCount": 0,
+        }
+
+        test_post = {
+            "PostID": "401",
+            "ThreadID": "101",
+            "UserID": "user_123",
+            "Content": "This is a test post.",
+            "CreatedAt": "2024-11-01T10:00:00",
+        }
+        self.threads_table.put_item(Item=test_thread)
+        self.posts_table.put_item(Item=test_post)
+
+        try:
+            # Verify the post exists before deletion
+            response = self.posts_table.get_item(
+                Key={"ThreadID": test_post["ThreadID"], "PostID": test_post["PostID"]}
+            )
+            self.assertIn(
+                "Item", response, "Post should exist in the table before deletion."
+            )
+
+            # Call the delete_post function
+            delete_result = delete_post(test_post["PostID"], test_post["ThreadID"])
+            self.assertTrue(delete_result, "Post deletion should return True.")
+
+            # Verify the post no longer exists after deletion
+            response = self.posts_table.get_item(
+                Key={"ThreadID": test_post["ThreadID"], "PostID": test_post["PostID"]}
+            )
+            self.assertNotIn(
+                "Item",
+                response,
+                "Post should no longer exist in the table after deletion.",
+            )
+
+        finally:
+            # Cleanup: Ensure the post is deleted, in case the function failed
+            self.posts_table.delete_item(
+                Key={"ThreadID": test_post["ThreadID"], "PostID": test_post["PostID"]}
+            )
+
+            self.threads_table.delete_item(Key={"ThreadID": test_post["ThreadID"]})
 
     def test_delete_thread_by_id(self):
         # Step 1: Create a sample thread
