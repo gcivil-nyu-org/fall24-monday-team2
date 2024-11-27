@@ -36,15 +36,15 @@ class MockUser:
             self.is_active = user_data.get("is_active", True)
             self.last_login = user_data.get("last_login", None)
             self.pk = self.user_id
-        else:
-            self.user_id = None
-            self.email = ""
-            self.username = ""
-            self.password = ""
-            self.date_of_birth = ""
-            self.is_active = True
-            self.last_login = None
-            self.pk = None
+        # else:
+        #     self.user_id = None
+        #     self.email = ""
+        #     self.username = ""
+        #     self.password = ""
+        #     self.date_of_birth = ""
+        #     self.is_active = True
+        #     self.last_login = None
+        #     self.pk = None
 
     def get_email_field_name(self):
         return "email"

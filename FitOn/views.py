@@ -453,24 +453,24 @@ def confirm_deactivation(request):
 
 def authorize_google_fit(request):
     credentials = request.session.get("google_fit_credentials")
-    print("inside auth")
+    # print("inside auth")
 
     if not credentials or credentials.expired:
         # if settings.DEBUG == True:
         #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES)
         # else:
-        print(settings.GOOGLEFIT_CLIENT_CONFIG)
+        # print(settings.GOOGLEFIT_CLIENT_CONFIG)
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
         flow.redirect_uri = request.build_absolute_uri(
             reverse("callback_google_fit")
         ).replace("http://", "https://")
-        print("Redirected URI: ", flow.redirect_uri)
+        # print("Redirected URI: ", flow.redirect_uri)
         authorization_url, state = flow.authorization_url(
             access_type="offline", include_granted_scopes="true"
         )
         # Debugging print statements
-        print("Authorization URL:", authorization_url)
-        print("State:", state)
+        # print("Authorization URL:", authorization_url)
+        # print("State:", state)
 
         request.session["google_fit_state"] = state
         return redirect(authorization_url)
@@ -479,8 +479,8 @@ def authorize_google_fit(request):
 
 def callback_google_fit(request):
     user_id = request.session.get("user_id")
-    print("Inside Callback")
-    print("Session: ")
+    # print("Inside Callback")
+    # print("Session: ")
     # Fetch user details from DynamoDB
     user = get_user(user_id)
     state = request.session.get("google_fit_state")
@@ -488,12 +488,12 @@ def callback_google_fit(request):
         # if settings.DEBUG:
         #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES, state=state)
         # else:
-        print("inside calback")
+        # print("inside calback")
 
         flow = Flow.from_client_config(
             settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES, state=state
         )
-        print("flow=", flow)
+        # print("flow=", flow)
         flow.redirect_uri = request.build_absolute_uri(reverse("callback_google_fit"))
         flow.fetch_token(authorization_response=request.build_absolute_uri())
 
@@ -551,9 +551,11 @@ def delink_google_fit(request):
         )
 
         if revoke_response.status_code == 200:
-            print("Google account successfully revoked.")
+            # print("Google account successfully revoked.")
+            print()
         else:
-            print("Failed to revoke Google account.")
+            # print("Failed to revoke Google account.")
+            print()
 
         # Remove credentials from the session
         del request.session["credentials"]
@@ -753,7 +755,7 @@ def thread_detail_view(request, thread_id):
             data = json.loads(request.body.decode("utf-8"))
             action = data.get("action")
             post_id = data.get("post_id")
-            print("Action received:", action)  # Print the action value
+            # print("Action received:", action)  # Print the action value
 
             if action == "like_post":
                 # Handle like/unlike for the main thread post
@@ -811,7 +813,7 @@ def thread_detail_view(request, thread_id):
                 )
 
             elif action == "add_reply":
-                print("add reply")
+                # print("add reply")
 
                 # Handle adding a reply to a comment
                 reply_content = data.get("content", "").strip()
@@ -1065,7 +1067,7 @@ async def format_bod_fitness_data(total_data):
 
 def process_dynamo_data(items, frequency):
     # Dictionary to hold the data grouped by date
-    print("Items in dictionary", items)
+    # print("Items in dictionary", items)
     date_groups = defaultdict(list)
 
     # Process each item
@@ -1192,7 +1194,7 @@ def merge_data(existing_data, new_data, frequency):
 
 def steps_barplot(data):
     # Your steps data
-    print("inside steps function\n")
+    # print("inside steps function\n")
     steps_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1205,13 +1207,13 @@ def steps_barplot(data):
             steps_data.append(d)
 
     # Pass the plot path to the template
-    print("Steps Data:", steps_data)
+    # print("Steps Data:", steps_data)
     context = {"steps_data_json": steps_data}
     return context
 
 
 def resting_heartrate_plot(data):
-    print("inside resting heart function\n")
+    # print("inside resting heart function\n")
     resting_heart_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1229,7 +1231,7 @@ def resting_heartrate_plot(data):
 
 
 def sleep_plot(data):
-    print("inside sleep function\n")
+    # print("inside sleep function\n")
     sleep_data = []
     for record in data["session"]:
         d = {}
@@ -1249,7 +1251,7 @@ def sleep_plot(data):
 
 
 def heartrate_plot(data):
-    print("inside heart function\n")
+    # print("inside heart function\n")
     heart_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1269,7 +1271,7 @@ def heartrate_plot(data):
 
 
 def activity_plot(data):
-    print("inside activity function\n")
+    # print("inside activity function\n")
     activity_data = {}
     for record in data["session"]:
         activity_name = df.loc[df["Integer"] == record["activityType"]][
@@ -1295,7 +1297,7 @@ def activity_plot(data):
 
 
 def oxygen_plot(data):
-    print("inside oxygen saturation function\n")
+    # print("inside oxygen saturation function\n")
     oxygen_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1313,7 +1315,7 @@ def oxygen_plot(data):
 
 
 def glucose_plot(data):
-    print("inside blood glucose function\n")
+    # print("inside blood glucose function\n")
     oxygen_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1331,7 +1333,7 @@ def glucose_plot(data):
 
 
 def pressure_plot(data):
-    print("inside blood pressure function\n")
+    # print("inside blood pressure function\n")
     oxygen_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1438,48 +1440,49 @@ async def fetch_metric_data(service, metric, total_data, duration, frequency, em
         context = pressure_plot(data)
         total_data["pressure"] = context
     response = get_fitness_data(metric, email, start_time, end_time)
-    print(
-        f"Metric : {metric}\nResponse: {response}\n",
-    )
-    print("printing processed data from DynamoDB--------------------------------")
+    # print(
+    #     f"Metric : {metric}\nResponse: {response}\n",
+    # )
+    # print("printing processed data from DynamoDB--------------------------------")
 
     processed_data = process_dynamo_data(response["Items"], frequency)
-    print("processed data", processed_data)
+    # print("processed data", processed_data)
 
     # Assuming 'processed_data' is structured similarly for each metric
     # and 'frequency' is defined appropriately for the context in which this is run
 
     if metric == "heart_rate":
-        print("heart rate")
+        # print("heart rate")
         total_data["heartRate"]["heart_data_json"] = merge_data(
             total_data["heartRate"]["heart_data_json"],
             processed_data["Items"],
             frequency,
         )
     elif metric == "steps":
-        print("steps")
+        # print("steps")
         total_data["steps"]["steps_data_json"] = merge_data(
             total_data["steps"]["steps_data_json"], processed_data["Items"], frequency
         )
     elif metric == "resting_heart_rate":
-        print("resting heart rate")
+        # print("resting heart rate")
         total_data["restingHeartRate"]["resting_heart_data_json"] = merge_data(
             total_data["restingHeartRate"]["resting_heart_data_json"],
             processed_data["Items"],
             frequency,
         )
     elif metric == "sleep":
-        print("sleep")
+        # print("sleep")
         total_data["sleep"]["sleep_data_json"] = merge_data(
             total_data["sleep"]["sleep_data_json"], processed_data["Items"], frequency
         )
     elif metric == "activity":
-        print("activity")
+        # print("activity")
+        print()
         # final = merge_data(total_data['activity']['activity_data_json'], processed_data['Items'], frequency)
         # print(final) #
 
     elif metric == "oxygen":
-        print("oxygen")
+        # print("oxygen")
         total_data["oxygen"]["oxygen_data_json"] = merge_data(
             total_data["oxygen"]["oxygen_data_json"], processed_data["Items"], frequency
         )
@@ -1531,8 +1534,8 @@ async def get_metric_data(request):
     user_id = await sync_to_async(lambda: request.session.get("user_id"))()
     user = get_user(user_id)
     user_email = user.get("email")
-    print("Credentials: \n", credentials)
-    print("User Email: \n", user_email)
+    # print("Credentials: \n", credentials)
+    # print("User Email: \n", user_email)
     if credentials:
         duration = "week"
         frequency = "daily"
@@ -1581,7 +1584,6 @@ def health_data_view(request):
                 ConditionExpression="attribute_not_exists(email) AND attribute_not_exists(#t)",
                 ExpressionAttributeNames={"#t": "time"},
             )
-            print("Item inserted successfully.")
         except dynamodb_res.meta.client.exceptions.ConditionalCheckFailedException:
             print("Item already exists and was not replaced.")
         return redirect("get_metric_data")
@@ -1612,22 +1614,18 @@ def health_data_view(request):
 
 
 def add_reply(request):
-    print("Received request in add_reply")  # Debugging statement
-
     if (
         request.method == "POST"
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
     ):
         try:
             data = json.loads(request.body.decode("utf-8"))
-            print("Data received:", data)  # Debugging statement
 
             post_id = data.get("post_id")
             content = data.get("content")
             thread_id = data.get("thread_id")
 
             if not post_id or not content:
-                print("Missing post_id or content")  # Debugging statement
                 return JsonResponse(
                     {"status": "error", "message": "Post ID and content are required."},
                     status=400,
@@ -1635,7 +1633,6 @@ def add_reply(request):
 
             user_id = request.session.get("username")
             if not user_id:
-                print("User not authenticated")  # Debugging statement
                 return JsonResponse(
                     {"status": "error", "message": "User not authenticated"}, status=403
                 )
@@ -1649,7 +1646,7 @@ def add_reply(request):
             }
 
             # Simulating interaction with a database (DynamoDB, for example)
-            print("Attempting to save reply:", reply_data)  # Debugging statement
+            # print("Attempting to save reply:", reply_data)  # Debugging statement
             # Assuming 'posts_table' is configured to interact with your database
             posts_table.update_item(
                 Key={"PostID": post_id, "ThreadID": thread_id},
@@ -1670,7 +1667,6 @@ def add_reply(request):
 
         except Exception as e:
             print("Exception occurred:", e)  # Debugging statement
-            # logger.error("Failed to process add_reply request", exc_info=True)
             return JsonResponse(
                 {"status": "error", "message": f"Failed to save reply: {str(e)}"},
                 status=500,
@@ -1680,7 +1676,7 @@ def add_reply(request):
 
 
 def delete_reply_view(request):
-    print("ReplitID:")
+    # print("ReplitID:")
     if (
         request.method == "POST"
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
@@ -1754,7 +1750,7 @@ def reports_view(request):
         post_id = data.get("post_id")  # Add support for comment IDs
 
         # Debugging input values
-        print(f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}")
+        # print(f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}")
 
         # Allow anyone to report a thread
         if action == "report_thread" and thread_id:
@@ -1764,7 +1760,7 @@ def reports_view(request):
 
         # Allow anyone to report a comment
         elif action == "report_comment" and thread_id and post_id:
-            print("Reporting comment...")
+            # print("Reporting comment...")
             # Pass all three arguments to the function
             mark_comment_as_reported(thread_id, post_id, reporting_user)
             return JsonResponse(
