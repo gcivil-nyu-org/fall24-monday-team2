@@ -2,6 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 import datetime
 from .dynamodb import get_user_by_username
+import re
 
 
 GENDER_OPTIONS = [
@@ -33,9 +34,9 @@ class LoginForm(forms.Form):
 
 
 class SignUpForm(forms.Form):
-    username = forms.CharField(max_length=100, label="Username")
+    username = forms.CharField(max_length=20, label="Username")
     email = forms.EmailField(label="Email")
-    name = forms.CharField(max_length=100, label="Full Name")
+    name = forms.CharField(max_length=50, label="Full Name")
     date_of_birth = forms.DateField(
         widget=forms.SelectDateWidget(
             years=range(1900, datetime.date.today().year + 1)
@@ -61,6 +62,16 @@ class SignUpForm(forms.Form):
 
     def clean_username(self):
         username = self.cleaned_data.get("username")
+
+        # Check if username exceeds 20 characters
+        if len(username) > 20:
+            raise ValidationError("Username cannot exceed 20 characters.")
+
+        # Ensure username contains only alphanumeric characters (letters, numbers, and no special characters)
+        if not re.match(r"^[a-zA-Z0-9_]+$", username):
+            raise ValidationError(
+                "Username can only contain letters, numbers, and underscores."
+            )
 
         # Query DynamoDB to check if the username already exists
         if get_user_by_username(username):

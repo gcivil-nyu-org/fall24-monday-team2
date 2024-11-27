@@ -1,76 +1,20 @@
-import asyncio
-import datetime as dt
-import json
-import uuid
-from collections import defaultdict
-from datetime import datetime, timedelta
-
-import boto3
-import pandas as pd
-import pytz
-import requests
-
-# from django.utils.encoding import force_bytes
-# from django.utils.html import strip_tags
-# from django.utils.http import urlsafe_base64_encode
-# import os
-from asgiref.sync import sync_to_async
-from django.conf import settings
-from django.contrib import messages
-from django.contrib.auth import login as auth_login
-from django.contrib.auth import logout
-
-# from django.contrib.auth.decorators import login_required
-from django.contrib.auth.hashers import check_password, make_password
-from django.contrib.auth.models import User
-from django.contrib.auth.tokens import default_token_generator
-
-# from django.core.files.storage import FileSystemStorage
-from django.core.mail import EmailMessage
-
-# from django.core.mail.backends.locmem import EmailBackend
-
-# from django.core.mail import EmailMultiAlternatives
-from django.http import HttpResponseForbidden, JsonResponse
-from django.shortcuts import redirect, render
-from django.template.loader import render_to_string
-from django.urls import reverse
-from django.utils import timezone
-from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-
-# from google import Things
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
-from googleapiclient.discovery import build
-
-from boto3.dynamodb.conditions import Key, Attr
-
-from .dynamodb import (  # create_post,; fetch_thread,; get_replies,; get_thread_details,
+from django.shortcuts import render, redirect
+from .dynamodb import (
     add_fitness_trainer_application,
-    create_reply,
+    # create_post,
+    post_comment,
     create_thread,
+    create_reply,
     create_user,
-    delete_post,
-    delete_reply,
     delete_user_by_username,
     delete_post,
     fetch_posts_for_thread,
     get_fitness_trainer_applications,
-    get_fitness_trainers,
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
-    # get_user_by_uid,
-    get_mock_user_by_uid,
+    get_user_by_uid,
     get_user_by_username,
-    get_users_without_specific_username,
-    make_fitness_trainer,
-    mark_thread_as_reported,
-    post_comment,
-    posts_table,
-    remove_fitness_trainer,
-    threads_table,
     update_reset_request_time,
     update_user,
     update_user_password,
@@ -83,21 +27,23 @@ from .dynamodb import (  # create_post,; fetch_thread,; get_replies,; get_thread
     get_fitness_trainers,
     make_fitness_trainer,
     remove_fitness_trainer,
-    get_standard_users,
-    send_data_request_to_user,
-    cancel_data_request_to_user,
-    add_to_list,
-    remove_from_list,
     delete_reply,
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
     mark_comment_as_reported,
     posts_table,
     delete_thread_by_id,
+    get_section_stats,
+    get_users_without_specific_username,
     get_chat_history_from_db,
     chat_table,
+    get_standard_users,
+    send_data_request_to_user,
+    add_to_list,
+    remove_from_list,
+    cancel_data_request_to_user,
+    get_mock_user_by_uid,
 )
-
 from .rds import rds_main, fetch_user_data
 
 from .forms import (
@@ -108,6 +54,7 @@ from .forms import (
     SetNewPasswordForm,
     SignUpForm,
 )
+
 from .models import GroupChatMember
 
 # from .models import PasswordResetRequest
@@ -154,6 +101,7 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 import asyncio
 from collections import defaultdict
+from boto3.dynamodb.conditions import Key, Attr
 
 # Define metric data types
 dataTypes = {
@@ -212,36 +160,24 @@ def login(request):
             username = form.cleaned_data["username"]
             password = form.cleaned_data["password"]
 
-            # Check if password field is empty
-            if not password:
-                error_message = "Please enter a valid password."
-            else:
-                # Query DynamoDB for the user by username
-                user = get_user_by_username(username)
+            # Query DynamoDB for the user by username
+            user = get_user_by_username(username)
 
-                if user:
-                    stored_password = user["password"]
-                    user_id = user["user_id"]
+            if user:
+                # Get the hashed password from DynamoDB
+                stored_password = user["password"]
+                user_id = user["user_id"]
 
-                    if check_password(password, stored_password):
-                        # Create a Django User object for authentication
-                        django_user, created = User.objects.get_or_create(
-                            username=username, defaults={"password": stored_password}
-                        )
-                        # Use auth_login to set request.user
-                        auth_login(request, django_user)
-                        # Store user details in session for additional information
-                        request.session["username"] = username
-                        request.session["user_id"] = user_id
-                        return redirect("homepage")
-                    else:
-                        error_message = "Invalid password. Please try again."
+                # Verify the password using Django's check_password
+                if check_password(password, stored_password):
+                    # Set the session and redirect to the homepage
+                    request.session["username"] = username
+                    request.session["user_id"] = user_id
+                    return redirect("homepage")
                 else:
-                    error_message = "User does not exist."
-        else:
-            error_message = form.errors.get(
-                "password", ["Please fill out the form correctly."]
-            )[0]
+                    error_message = "Invalid password. Please try again."
+            else:
+                error_message = "User does not exist."
 
     else:
         form = LoginForm()
@@ -273,10 +209,9 @@ def signup(request):
             name = form.cleaned_data["name"]
             date_of_birth = form.cleaned_data["date_of_birth"]
             gender = form.cleaned_data["gender"]
+            password = form.cleaned_data["password"]
             height = form.cleaned_data["height"]
             weight = form.cleaned_data["weight"]
-
-            password = form.cleaned_data["password"]
 
             # Hash the password before saving it
             hashed_password = make_password(password)
@@ -526,6 +461,7 @@ def confirm_deactivation(request):
             if delete_user_by_username(username):
                 # Log the user out and redirect to the homepage
                 logout(request)
+                request.session.flush()
                 return redirect("homepage")  # Redirect to homepage after deactivation
             else:
                 return render(
@@ -543,24 +479,24 @@ def confirm_deactivation(request):
 
 def authorize_google_fit(request):
     credentials = request.session.get("google_fit_credentials")
-    print("inside auth")
+    # print("inside auth")
 
     if not credentials or credentials.expired:
         # if settings.DEBUG == True:
         #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES)
         # else:
-        print(settings.GOOGLEFIT_CLIENT_CONFIG)
+        # print(settings.GOOGLEFIT_CLIENT_CONFIG)
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
         flow.redirect_uri = request.build_absolute_uri(
             reverse("callback_google_fit")
         ).replace("http://", "https://")
-        print("Redirected URI: ", flow.redirect_uri)
+        # print("Redirected URI: ", flow.redirect_uri)
         authorization_url, state = flow.authorization_url(
             access_type="offline", include_granted_scopes="true"
         )
         # Debugging print statements
-        print("Authorization URL:", authorization_url)
-        print("State:", state)
+        # print("Authorization URL:", authorization_url)
+        # print("State:", state)
 
         request.session["google_fit_state"] = state
         return redirect(authorization_url)
@@ -569,8 +505,8 @@ def authorize_google_fit(request):
 
 def callback_google_fit(request):
     user_id = request.session.get("user_id")
-    print("Inside Callback")
-
+    # print("Inside Callback")
+    # print("Session: ")
     # Fetch user details from DynamoDB
     user = get_user(user_id)
     state = request.session.get("google_fit_state")
@@ -578,12 +514,12 @@ def callback_google_fit(request):
         # if settings.DEBUG:
         #     flow = Flow.from_client_secrets_file('credentials.json', SCOPES, state=state)
         # else:
-        print("inside calback")
+        # print("inside calback")
 
         flow = Flow.from_client_config(
             settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES, state=state
         )
-        print("flow=", flow)
+        # print("flow=", flow)
         flow.redirect_uri = request.build_absolute_uri(reverse("callback_google_fit"))
         flow.fetch_token(authorization_response=request.build_absolute_uri())
 
@@ -641,9 +577,11 @@ def delink_google_fit(request):
         )
 
         if revoke_response.status_code == 200:
-            print("Google account successfully revoked.")
+            # print("Google account successfully revoked.")
+            print()
         else:
-            print("Failed to revoke Google account.")
+            # print("Failed to revoke Google account.")
+            print()
 
         # Remove credentials from the session
         del request.session["credentials"]
@@ -659,8 +597,6 @@ def delink_google_fit(request):
 # --------------------------------- #
 # User + Fitness Trainer Functions  #
 # --------------------------------- #
-
-
 def fitness_trainer_application_view(request):
     user_id = request.session.get("user_id")
     if request.method == "POST":
@@ -674,7 +610,6 @@ def fitness_trainer_application_view(request):
             certifications = request.FILES.get("certifications")
             reference_name = form.cleaned_data.get("reference_name")
             reference_contact = form.cleaned_data.get("reference_contact")
-
             # Call the DynamoDB function, making sure all names match
             add_fitness_trainer_application(
                 user_id=user_id,
@@ -685,16 +620,13 @@ def fitness_trainer_application_view(request):
                 reference_name=reference_name,
                 reference_contact=reference_contact,
             )
-
             # Notify user and redirect
             messages.success(
                 request, "Your application has been submitted successfully!"
             )
             return redirect("profile")
-
     else:
         form = FitnessTrainerApplicationForm()
-
     return render(request, "fitness_trainer_application.html", {"form": form})
 
 
@@ -704,10 +636,8 @@ def fitness_trainer_applications_list_view(request):
     user = get_user(user_id)
     if not user or not user.get("is_admin"):
         return HttpResponseForbidden("You do not have permission to access this page.")
-
     # Retrieve applications from DynamoDB
     applications = get_fitness_trainer_applications()
-
     # Render the list of applications
     return render(
         request,
@@ -724,14 +654,11 @@ def approve_fitness_trainer(request):
         data = json.loads(request.body)
         username = data.get("username")
         user = get_user_by_username(username)
-
         if not user:
             return JsonResponse(
                 {"status": "error", "message": "User not found"}, status=404
             )
-
         make_fitness_trainer(user["user_id"])
-
         subject = "Fitness Trainer Application Approved"
         message = render_to_string(
             "fitness_trainer_email.html",
@@ -747,11 +674,9 @@ def approve_fitness_trainer(request):
         )
         email_message.content_subtype = "html"
         email_message.send()
-
         return JsonResponse(
             {"status": "success", "message": "Fitness Trainer has been approved"}
         )
-
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 
@@ -763,14 +688,11 @@ def reject_fitness_trainer(request):
         data = json.loads(request.body)
         username = data.get("username")
         user = get_user_by_username(username)
-
         if not user:
             return JsonResponse(
                 {"status": "error", "message": "User not found"}, status=404
             )
-
         remove_fitness_trainer(user["user_id"])
-
         subject = "Fitness Trainer Application Rejected"
         message = render_to_string(
             "fitness_trainer_email.html",
@@ -790,35 +712,27 @@ def reject_fitness_trainer(request):
         )
         email_message.content_subtype = "html"
         email_message.send()
-
         return JsonResponse(
             {"status": "success", "message": "Fitness Trainer application rejected"}
         )
-
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 
 def accept_trainer(request):
     if request.method == "POST":
         data = json.loads(request.body)
-
         trainer_id = data.get("trainer_id")
         user_id = request.session.get("user_id")
-
         trainer = get_user(trainer_id)
         user = get_user(user_id)
-
         if not user or not trainer:
             return JsonResponse({"status": "error", "message": "User is not found"})
-
         # Update access lists in DynamoDB
         add_to_list(user_id, "trainers_with_access", trainer_id)
         add_to_list(trainer_id, "users_with_access", user_id)
-
         # # Remove trainer from the user's waiting list
         remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
         remove_from_list(trainer_id, "waiting_list_of_users", user_id)
-
         return JsonResponse({"status": "success"})
     return JsonResponse({"status": "error", "message": "Invalid request"})
 
@@ -826,20 +740,15 @@ def accept_trainer(request):
 def deny_trainer(request):
     if request.method == "POST":
         data = json.loads(request.body)
-
         trainer_id = data.get("trainer_id")
         user_id = request.session.get("user_id")
-
         trainer = get_user(trainer_id)
         user = get_user(user_id)
-
         if not user or not trainer:
             return JsonResponse({"status": "error", "message": "User is not found"})
-
         # Remove trainer from the user's waiting list
         remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
         remove_from_list(trainer_id, "waiting_list_of_users", user_id)
-
         return JsonResponse({"status": "success"})
     return JsonResponse({"status": "error", "message": "Invalid request"})
 
@@ -847,20 +756,15 @@ def deny_trainer(request):
 def provide_access_to_trainer(request):
     if request.method == "POST":
         data = json.loads(request.body)
-
         trainer_id = data.get("trainer_id")
         user_id = request.session.get("user_id")
-
         trainer = get_user(trainer_id)
         user = get_user(user_id)
-
         if not user or not trainer:
             return JsonResponse({"status": "error", "message": "User is not found"})
-
         # Update user and trainer records in DynamoDB
         add_to_list(user_id, "trainers_with_access", trainer_id)
         add_to_list(trainer_id, "users_with_access", user_id)
-
         return JsonResponse({"status": "success"})
     return JsonResponse({"status": "error", "message": "Invalid request"})
 
@@ -868,17 +772,13 @@ def provide_access_to_trainer(request):
 def revoke_access_to_trainer(request):
     if request.method == "POST":
         data = json.loads(request.body)
-
         trainer_id = data.get("trainer_id")
         user_id = request.session.get("user_id")
-
         if not user_id or not trainer_id:
             return JsonResponse({"status": "error", "message": "Invalid data"})
-
         try:
             remove_from_list(user_id, "trainers_with_access", trainer_id)
             remove_from_list(trainer_id, "users_with_access", user_id)
-
             return JsonResponse(
                 {
                     "status": "success",
@@ -897,14 +797,11 @@ def fitness_trainers_list_view(request):
     user = get_user(user_id)
     if not user or user.get("is_fitness_trainer"):
         return HttpResponseForbidden("You do not have permission to access this page")
-
     # Retrieve list of trainers from DynamoDB
     trainers = get_fitness_trainers()
-
     # Extract lists from the user's data
     waiting_list_of_trainers = user.get("waiting_list_of_trainers", [])
     trainers_with_access = user.get("trainers_with_access", [])
-
     # Separate trainers into categories
     trainers_in_waiting_list = [
         trainer
@@ -920,7 +817,6 @@ def fitness_trainers_list_view(request):
         if trainer["user_id"] not in waiting_list_of_trainers
         and trainer["user_id"] not in trainers_with_access
     ]
-
     # Pass the categorized trainers to the template
     context = {
         "trainers_in_waiting_list": trainers_in_waiting_list,
@@ -936,10 +832,8 @@ def standard_users_list_view(request):
     user = get_user(user_id)
     if not user or not user.get("is_fitness_trainer"):
         return HttpResponseForbidden("You do not have permission to access this page")
-
     # Retrieve list of standard users from DynamoDB
     standard_users = get_standard_users()
-
     waiting_list_of_users = user.get("waiting_list_of_users", [])
     users_in_waiting_list = [
         user for user in standard_users if user["user_id"] in waiting_list_of_users
@@ -951,7 +845,6 @@ def standard_users_list_view(request):
         for user in standard_users
         if user["user_id"] not in waiting_list_of_users + users_with_access
     ]
-
     return render(
         request,
         "standard_users_list.html",
@@ -968,9 +861,7 @@ def send_data_request(request):
         data = json.loads(request.body)
         standard_user_id = data.get("user_id")
         fitness_trainer_id = request.session.get("user_id")
-
         success = send_data_request_to_user(fitness_trainer_id, standard_user_id)
-
         if success:
             return JsonResponse({"message": "Request sent successfully!"}, status=200)
         else:
@@ -983,12 +874,9 @@ def cancel_data_request(request):
         data = json.loads(request.body)
         standard_user_id = data.get("user_id")
         fitness_trainer_id = request.session.get("user_id")
-
         if not standard_user_id:
             return JsonResponse({"error": "User ID is required"}, status=400)
-
         success = cancel_data_request_to_user(fitness_trainer_id, standard_user_id)
-
         if success:
             return JsonResponse(
                 {"message": "Request cancelled successfully"}, status=200
@@ -1005,11 +893,9 @@ def view_user_data(request):
         # Retrieve the data from the session
         user_data = request.session.get("user_data")
         print("User data in session:", user_data)
-
         if not user_data:
             # Handle missing session data
             raise ValueError("User data is not available in the session.")
-
         # Render the HTML template with the session data
         return render(
             request,
@@ -1041,19 +927,15 @@ def serialize_data(data):
     # Handle dictionaries
     if isinstance(data, dict):
         return {key: serialize_data(value) for key, value in data.items()}
-
     # Handle lists and tuples
     elif isinstance(data, list) or isinstance(data, tuple):
         return [serialize_data(item) for item in data]
-
     # Handle dates: Convert datetime.date to ISO format string
     elif isinstance(data, dt.date):
         return data.isoformat()
-
     # Handle other types that can be directly serialized to JSON
     elif isinstance(data, (str, int, float, bool)):
         return data
-
     # If we can't serialize the type, return it as a string
     return str(data)
 
@@ -1065,16 +947,12 @@ async def async_view_user_data(request, user_id):
         user = await sync_to_async(get_user)(user_id)
         user_email = user.get("email")
         user_data = await fetch_user_data(user_email)
-
         # Serialize user data
         serialized_data = serialize_data(user_data)
-
         # Store the data in the session
         await sync_to_async(store_session_data)(request, serialized_data)
-
         # Send serialized user_data in JSON response
         return JsonResponse({"success": True, "user_data": serialized_data})
-
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
@@ -1082,11 +960,6 @@ async def async_view_user_data(request, user_id):
 # -------------------------------
 # Forums Functions
 # -------------------------------
-
-
-# def forum_view(request):
-#     threads = fetch_all_threads()
-#     return render(request, "forums.html", {"threads": threads})
 
 
 # View to display a single thread with its posts
@@ -1116,7 +989,7 @@ def thread_detail_view(request, thread_id):
             data = json.loads(request.body.decode("utf-8"))
             action = data.get("action")
             post_id = data.get("post_id")
-            print("Action received:", action)  # Print the action value
+            # print("Action received:", action)  # Print the action value
 
             if action == "like_post":
                 # Handle like/unlike for the main thread post
@@ -1174,7 +1047,7 @@ def thread_detail_view(request, thread_id):
                 )
 
             elif action == "add_reply":
-                print("add reply")
+                # print("add reply")
 
                 # Handle adding a reply to a comment
                 reply_content = data.get("content", "").strip()
@@ -1267,11 +1140,14 @@ def new_thread_view(request):
     if request.method == "POST":
         title = request.POST.get("title")
         content = request.POST.get("content")
+        section = request.POST.get("section")
         user_id = request.session.get("username")  # Assuming the user is logged in
 
         if title and content and user_id:
             # Call your DynamoDB function to create a new thread
-            create_thread(title=title, user_id=user_id, content=content)
+            create_thread(
+                title=title, user_id=user_id, content=content, section=section
+            )
 
             # Redirect to the forums page after successfully creating the thread
             return redirect("forum")
@@ -1317,8 +1193,12 @@ def delete_post_view(request):
 
 
 def forum_view(request):
+
     user_id = request.session.get("username")
     user = get_user_by_username(user_id)
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
     is_banned = user.get("is_banned")
     if is_banned:
         return render(request, "forums.html", {"is_banned": is_banned})
@@ -1329,6 +1209,10 @@ def forum_view(request):
     start_date = request.GET.get("start_date", "")  # Start date filter
     end_date = request.GET.get("end_date", "")  # End date filter
     search_text = request.GET.get("search", "")  # Search text filter
+
+    # Fetch section stats
+    sections = ["General", "Workout Suggestions", "Diet Plans", "Other"]
+    section_stats = {section: get_section_stats(section) for section in sections}
 
     # Fetch filtered threads based on the inputs
     threads = fetch_filtered_threads(
@@ -1344,7 +1228,39 @@ def forum_view(request):
         fetch_all_users()
     )  # Assuming you have a function to fetch users who posted threads/replies
 
-    return render(request, "forums.html", {"threads": threads, "users": users})
+    return render(
+        request,
+        "forums.html",
+        {
+            "threads": threads,
+            "users": users,
+            "user": user,
+            "section_stats": section_stats,
+        },
+    )
+
+
+def section_view(request, section_name):
+    user_id = request.session.get("username")
+    user = get_user_by_username(user_id)
+
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
+
+    is_banned = user.get("is_banned")
+    if is_banned:
+        return render(request, "forums.html", {"is_banned": is_banned})
+
+    # Fetch threads only for the specified section
+    threads = fetch_filtered_threads(section=section_name)
+    threads = sorted(threads, key=lambda t: t.get("CreatedAt"), reverse=True)
+
+    return render(
+        request,
+        "section_threads.html",
+        {"threads": threads, "section_name": section_name, "user": user},
+    )
 
 
 ######################################
@@ -1396,7 +1312,7 @@ async def format_bod_fitness_data(total_data):
 
 def process_dynamo_data(items, frequency):
     # Dictionary to hold the data grouped by date
-    print("Items in dictionary", items)
+    # print("Items in dictionary", items)
     date_groups = defaultdict(list)
 
     # Process each item
@@ -1523,7 +1439,7 @@ def merge_data(existing_data, new_data, frequency):
 
 def steps_barplot(data):
     # Your steps data
-    print("inside steps function\n")
+    # print("inside steps function\n")
     steps_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1536,12 +1452,13 @@ def steps_barplot(data):
             steps_data.append(d)
 
     # Pass the plot path to the template
+    # print("Steps Data:", steps_data)
     context = {"steps_data_json": steps_data}
     return context
 
 
 def resting_heartrate_plot(data):
-    print("inside resting heart function\n")
+    # print("inside resting heart function\n")
     resting_heart_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1559,7 +1476,7 @@ def resting_heartrate_plot(data):
 
 
 def sleep_plot(data):
-    print("inside sleep function\n")
+    # print("inside sleep function\n")
     sleep_data = []
     for record in data["session"]:
         d = {}
@@ -1579,7 +1496,7 @@ def sleep_plot(data):
 
 
 def heartrate_plot(data):
-    print("inside heart function\n")
+    # print("inside heart function\n")
     heart_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1599,7 +1516,7 @@ def heartrate_plot(data):
 
 
 def activity_plot(data):
-    print("inside activity function\n")
+    # print("inside activity function\n")
     activity_data = {}
     for record in data["session"]:
         activity_name = df.loc[df["Integer"] == record["activityType"]][
@@ -1625,7 +1542,7 @@ def activity_plot(data):
 
 
 def oxygen_plot(data):
-    print("inside oxygen saturation function\n")
+    # print("inside oxygen saturation function\n")
     oxygen_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1643,7 +1560,7 @@ def oxygen_plot(data):
 
 
 def glucose_plot(data):
-    print("inside blood glucose function\n")
+    # print("inside blood glucose function\n")
     oxygen_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1661,7 +1578,7 @@ def glucose_plot(data):
 
 
 def pressure_plot(data):
-    print("inside blood pressure function\n")
+    # print("inside blood pressure function\n")
     oxygen_data = []
     for record in data["bucket"]:
         if len(record["dataset"][0]["point"]) == 0:
@@ -1768,48 +1685,49 @@ async def fetch_metric_data(service, metric, total_data, duration, frequency, em
         context = pressure_plot(data)
         total_data["pressure"] = context
     response = get_fitness_data(metric, email, start_time, end_time)
-    print(
-        f"Metric : {metric}\nResponse: {response}\n",
-    )
-    print("printing processed data from DynamoDB--------------------------------")
+    # print(
+    #     f"Metric : {metric}\nResponse: {response}\n",
+    # )
+    # print("printing processed data from DynamoDB--------------------------------")
 
     processed_data = process_dynamo_data(response["Items"], frequency)
-    print("processed data", processed_data)
+    # print("processed data", processed_data)
 
     # Assuming 'processed_data' is structured similarly for each metric
     # and 'frequency' is defined appropriately for the context in which this is run
 
     if metric == "heart_rate":
-        print("heart rate")
+        # print("heart rate")
         total_data["heartRate"]["heart_data_json"] = merge_data(
             total_data["heartRate"]["heart_data_json"],
             processed_data["Items"],
             frequency,
         )
     elif metric == "steps":
-        print("steps")
+        # print("steps")
         total_data["steps"]["steps_data_json"] = merge_data(
             total_data["steps"]["steps_data_json"], processed_data["Items"], frequency
         )
     elif metric == "resting_heart_rate":
-        print("resting heart rate")
+        # print("resting heart rate")
         total_data["restingHeartRate"]["resting_heart_data_json"] = merge_data(
             total_data["restingHeartRate"]["resting_heart_data_json"],
             processed_data["Items"],
             frequency,
         )
     elif metric == "sleep":
-        print("sleep")
+        # print("sleep")
         total_data["sleep"]["sleep_data_json"] = merge_data(
             total_data["sleep"]["sleep_data_json"], processed_data["Items"], frequency
         )
     elif metric == "activity":
-        print("activity")
+        # print("activity")
+        print()
         # final = merge_data(total_data['activity']['activity_data_json'], processed_data['Items'], frequency)
         # print(final) #
 
     elif metric == "oxygen":
-        print("oxygen")
+        # print("oxygen")
         total_data["oxygen"]["oxygen_data_json"] = merge_data(
             total_data["oxygen"]["oxygen_data_json"], processed_data["Items"], frequency
         )
@@ -1861,8 +1779,8 @@ async def get_metric_data(request):
     user_id = await sync_to_async(lambda: request.session.get("user_id"))()
     user = get_user(user_id)
     user_email = user.get("email")
-    print("Credentials: \n", credentials)
-    print("User Email: \n", user_email)
+    # print("Credentials: \n", credentials)
+    # print("User Email: \n", user_email)
     if credentials:
         duration = "week"
         frequency = "daily"
@@ -1899,15 +1817,20 @@ def health_data_view(request):
 
     if request.method == "POST":
         data = request.POST
-        print(data)
-        table.put_item(
-            Item={
-                "email": user_email,  # Use the default email
-                "metric": data.get("metric"),
-                "time": data.get("time"),
-                "value": data.get("value"),
-            }
-        )
+        print("Data:", data)
+        try:
+            table.put_item(
+                Item={
+                    "email": user_email,  # Use the default email
+                    "metric": data.get("metric"),
+                    "time": data.get("time"),
+                    "value": data.get("value"),
+                },
+                ConditionExpression="attribute_not_exists(email) AND attribute_not_exists(#t)",
+                ExpressionAttributeNames={"#t": "time"},
+            )
+        except dynamodb_res.meta.client.exceptions.ConditionalCheckFailedException:
+            print("Item already exists and was not replaced.")
         return redirect("get_metric_data")
 
     # Fetch all the metrics data from DynamoDB
@@ -1936,22 +1859,18 @@ def health_data_view(request):
 
 
 def add_reply(request):
-    print("Received request in add_reply")  # Debugging statement
-
     if (
         request.method == "POST"
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
     ):
         try:
             data = json.loads(request.body.decode("utf-8"))
-            print("Data received:", data)  # Debugging statement
 
             post_id = data.get("post_id")
             content = data.get("content")
             thread_id = data.get("thread_id")
 
             if not post_id or not content:
-                print("Missing post_id or content")  # Debugging statement
                 return JsonResponse(
                     {"status": "error", "message": "Post ID and content are required."},
                     status=400,
@@ -1959,7 +1878,6 @@ def add_reply(request):
 
             user_id = request.session.get("username")
             if not user_id:
-                print("User not authenticated")  # Debugging statement
                 return JsonResponse(
                     {"status": "error", "message": "User not authenticated"}, status=403
                 )
@@ -1973,7 +1891,7 @@ def add_reply(request):
             }
 
             # Simulating interaction with a database (DynamoDB, for example)
-            print("Attempting to save reply:", reply_data)  # Debugging statement
+            # print("Attempting to save reply:", reply_data)  # Debugging statement
             # Assuming 'posts_table' is configured to interact with your database
             posts_table.update_item(
                 Key={"PostID": post_id, "ThreadID": thread_id},
@@ -1994,7 +1912,6 @@ def add_reply(request):
 
         except Exception as e:
             print("Exception occurred:", e)  # Debugging statement
-            # logger.error("Failed to process add_reply request", exc_info=True)
             return JsonResponse(
                 {"status": "error", "message": f"Failed to save reply: {str(e)}"},
                 status=500,
@@ -2004,7 +1921,7 @@ def add_reply(request):
 
 
 def delete_reply_view(request):
-    print("ReplitID:")
+    # print("ReplitID:")
     if (
         request.method == "POST"
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
@@ -2078,7 +1995,7 @@ def reports_view(request):
         post_id = data.get("post_id")  # Add support for comment IDs
 
         # Debugging input values
-        print(f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}")
+        # print(f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}")
 
         # Allow anyone to report a thread
         if action == "report_thread" and thread_id:
@@ -2088,7 +2005,7 @@ def reports_view(request):
 
         # Allow anyone to report a comment
         elif action == "report_comment" and thread_id and post_id:
-            print("Reporting comment...")
+            # print("Reporting comment...")
             # Pass all three arguments to the function
             mark_comment_as_reported(thread_id, post_id, reporting_user)
             return JsonResponse(
