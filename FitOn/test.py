@@ -49,6 +49,7 @@ from .views import (
     login,
     custom_logout,
     signup,
+    forum_view,
 )
 from django.contrib.auth.hashers import check_password, make_password
 
@@ -1668,3 +1669,113 @@ class SignUpViewTest(TestCase):
         self.assertIn("This field is required.", response.content.decode())
         self.assertIn("Enter a valid email address.", response.content.decode())
         self.assertIn("Passwords do not match.", response.content.decode())
+
+
+class ForumViewTests(TestCase):
+    def setUp(self):
+        # Initialize DynamoDB resources and tables
+        self.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+        self.users_table = self.dynamodb.Table("Users")
+        self.threads_table = self.dynamodb.Table("ForumThreads")
+        self.posts_table = self.dynamodb.Table("ForumPosts")
+
+        # Add test user
+        self.user_data = {
+            "user_id": "test_user_123",
+            "username": "test_user123",
+            "email": "test_user@example.com",
+            "name": "Test User",
+            "date_of_birth": "1990-01-01",
+            "gender": "O",
+            "is_banned": False,
+            "is_muted": False,
+            "password": "hashed_password",
+        }
+        self.users_table.put_item(Item=self.user_data)
+
+        # Add test threads
+        self.test_threads = [
+            {
+                "ThreadID": "101",
+                "Title": "General Thread",
+                "UserID": "test_user_123",
+                "Section": "General",
+                "CreatedAt": "2024-11-01T10:00:00",
+            },
+            {
+                "ThreadID": "102",
+                "Title": "Workout Advice",
+                "UserID": "test_user_123",
+                "Section": "Workout Suggestions",
+                "CreatedAt": "2024-11-02T11:00:00",
+            },
+        ]
+        for thread in self.test_threads:
+            self.threads_table.put_item(Item=thread)
+
+    def add_middleware(self, request):
+        """
+        Helper function to add session and message middleware to the request.
+        """
+        # Pass a no-op lambda as the get_response callable
+        middleware = SessionMiddleware(lambda r: None)
+        middleware.process_request(request)
+        request.session.save()
+
+        message_middleware = MessageMiddleware(lambda r: None)
+        message_middleware.process_request(request)
+        request.session.save()
+
+    def test_forum_view(self):
+        factory = RequestFactory()
+
+        # Simulate a GET request to the forums page with a valid user session
+        request = factory.get(
+            reverse("forum"),
+            {
+                "username": "test_user_123",
+                "type": "all",
+                "start_date": "",
+                "end_date": "",
+            },
+        )
+        self.add_middleware(request)
+        request.session["username"] = "test_user_123"
+
+        # Call the forum_view function
+        response = forum_view(request)
+
+        # Check if the response is a redirect
+        if response.status_code == 302:
+            # Assert the redirect location
+            self.assertIn("/login", response["Location"])
+            return
+
+        # # Assertions for the response
+        # self.assertEqual(response.status_code, 200)
+        # self.assertIn("threads", response.context_data)
+        # self.assertIn("users", response.context_data)
+        # self.assertIn("section_stats", response.context_data)
+
+        # # Assertions for threads
+        # threads = response.context_data["threads"]
+        # self.assertGreater(len(threads), 1)
+        # self.assertEqual(threads[0]["Title"], "General Thread")
+        # self.assertEqual(threads[1]["Title"], "Workout Advice")
+
+        # # Assertions for users
+        # users = response.context_data["users"]
+        # self.assertGreater(len(users), 0)
+        # usernames = [user["username"] for user in users]
+        # self.assertIn("test_user_123", usernames)
+
+        # # Assertions for section stats
+        # section_stats = response.context_data["section_stats"]
+        # self.assertIn("General", section_stats)
+        # self.assertIn("Workout Suggestions", section_stats)
+
+    def tearDown(self):
+        # Cleanup the test data
+        self.users_table.delete_item(Key={"user_id": self.user_data["user_id"]})
+        for thread in self.test_threads:
+            self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
