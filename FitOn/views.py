@@ -45,6 +45,7 @@ from .dynamodb import (
     get_mock_user_by_uid,
     mark_user_as_warned_thread,
     mark_user_as_warned_comment,
+    set_user_warned_to_false,
 )
 from .rds import rds_main, fetch_user_data
 
@@ -2264,26 +2265,20 @@ def warn_action(request):
     return JsonResponse({"status": "error", "message": "Invalid request method."}, status=405)
 
 def dismiss_warning(request):
-    if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
-        user_id = request.session.get("user_id")
+    if request.method == "POST":
+        user_id = request.session.get("user_id")  # Retrieve the logged-in user's ID
         if not user_id:
-            return JsonResponse({"status": "error", "message": "User not logged in."}, status=403)
+            return JsonResponse({"status": "error", "message": "User ID is missing."}, status=400)
 
-        # Update `is_warned` to False in DynamoDB
-        try:
-            update_expression = "SET is_warned = :warned"
-            expression_values = {":warned": False}
+        # Call the function to set is_warned to False
+        result = set_user_warned_to_false(user_id)
 
-            users_table.update_item(
-                Key={"user_id": user_id},
-                UpdateExpression=update_expression,
-                ExpressionAttributeValues=expression_values,
-            )
-            return JsonResponse({"status": "success", "message": "Warning dismissed."})
-        except Exception as e:
-            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+        if result["status"] == "success":
+            return JsonResponse({"status": "success", "message": result["message"]})
+        else:
+            return JsonResponse({"status": "error", "message": result["message"]}, status=500)
 
-    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+    return JsonResponse({"status": "error", "message": "Invalid request method."}, status=400)
 
 # -------------
 # Punishmentsx

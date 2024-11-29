@@ -1268,6 +1268,29 @@ def mark_user_as_warned_comment(post_id, user_id):
         print(f"Error warning user {user_id} for comment {post_id}: {e}")
         raise
 
+def set_user_warned_to_false(user_id):
+    """
+    Sets the is_warned attribute to False for a user in the Users table.
+
+    :param user_id: The ID of the user to update.
+    """
+    # Initialize DynamoDB resource
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    try:
+        # Update the is_warned attribute to False
+        response = users_table.update_item(
+            Key={"user_id": user_id},  # Replace this key with your partition key field name if different
+            UpdateExpression="SET is_warned = :warned",
+            ExpressionAttributeValues={":warned": False},
+            ReturnValues="UPDATED_NEW"
+        )
+        print(f"User {user_id} successfully updated: {response}")
+        return {"status": "success", "message": f"User {user_id} warning dismissed."}
+    except ClientError as e:
+        print(f"Error updating user {user_id}: {e.response['Error']['Message']}")
+        return {"status": "error", "message": e.response['Error']['Message']}
 
 
 
