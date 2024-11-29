@@ -40,7 +40,7 @@
             Ban
         </button>
 
-        <button class="warn-thread-btn" data-thread-id="{{ thread.ThreadID }}" style="background-color: orange; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+        <button class="warn-thread-btn" data-thread-id="{{ thread.ThreadID }}"  data-user-id="{{ thread.UserID }}" style="background-color: orange; color: white; border: none; padding: 5px 15px; cursor: pointer;">
             ⚠ Warn
         </button>
         {% endif %}
@@ -81,7 +81,7 @@
                         <button class="ban-post-btn" data-user-id="{{ post.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
                             Ban
                         </button>
-                        <button class="warn-comment-btn" data-post-id="{{ post.PostID }}" style="background-color: orange; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+                        <button class="warn-comment-btn" data-post-id="{{ post.PostID }}" data-user-id="{{ post.UserID }}" style="background-color: orange; color: white; border: none; padding: 5px 15px; cursor: pointer;">
                             ⚠ Warn
                         </button>                        
                     {% endif %}
@@ -575,33 +575,33 @@
             button.addEventListener('click', function(event) {
                 event.preventDefault();
                 const threadId = this.dataset.threadId;
+                const userId = this.dataset.userId; // Extract user ID
 
-                if (!threadId) {
-                    alert('Error: Thread ID is missing.');
+                if (!userId) {
+                    alert("User ID is missing.");
                     return;
                 }
 
-                // AJAX request to warn the thread
                 fetch('/warn_action/', {
                     method: 'POST',
                     headers: {
-                        'X-CSRFToken': '{{ csrf_token }}', // CSRF token for security
+                        'X-CSRFToken': '{{ csrf_token }}',
                         'Content-Type': 'application/json',
                         'x-requested-with': 'XMLHttpRequest'
                     },
                     body: JSON.stringify({
                         action: 'warn_thread',
-                        thread_id: threadId
+                        thread_id: threadId,
+                        user_id: userId // Send the user ID
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        alert('Thread has been warned successfully.');
-                        // Disable the button or change its appearance
+                        alert('User warned for thread successfully.');
+                        this.textContent = 'Warned';
                         this.disabled = true;
                         this.style.backgroundColor = '#ccc';
-                        this.textContent = 'Warned';
                     } else {
                         alert('Error: ' + data.message);
                     }
@@ -610,38 +610,39 @@
             });
         });
 
+
         // Warn Comment Button Event Listener
         warnCommentButtons.forEach(button => {
             button.addEventListener('click', function(event) {
                 event.preventDefault();
                 const postId = this.dataset.postId;
+                const userId = this.dataset.userId; // Extract user ID
 
-                if (!postId) {
-                    alert('Error: Post ID is missing.');
+                if (!userId) {
+                    alert("User ID is missing.");
                     return;
                 }
 
-                // AJAX request to warn the comment
                 fetch('/warn_action/', {
                     method: 'POST',
                     headers: {
-                        'X-CSRFToken': '{{ csrf_token }}', // CSRF token for security
+                        'X-CSRFToken': '{{ csrf_token }}',
                         'Content-Type': 'application/json',
                         'x-requested-with': 'XMLHttpRequest'
                     },
                     body: JSON.stringify({
                         action: 'warn_comment',
-                        post_id: postId
+                        post_id: postId,
+                        user_id: userId // Send the user ID
                     })
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.status === 'success') {
-                        alert('Comment has been warned successfully.');
-                        // Disable the button or change its appearance
+                        alert('User warned for comment successfully.');
+                        this.textContent = 'Warned';
                         this.disabled = true;
                         this.style.backgroundColor = '#ccc';
-                        this.textContent = 'Warned';
                     } else {
                         alert('Error: ' + data.message);
                     }
@@ -649,6 +650,7 @@
                 .catch(error => console.error('Error warning comment:', error));
             });
         });
+
 
        
     });

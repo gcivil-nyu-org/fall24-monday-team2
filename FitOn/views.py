@@ -43,6 +43,8 @@ from .dynamodb import (
     remove_from_list,
     cancel_data_request_to_user,
     get_mock_user_by_uid,
+    mark_user_as_warned_thread,
+    mark_user_as_warned_comment,
 )
 from .rds import rds_main, fetch_user_data
 
@@ -2217,24 +2219,41 @@ def unmute_user(request):
 
 def warn_action(request):
     if request.method == "POST":
-        data = json.loads(request.body)
+        data = json.loads(request.body.decode("utf-8"))
         action = data.get("action")
         thread_id = data.get("thread_id")
         post_id = data.get("post_id")
+        username = data.get("user_id")  # Here 'user_id' refers to the username.
+
+        if not username:
+            return JsonResponse(
+                {"status": "error", "message": "Username is missing."}, status=400
+            )
+
+        # Retrieve the user record by username
+        user = get_user_by_username(username)
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found."}, status=404
+            )
+
+        # Extract the actual user_id from the user record
+        user_id = user.get("user_id")
+
+        print(f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}, User ID: {user_id}")
 
         if action == "warn_thread" and thread_id:
-            # Simulate marking the thread as warned
-            print(f"Thread {thread_id} has been warned.")
-            return JsonResponse({"status": "success", "message": "Thread warned successfully."})
+            mark_user_as_warned_thread(thread_id, user_id)
+            return JsonResponse({"status": "success", "message": "User warned for thread successfully."})
 
-        if action == "warn_comment" and post_id:
-            # Simulate marking the comment as warned
-            print(f"Comment {post_id} has been warned.")
-            return JsonResponse({"status": "success", "message": "Comment warned successfully."})
+        elif action == "warn_comment" and post_id:
+            mark_user_as_warned_comment(post_id, user_id)
+            return JsonResponse({"status": "success", "message": "User warned for comment successfully."})
 
         return JsonResponse({"status": "error", "message": "Invalid action or ID."}, status=400)
 
     return JsonResponse({"status": "error", "message": "Invalid request method."}, status=405)
+
 
 # -------------
 # Punishmentsx

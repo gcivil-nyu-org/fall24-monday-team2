@@ -1214,6 +1214,65 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
         print(f"Error reporting comment: {e}")
 
 
+def mark_user_as_warned_thread(user_id, thread_id):
+    """
+    Marks a user as warned for inappropriate behavior in a thread.
+    """
+    try:
+        # Fetch the user item to ensure it exists
+        response = users_table.get_item(Key={"user_id": user_id})
+        user = response.get("Item", {})
+
+        if not user:
+            raise ValueError(f"User with ID {user_id} not found.")
+
+        # Optionally log the warning reason and thread context
+        warning_reason = f"Warned for behavior in thread {thread_id}"
+
+        # Update the "is_warned" attribute and optionally log the warning context
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_warned = :warned, warning_reason = :reason",
+            ExpressionAttributeValues={
+                ":warned": True,
+                ":reason": warning_reason,
+            },
+        )
+        print(f"User {user_id} has been warned for thread {thread_id}.")
+    except Exception as e:
+        print(f"Error warning user {user_id} for thread {thread_id}: {e}")
+        raise
+
+def mark_user_as_warned_comment(post_id, user_id):
+    try:
+        print(f"Fetching user with ID: {user_id}")
+        response = users_table.get_item(Key={"user_id": user_id})
+        user = response.get("Item", {})
+
+        if not user:
+            print(f"User with ID {user_id} not found in users_table.")
+            raise ValueError(f"User with ID {user_id} not found.")
+
+        print(f"User fetched successfully: {user}")
+
+        warning_reason = f"Warned for behavior in comment {post_id}"
+
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_warned = :warned, warning_reason = :reason",
+            ExpressionAttributeValues={
+                ":warned": True,
+                ":reason": warning_reason,
+            },
+        )
+        print(f"User {user_id} has been warned for comment {post_id}.")
+    except Exception as e:
+        print(f"Error warning user {user_id} for comment {post_id}: {e}")
+        raise
+
+
+
+
 def get_section_stats(section_name):
     # Fetch threads for the section
     threads_response = threads_table.scan(
