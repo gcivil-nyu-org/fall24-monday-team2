@@ -39,6 +39,10 @@
         <button class="ban-post-btn" data-user-id="{{ thread.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
             Ban
         </button>
+
+        <button class="warn-thread-btn" data-thread-id="{{ thread.ThreadID }}" style="background-color: orange; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+            ⚠ Warn
+        </button>
         {% endif %}
 
     </div>
@@ -77,6 +81,9 @@
                         <button class="ban-post-btn" data-user-id="{{ post.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
                             Ban
                         </button>
+                        <button class="warn-comment-btn" data-post-id="{{ post.PostID }}" style="background-color: orange; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+                            ⚠ Warn
+                        </button>                        
                     {% endif %}
                 {% endif %}
             </div>
