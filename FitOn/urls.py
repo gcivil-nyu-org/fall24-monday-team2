@@ -152,4 +152,5 @@ urlpatterns = [
         name="pending_invitations",
     ),
     path('warn_action/', views.warn_action, name='warn_action'),
+    path("dismiss_warning/", views.dismiss_warning, name="dismiss_warning"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

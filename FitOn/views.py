@@ -136,7 +136,16 @@ SCOPES = [
 
 def homepage(request):
     username = request.session.get("username", "Guest")
-    return render(request, "home.html", {"username": username})
+    user_id = request.session.get("user_id")  # Retrieve user_id from session
+
+    if not user_id:
+        return redirect("login")  # Redirect to login if the user is not authenticated
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)  # Replace with your function to fetch the user
+    is_warned = user.get("is_warned", False)  # Get the 'is_warned' status
+
+    return render(request, "home.html", {"username": username, "is_warned": is_warned})
 
 
 def list_metrics(request):
@@ -2254,6 +2263,27 @@ def warn_action(request):
 
     return JsonResponse({"status": "error", "message": "Invalid request method."}, status=405)
 
+def dismiss_warning(request):
+    if request.method == "POST" and request.headers.get("x-requested-with") == "XMLHttpRequest":
+        user_id = request.session.get("user_id")
+        if not user_id:
+            return JsonResponse({"status": "error", "message": "User not logged in."}, status=403)
+
+        # Update `is_warned` to False in DynamoDB
+        try:
+            update_expression = "SET is_warned = :warned"
+            expression_values = {":warned": False}
+
+            users_table.update_item(
+                Key={"user_id": user_id},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_values,
+            )
+            return JsonResponse({"status": "success", "message": "Warning dismissed."})
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+    return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 # -------------
 # Punishmentsx
