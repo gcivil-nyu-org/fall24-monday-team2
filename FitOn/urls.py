@@ -151,4 +151,5 @@ urlpatterns = [
         views.get_pending_invitations,
         name="pending_invitations",
     ),
+    path('warn_action/', views.warn_action, name='warn_action'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

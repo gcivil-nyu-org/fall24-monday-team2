@@ -2215,6 +2215,27 @@ def unmute_user(request):
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
 
+def warn_action(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        action = data.get("action")
+        thread_id = data.get("thread_id")
+        post_id = data.get("post_id")
+
+        if action == "warn_thread" and thread_id:
+            # Simulate marking the thread as warned
+            print(f"Thread {thread_id} has been warned.")
+            return JsonResponse({"status": "success", "message": "Thread warned successfully."})
+
+        if action == "warn_comment" and post_id:
+            # Simulate marking the comment as warned
+            print(f"Comment {post_id} has been warned.")
+            return JsonResponse({"status": "success", "message": "Comment warned successfully."})
+
+        return JsonResponse({"status": "error", "message": "Invalid action or ID."}, status=400)
+
+    return JsonResponse({"status": "error", "message": "Invalid request method."}, status=405)
+
 # -------------
 # Punishmentsx
 # -------------

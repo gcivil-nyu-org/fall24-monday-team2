@@ -154,6 +154,8 @@
         const postSubmitButton = document.getElementById('post-submit');
         const threadElement = document.querySelector('[data-thread-id]');
         const threadId = document.querySelector('[data-thread-id]').getAttribute('data-thread-id');
+        const warnThreadButtons = document.querySelectorAll('.warn-thread-btn'); // Warn buttons for threads
+        const warnCommentButtons = document.querySelectorAll('.warn-comment-btn'); // Warn buttons for comments
 
         // Like comment
         likeCommentButtons.forEach(button => {
@@ -564,6 +566,87 @@
                     }
                 })
                 .catch(error => console.error('Error:', error));
+            });
+        });
+
+
+        // Warn Thread Button Event Listener
+        warnThreadButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const threadId = this.dataset.threadId;
+
+                if (!threadId) {
+                    alert('Error: Thread ID is missing.');
+                    return;
+                }
+
+                // AJAX request to warn the thread
+                fetch('/warn_action/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}', // CSRF token for security
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        action: 'warn_thread',
+                        thread_id: threadId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('Thread has been warned successfully.');
+                        // Disable the button or change its appearance
+                        this.disabled = true;
+                        this.style.backgroundColor = '#ccc';
+                        this.textContent = 'Warned';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error warning thread:', error));
+            });
+        });
+
+        // Warn Comment Button Event Listener
+        warnCommentButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const postId = this.dataset.postId;
+
+                if (!postId) {
+                    alert('Error: Post ID is missing.');
+                    return;
+                }
+
+                // AJAX request to warn the comment
+                fetch('/warn_action/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}', // CSRF token for security
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        action: 'warn_comment',
+                        post_id: postId
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('Comment has been warned successfully.');
+                        // Disable the button or change its appearance
+                        this.disabled = true;
+                        this.style.backgroundColor = '#ccc';
+                        this.textContent = 'Warned';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error warning comment:', error));
             });
         });
 
