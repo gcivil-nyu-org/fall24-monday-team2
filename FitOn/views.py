@@ -48,6 +48,9 @@ from .dynamodb import (
     remove_from_list,
     cancel_data_request_to_user,
     get_mock_user_by_uid,
+    mark_user_as_warned_thread,
+    mark_user_as_warned_comment,
+    set_user_warned_to_false,
 )
 from .rds import rds_main, fetch_user_data
 
@@ -142,7 +145,16 @@ SCOPES = [
 
 def homepage(request):
     username = request.session.get("username", "Guest")
-    return render(request, "home.html", {"username": username})
+    user_id = request.session.get("user_id")  # Retrieve user_id from session
+
+    if not user_id:
+        return redirect("login")  # Redirect to login if the user is not authenticated
+
+    # Fetch user details from DynamoDB
+    user = get_user(user_id)  # Replace with your function to fetch the user
+    is_warned = user.get("is_warned", False)  # Get the 'is_warned' status
+
+    return render(request, "home.html", {"username": username, "is_warned": is_warned})
 
 
 def list_metrics(request):
@@ -2270,6 +2282,80 @@ def unmute_user(request):
         return JsonResponse({"status": "success", "message": "User has been unmuted"})
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def warn_action(request):
+    if request.method == "POST":
+        data = json.loads(request.body.decode("utf-8"))
+        action = data.get("action")
+        thread_id = data.get("thread_id")
+        post_id = data.get("post_id")
+        username = data.get("user_id")  # Here 'user_id' refers to the username.
+
+        if not username:
+            return JsonResponse(
+                {"status": "error", "message": "Username is missing."}, status=400
+            )
+
+        # Retrieve the user record by username
+        user = get_user_by_username(username)
+        if not user:
+            return JsonResponse(
+                {"status": "error", "message": "User not found."}, status=404
+            )
+
+        # Extract the actual user_id from the user record
+        user_id = user.get("user_id")
+
+        print(
+            f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}, User ID: {user_id}"
+        )
+
+        if action == "warn_thread" and thread_id:
+            mark_user_as_warned_thread(thread_id, user_id)
+            return JsonResponse(
+                {"status": "success", "message": "User warned for thread successfully."}
+            )
+
+        elif action == "warn_comment" and post_id:
+            mark_user_as_warned_comment(post_id, user_id)
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "message": "User warned for comment successfully.",
+                }
+            )
+
+        return JsonResponse(
+            {"status": "error", "message": "Invalid action or ID."}, status=400
+        )
+
+    return JsonResponse(
+        {"status": "error", "message": "Invalid request method."}, status=405
+    )
+
+
+def dismiss_warning(request):
+    if request.method == "POST":
+        user_id = request.session.get("user_id")  # Retrieve the logged-in user's ID
+        if not user_id:
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing."}, status=400
+            )
+
+        # Call the function to set is_warned to False
+        result = set_user_warned_to_false(user_id)
+
+        if result["status"] == "success":
+            return JsonResponse({"status": "success", "message": result["message"]})
+        else:
+            return JsonResponse(
+                {"status": "error", "message": result["message"]}, status=500
+            )
+
+    return JsonResponse(
+        {"status": "error", "message": "Invalid request method."}, status=400
+    )
 
 
 # -------------
