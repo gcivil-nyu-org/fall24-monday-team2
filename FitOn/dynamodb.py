@@ -6,9 +6,13 @@ from datetime import datetime, timezone
 
 # from asgiref.sync import sync_to_async
 
+from boto3.dynamodb.conditions import Key
+from asgiref.sync import sync_to_async
+
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
+from django.http import JsonResponse
 from pytz import timezone
 from django.conf import settings
 import uuid
@@ -27,7 +31,7 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
-chat_table = dynamodb.Table("UserChats")
+chat_table = dynamodb.Table("chat_table")
 
 tz = timezone("EST")
 
@@ -678,9 +682,8 @@ def remove_from_list(user_id, field, value):
 # -------------------------------
 
 
-def create_thread(title, user_id, content):
+def create_thread(title, user_id, content, section="General"):
     thread_id = str(uuid.uuid4())
-
     created_at = datetime.now(tz).isoformat()
 
     thread = {
@@ -688,6 +691,7 @@ def create_thread(title, user_id, content):
         "Title": title,
         "UserID": user_id,
         "Content": content,
+        "Section": section,
         "CreatedAt": created_at,
         "Likes": 0,
         "LikedBy": [],
@@ -736,7 +740,6 @@ def fetch_thread(thread_id):
 
 def create_post(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-
     created_at = datetime.now(tz).isoformat()
 
     post = {
@@ -822,7 +825,12 @@ def delete_post(post_id, thread_id):
 
 
 def fetch_filtered_threads(
-    username="", thread_type="all", start_date="", end_date="", search_text=""
+    section=None,
+    username="",
+    thread_type="all",
+    start_date="",
+    end_date="",
+    search_text="",
 ):
     # Start building the filter expression
     filter_expression = Attr(
@@ -841,6 +849,9 @@ def fetch_filtered_threads(
     if end_date:
         end_date_dt = datetime.strptime(end_date, "%Y-%m-%d").isoformat()
         filter_expression &= Attr("CreatedAt").lte(end_date_dt)
+
+    if section:
+        filter_expression &= Attr("Section").eq(section)
 
     # Apply search text filter if provided (checks both thread titles and content)
     if search_text:
@@ -909,9 +920,9 @@ def fetch_all_users():
 
 def get_fitness_data(metric, email, start_time, end_time):
     try:
-        print("Inside Fitness Data Function\n")
-        print("Start Time: \n", start_time)
-        print("End Time: \n", end_time)
+        # print("Inside Fitness Data Function\n")
+        # print("Start Time: \n", start_time)
+        # print("End Time: \n", end_time)
         response = fitness_table.scan(
             FilterExpression="metric = :m AND #t BETWEEN :start AND :end AND email = :email",
             ExpressionAttributeNames={"#t": "time"},
@@ -922,9 +933,9 @@ def get_fitness_data(metric, email, start_time, end_time):
                 ":end": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
-        print(
-            f"Metric : {metric}\nResponse: {response}\n",
-        )
+        # print(
+        #     f"Metric : {metric}\nResponse: {response}\n",
+        # )
         return response
     except Exception as e:
         print(f"Error querying DynamoDB for fitness data. {e}")
@@ -1015,7 +1026,7 @@ def get_thread(title, user_id, content, created_at):
 
 def create_reply(thread_id, user_id, content):
     reply_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(tz).isoformat()
 
     reply = {
         "ReplyID": reply_id,
@@ -1175,10 +1186,10 @@ def mark_thread_as_reported(thread_id):
 
 def mark_comment_as_reported(thread_id, post_id, reporting_user):
     try:
-        print(f"Fetching comment {post_id} in thread {thread_id}")
+        # print(f"Fetching comment {post_id} in thread {thread_id}")
         response = posts_table.get_item(Key={"ThreadID": thread_id, "PostID": post_id})
         comment = response.get("Item", {})
-        print(f"Comment fetched: {comment}")
+        # print(f"Comment fetched: {comment}")
 
         if not comment:
             print(f"Comment {post_id} not found in thread {thread_id}")
@@ -1186,7 +1197,7 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
 
         # Initialize ReportedBy if it doesn't exist
         reported_by = comment.get("ReportedBy", [])
-        print(f"Current ReportedBy list: {reported_by}")
+        # print(f"Current ReportedBy list: {reported_by}")
 
         # Avoid duplicate reporting
         if reporting_user not in reported_by:
@@ -1198,6 +1209,172 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
             UpdateExpression="SET ReportedBy = :reported_by",
             ExpressionAttributeValues={":reported_by": reported_by},
         )
-        print(f"Successfully reported comment {post_id} in thread {thread_id}")
+        # print(f"Successfully reported comment {post_id} in thread {thread_id}")
     except Exception as e:
         print(f"Error reporting comment: {e}")
+
+
+def get_section_stats(section_name):
+    # Fetch threads for the section
+    threads_response = threads_table.scan(
+        FilterExpression=Attr("Section").eq(section_name)
+    )
+    threads = threads_response.get("Items", [])
+
+    # Count threads
+    thread_count = len(threads)
+
+    # Count posts (assuming each thread has a "PostCount" attribute)
+    post_count = sum(thread.get("PostCount", 0) for thread in threads)
+
+    # Find the latest thread
+    latest_thread = max(threads, key=lambda x: x.get("CreatedAt"), default=None)
+
+    if latest_thread:
+        latest_thread_title = latest_thread.get("Title", "No threads")
+        latest_thread_author = latest_thread.get("UserID", "Unknown")
+        latest_thread_id = latest_thread.get("ThreadID", None)
+        created_at_raw = latest_thread.get("CreatedAt")
+        latest_thread_created_at = (
+            datetime.fromisoformat(created_at_raw) if created_at_raw else None
+        )
+    else:
+        latest_thread_title = "No threads"
+        latest_thread_author = "N/A"
+        latest_thread_id = None
+        latest_thread_created_at = "N/A"
+
+    return {
+        "thread_count": thread_count,
+        "post_count": post_count,
+        "latest_thread": {
+            "title": latest_thread_title,
+            "author": latest_thread_author,
+            "thread_id": latest_thread_id,
+            "created_at": latest_thread_created_at,
+        },
+    }
+
+
+@sync_to_async
+def save_chat_message(sender, message, room_name, sender_name):
+    if len(message) > 500:
+        return JsonResponse({"error": "Message exceeds character limit"}, status=400)
+
+    timestamp = int(datetime.now(tz).timestamp())
+
+    chat_table.put_item(
+        Item={
+            "room_name": room_name,
+            "sender": sender,
+            "sender_name": sender_name,
+            "message": message,
+            "timestamp": timestamp,
+            "is_read": False,
+        }
+    )
+    return JsonResponse({"success": True})
+
+
+def get_users_without_specific_username(exclude_username):
+    try:
+        response = users_table.scan(
+            FilterExpression=Attr("username").ne(exclude_username),
+            ProjectionExpression="user_id, username",  # Fetch only required fields
+        )
+        users = response.get("Items", [])
+        print(f"Users fetched for search: {users}")
+        return users
+    except Exception as e:
+        print(
+            f"Error querying DynamoDB for users excluding username '{exclude_username}': {e}"
+        )
+        return []
+
+
+def get_chat_history_from_db(room_id):
+    response = chat_table.query(
+        KeyConditionExpression=Key("room_name").eq(room_id),
+        ScanIndexForward=True,
+    )
+    return response
+
+
+def get_unread_messages_count(receiver_id):
+    """
+    Fetch unread messages for a specific user using the GSI.
+    """
+    try:
+        response = chat_table.query(
+            IndexName="receiver-is_read-index",  # GSI name
+            KeyConditionExpression=Key("receiver").eq(receiver_id)
+            & Key("is_read").eq(0),
+        )
+        # Count unread messages grouped by sender
+        unread_counts = {}
+        for item in response.get("Items", []):
+            sender = item["sender"]
+            unread_counts[sender] = unread_counts.get(sender, 0) + 1
+
+        return unread_counts
+    except Exception as e:
+        print(f"Error querying unread messages: {e}")
+        return {}
+
+
+def get_users_with_chat_history(user_id):
+    try:
+        # Scan the table to find chat history involving the given user
+        response = chat_table.scan(
+            FilterExpression=Attr("user_id").eq(user_id)
+            | Attr("other_user_id").eq(user_id)
+        )
+
+        chat_history = response.get("Items", [])
+
+        # Debug: Check the raw chat history
+        print(f"Chat history raw response: {chat_history}")
+
+        # Extract unique user IDs and their chat information
+        users_with_activity = {}
+        for chat in chat_history:
+            # Identify the other participant in the chat
+            other_user_id = (
+                chat["other_user_id"] if chat["user_id"] == user_id else chat["user_id"]
+            )
+            room_name = chat.get("room_name", "")
+            last_activity = chat.get(
+                "timestamp", 0
+            )  # Assuming `timestamp` indicates last activity
+
+            # Store the latest activity for each user
+            if other_user_id not in users_with_activity:
+                users_with_activity[other_user_id] = {
+                    "user_id": other_user_id,
+                    "room_name": room_name,
+                    "last_activity": last_activity,
+                }
+            else:
+                # Update the last activity if this message is more recent
+                users_with_activity[other_user_id]["last_activity"] = max(
+                    users_with_activity[other_user_id]["last_activity"], last_activity
+                )
+
+        # Convert dictionary to a list and sort by last activity
+        sorted_users = sorted(
+            users_with_activity.values(), key=lambda x: x["last_activity"], reverse=True
+        )
+
+        # Fetch usernames for the users
+        for user in sorted_users:
+            user_details = get_user_by_uid(user["user_id"])
+            user["username"] = user_details.username if user_details else "Unknown"
+
+        # Debug: Check sorted users with usernames
+        print(f"Sorted users with chat activity: {sorted_users}")
+
+        return sorted_users
+
+    except Exception as e:
+        print(f"Error fetching users with chat history: {e}")
+        return []

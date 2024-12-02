@@ -4,15 +4,17 @@
 {% block content %}
 <div class="thread-container" style="width: 60%; margin: 0 auto;">
     <div class="thread-header" style="border-bottom: 1px solid #e0e0e0; padding-bottom: 20px; margin-bottom: 20px;">
-        <h2>{{ thread.Title }}</h2>
+        <h2 style="word-wrap: break-word; white-space: normal; overflow-wrap: break-word;">
+            {{ thread.Title }}
+        </h2>
         <div style="display: flex; align-items: center; color: #888; font-size: 14px;">
             <p>Posted by <strong>{{ thread.UserID }}</strong> on {{ thread.CreatedAt|date:"M d, Y H:i" }}</p>
         </div>
     </div>
 
-    <div class="thread-content" style="font-size: 16px; line-height: 1.5; margin-bottom: 30px;">
+    <div class="thread-content" style="font-size: 16px; line-height: 1.5; margin-bottom: 30px; word-wrap: break-word; white-space: normal; overflow-wrap: break-word;">
         <p>{{ thread.Content }}</p>
-    </div>
+    </div>    
 
     <div style="display: flex; align-items: center; border-top: 1px solid #e0e0e0; padding-top: 10px;">
         <!-- Like Button -->
@@ -50,7 +52,7 @@
                 <p><strong>{{ post.UserID }}</strong> said: </p>
                 <p style="color: #888; font-size: 12px;">{{ post.CreatedAt|date:"M d, Y H:i" }}</p>
             </div>
-            <p>{{ post.Content }}</p>
+            <p style="word-wrap: break-word; white-space: normal; overflow-wrap: break-word;">{{ post.Content }}</p>
     
             <!-- Admin Controls -->
             {% if post.UserID != request.session.username %}

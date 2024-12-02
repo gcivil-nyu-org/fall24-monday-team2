@@ -1,10 +1,10 @@
+import json
 import os
 import sys
-from pathlib import Path
 from datetime import timedelta
-import boto3
-import json
+from pathlib import Path
 
+import boto3
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,6 +17,7 @@ def get_secrets():
     GOOGLEFIT_CLIENT_ID = response.get("GOOGLEFIT_CLIENT_ID")
     GOOGLEFIT_CLIENT_SECRET = response.get("GOOGLEFIT_CLIENT_SECRET")
     return (GOOGLEFIT_CLIENT_ID, GOOGLEFIT_CLIENT_SECRET)
+
 
 def get_aws_secrets():
     client = boto3.client("secretsmanager", region_name="us-west-2")
@@ -94,6 +95,7 @@ ALLOWED_HOSTS = ["*"]
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     "FitOn",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -102,13 +104,14 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "storages",  # Add this line for S3 storage
+    "channels",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
+    # "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -134,6 +137,31 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "FitOn.wsgi.application"
+
+ASGI_APPLICATION = "FitOn.asgi.application"
+
+# Set Redis host based on environment
+# REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
+# REDIS_PORT = os.getenv("REDIS_PORT", "6379")
+
+# CHANNEL_LAYERS = {
+#     "default": {
+#         "BACKEND": "channels_redis.core.RedisChannelLayer",
+#         "CONFIG": {
+#             "hosts": [(REDIS_HOST, int(REDIS_PORT))],
+#         },
+#     },
+# }
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
+
+# Session settings
+SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_NAME = "fiton_session"
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases

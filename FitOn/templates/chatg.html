@@ -1,0 +1,588 @@
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <title>Group Chat</title>
+    <link rel="stylesheet" type="text/css" href="../static/css/chat.css">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <script src="{% static 'js/navbar.js' %}" defer></script>
+    <style>
+        /* Override specific navbar styles */
+        .navbar {
+            padding: 15px 30px !important; /* Match global padding */
+        }
+        .navbar-logo {
+            font-size: 28px !important; /* Match global logo font size */
+        }
+        .navbar-links {
+            gap: 40px !important; /* Match global link spacing */
+        }
+        .navbar-links a {
+            padding: 15px 20px !important; /* Match global link padding */
+            font-size: 18px !important; /* Match global font size */
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="{% url 'homepage' %}" class="navbar-logo">FitOn</a>
+            <div class="hamburger" id="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <ul class="navbar-links">
+                {% if request.session.username %}
+                    {% if is_admin %}
+                        <li><a href="{% url 'fitness_trainers_list' %}">Fitness Trainers</a></li>
+                        <li><a href="{% url 'fitness_trainer_applications_list' %}">Review Applications</a></li>
+                        <li><a href="{% url 'punishments' %}">Manage Punishments</a></li>
+                    {% endif %}
+                    <li><a href="{% url 'forum' %}">Forums</a></li>
+                    <li><a href="{% url 'homepage' %}">Workouts</a></li>
+                    <li><a href="{% url 'get_metric_data' %}">Metrics</a></li>
+                    <li><a href="{% url 'profile' %}">Profile</a></li>
+                    <li><a href="{% url 'chat' %}">Chat</a></li>
+                    <li><a href="{% url 'logout' %}">Logout</a></li>
+                {% else %}
+                    <li><a href="{% url 'login' %}">Login</a></li>
+                    <li><a href="{% url 'signup' %}">Sign Up</a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </nav>
+
+    <div class="chat-container">
+        <div class="leftSide">
+            <!--header-->
+
+            <!--search-->
+            <button style="width: 100%;height: 60px" id="private">
+                Back
+            </button>
+            <button style="width: 100%;height: 60px" onclick="showCreateGroupPopup()">
+                Create a Group
+            </button>
+            <button style="width: 100%;height: 60px" onclick="requestCheckInvitations()">
+                Pending Invitations
+            </button>
+            <!--ChatList-->
+
+            {% for i in data %}
+            <div class="chatlist" data-room-name="{{ i.name }}"">
+                <div class=" block">
+                <div class="details">
+                    <div class="listHead">
+                        <h4>{{ i.name }}</h4>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="search_chat">
+        <div style="position: relative;"> <!-- Ensure relative positioning for proper alignment -->
+            <input
+                type="text"
+                id="search_group_user"
+                placeholder="Search for a username..."
+                oninput="searchGroupUsers()"
+            />
+            <div id="search_results" class="search-popup"></div> <!-- Popup for search results -->
+        </div>
+    </div>
+
+    <div class="overlay" id="overlay" display: none;>
+        <div class="popup">
+            <button class="close-btn" onclick="closeCreateGroupPopup()">×</button>
+            <h2>Select Members</h2>
+            <label for="roomName">Room Name:</label>
+            <input type="text" id="roomName" placeholder="Enter a unique room name" required>
+
+        <!-- Search Bar -->
+        <div class="search_chat">
+            <input
+                type="text"
+                id="search__group_user"
+                onkeyup="filterUsernames()"
+                oninput="searchGroupUsers()"
+                placeholder="Search for a username..."
+            />
+            <div id="search_results" class="search-popup"></div>
+        </div>
+
+        <!-- List of Usernames Below Search -->
+        <ul class="checkbox-list" id="usernameList">
+            {% for i in allUser %}
+            <li class="checkbox-item">
+                <label>
+                    <input type="checkbox" class="fruit-checkbox" value="{{ i.user_id }}"> {{ i.username }}
+                </label>
+            </li>
+            {% endfor %}
+        </ul>
+
+            <button class="submit-btn" onclick="submitCreateGroup()">Submit</button>
+        </div>
+    </div>
+
+    <!-- Pending Invitations Popup -->
+    <div class="overlay" id="overlayA" style="display: none;">
+        <div class="popup">
+            <button class="close-btn" onclick="closeInvitePopup()">×</button>
+            <h2>Pending Invitations</h2>
+            <ul class="checkbox-list">
+                {% for invite in pending_invitations %}
+                <li class="checkbox-item">
+                    <label>
+                        <input type="checkbox" class="invite-checkbox" value="{{ invite.group_id }}">
+                        {{ invite.group_name }}
+                    </label>
+                </li>
+                {% endfor %}
+            </ul>
+            <button class="submit-btn" onclick="submitInviteMembers()">Submit</button>
+        </div>
+    </div>
+</body>
+</html>
+
+
+    <div id="rightBar" class="rightSide" style="visibility: hidden">
+        <div class="header">
+            <button id="leave" style="width: 120px">
+                Leave
+            </button>
+            <button id="invent" style="width: 120px" onclick="showInvitePopup()">
+                Invite
+            </button>
+        </div>
+        <!--chatbox-->
+
+        <div class="chatBox" id="chatBox">
+        </div>
+
+        <!--chat input-->
+        <div class="chatbox_input">
+            <div>
+                <input id="input_message" type="text" placeholder="Type your message here...">
+                <button id="submit">
+                    Send
+                </button>
+
+            </div>
+
+        </div>
+    </div>
+
+    </div>
+
+    </div>
+
+
+    <script>
+
+        function showInvitationDialog() {
+            document.getElementById('dialog').style.display = 'block';
+        }
+
+        function closeInvitationDialog() {
+            document.getElementById('dialog').style.display = 'none';
+        }
+
+
+        function handleConfirmJoin() {
+            data = {
+                "userId": '{{  mine.user_id }}',
+                "room": window.inviteRoomName,
+            }
+            const url = `http://${window.location.host}/chat/group/join/`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(json => {
+                    if (json.code === '200') {
+                        closeInvitationDialog();
+                        location.reload()
+                    }
+                })
+                .catch(error => alert('Error' + error));
+        }
+
+        function handleCancelJoin() {
+            closeInvitationDialog();
+        }
+
+        function showCreateGroupPopup() {
+            document.getElementById('overlay').style.display = 'block';
+        }
+
+        function closeCreateGroupPopup() {
+            document.getElementById('overlay').style.display = 'none';
+        }
+
+        function showInvitePopup() {
+            document.getElementById('overlayA').style.display = 'block';
+        }
+
+
+        function closeInvitePopup() {
+            document.getElementById('overlayA').style.display = 'none';
+        }
+
+        // function submitCreateGroup() {
+        //     const roomName = document.getElementById('roomName').value.trim();
+
+        //     if (roomName === "") {
+        //         alert("You have to type in a room name!");
+        //         return;
+        //     }
+
+
+        //     const checkboxes = document.querySelectorAll('.fruit-checkbox');
+        //     lis = []
+        //     checkboxes.forEach(checkbox => {
+        //         if (checkbox.checked) {
+        //             lis.push(checkbox.value)
+        //         }
+        //     });
+
+        //     const data = {
+        //         "allUser": lis,
+        //         "mineId": '{{ mine.user_id }}',
+        //         "roomName": roomName
+        //     }
+        //     sendCreatePostRequest(data);
+        // }
+
+        function submitCreateGroup() {
+            const roomName = document.getElementById("roomName").value.trim();
+            const selectedMembersList = document.getElementById("selected_members_list").children;
+
+            if (roomName === "" || selectedMembersList.length === 0) {
+                alert("Please provide a room name and select at least one member.");
+                return;
+            }
+
+            const members = Array.from(selectedMembersList).map((item) => item.dataset.userId);
+
+            const data = {
+                allUser: members,
+                roomName: roomName,
+            };
+
+            fetch("/chat/group/create/", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(data),
+            })
+                .then((response) => response.json())
+                .then((json) => {
+                    if (json.code === "200") {
+                        alert("Group created successfully!");
+                        closeCreateGroupPopup();
+                        location.reload();
+                    } else {
+                        alert(json.message);
+                    }
+                })
+                .catch((error) => console.error("Error creating group:", error));
+        }
+
+        function sendCreatePostRequest(data) {
+            const url = `http://${window.location.host}/chat/group/create/`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(json => {
+                    if (json.code === '200') {
+                        closeCreateGroupPopup();
+                    }
+                })
+                .catch(error => alert('Error' + error));
+        }
+
+        function submitInviteMembers() {
+            const checkboxes = document.querySelectorAll('.fruit-checkbox');
+            lis = []
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    lis.push(checkbox.value)
+                }
+            });
+            const data = {
+                "allUser": lis,
+                "roomName": window.current_room_name
+            }
+            sendInvitePostRequest(data)
+        }
+
+
+        function sendInvitePostRequest(data) {
+            const url = `http://${window.location.host}/chat/group/invite/`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.json())
+                .then(json => {
+                    if (json.code === '200') {
+                        closeInvitePopup();
+                    }
+                })
+                .catch(error => alert('Error' + error));
+        }
+
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const chatListItems = document.querySelectorAll('.chatlist');
+
+            chatListItems.forEach(item => {
+                item.addEventListener('click', function () {
+                    startChat(this);
+                });
+            });
+
+            var privateChat = document.getElementById('private')
+            var leave = document.getElementById('leave')
+            privateChat.addEventListener('click', function () {
+                window.location.href = "/chat";
+            })
+
+            leave.addEventListener('click', function () {
+                data = {
+                    "userId": '{{  mine.user_id }}',
+                    "room": window.current_room_name,
+                }
+                const url = `http://${window.location.host}/chat/group/leave/`;
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                })
+                    .then(response => response.json())
+                    .then(json => {
+                        if (json.code === '200') {
+                            location.reload()
+                        }
+                    })
+                    .catch(error => alert('Error' + error));
+            })
+        });
+
+        let submitListener = null;
+
+        function startChat(chatElement) {
+            element = document.getElementById("rightBar")
+            element.style.visibility = 'visible'
+
+            const chatBox = document.getElementById("chatBox");
+            if (chatBox) {
+                chatBox.innerHTML = '';
+            }
+
+            if (window.chatSocket != null) {
+                window.chatSocket.close(1000, 'Closing connection');
+                window.chatSocket.onclose = null;
+                window.chatSocket = null;
+            }
+
+
+            const blockListItems = document.querySelectorAll('.block');
+            blockListItems.forEach(item => {
+                item.classList.remove("active")
+            })
+
+            block = chatElement.querySelector('.block');
+            block.classList.add("active")
+
+            window.current_room_name = chatElement.getAttribute('data-room-name');
+
+            const roomId = window.current_room_name;
+            fetch(`/chat/history/${roomId}/`)
+                .then(response => response.json())
+                .then(data => {
+                    data.messages.forEach(message => {
+                        const messageDiv = document.createElement('div');
+                        if (message.sender === '{{ mine.user_id }}') {
+                            messageDiv.classList.add('message', 'my_message');
+                        } else {
+                            messageDiv.classList.add('message', 'frnd_message');
+                        }
+                        messageDiv.innerHTML = `<p><small>${message.sender_name}</small><br>${message.message}<br></p>`;
+                        chatBox.appendChild(messageDiv);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching chat history:', error);
+                });
+            window.chatSocket = new WebSocket('ws://' + window.location.host + '/ws/chat/' + current_room_name + '/');
+
+            window.chatSocket.onmessage = function (e) {
+                const data = JSON.parse(e.data);
+                console.log(data)
+                const message = data;
+                const messageDiv = document.createElement('div');
+                if (message.sender === '{{ mine.user_id }}') {
+                    messageDiv.classList.add('message', 'my_message');
+                } else {
+                    messageDiv.classList.add('message', 'frnd_message');
+                }
+                messageDiv.innerHTML = `<p><small>${message.sender_name}</small><br>${message.message}<br></p>`;
+                chatBox.appendChild(messageDiv);
+            };
+
+            if (submitListener) {
+                document.getElementById('submit').removeEventListener('click', submitListener);
+            }
+
+            submitListener = function () {
+                submitMessage(this, window.chatSocket);
+            };
+            document.getElementById('submit').addEventListener('click', submitListener);
+
+
+        }
+
+        function submitMessage(element, chatSocket) {
+            var inputField = document.getElementById('input_message');
+            var inputValue = inputField.value.trim(); // Get the input value and trim whitespace
+
+            if (inputValue === "") {
+                return; // Don't send empty messages
+            }
+
+            chatSocket.send(JSON.stringify({
+                'message': inputValue,
+                'sender': '{{ mine.user_id }}'
+            }));
+
+            inputField.value = ""; // Clear the input field after sending the message
+        }
+
+        function requestCheckInvitations() {
+            const url = `http://${window.location.host}/chat/group/check/`;
+            fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+            })
+                .then(response => response.json())
+                .then(response => {
+                    response.data.forEach(
+                        (item) => {
+                            window.inviteRoomName = item.name
+                            showInvitationDialog()
+                        }
+                    )
+
+                })
+                .catch(error => alert('Error' + error));
+        }
+
+        function searchGroupUsers() {
+            const query = document.getElementById("search_group_user").value.trim();
+            const searchResultsDiv = document.getElementById("search_results");
+
+            if (query === "") {
+                searchResultsDiv.style.display = "none";
+                return;
+            }
+
+            fetch(`/search_users?query=${query}`)
+                .then((response) => response.json())
+                .then((data) => {
+                    searchResultsDiv.innerHTML = "";
+                    if (data.length > 0) {
+                        data.forEach((user) => {
+                            const resultDiv = document.createElement("div");
+                            resultDiv.textContent = user.username;
+                            resultDiv.dataset.userId = user.user_id;
+
+                            // Add click event to add user to group instead of redirecting
+                            resultDiv.addEventListener("click", function () {
+                                addToSelectedMembers(user.user_id, user.username);
+                                searchResultsDiv.style.display = "none";
+                                document.getElementById("search_group_user").value = "";
+                            });
+
+                            searchResultsDiv.appendChild(resultDiv);
+                        });
+                        searchResultsDiv.style.display = "block";
+                    } else {
+                        searchResultsDiv.innerHTML = "No results found.";
+                        searchResultsDiv.style.display = "block";
+                    }
+                })
+                .catch((error) => console.error("Search error:", error));
+        }
+
+        function addToSelectedMembers(userId, username) {
+            const selectedMembersList = document.getElementById("selected_members_list");
+            const existingMember = selectedMembersList.querySelector(`[data-user-id="${userId}"]`);
+
+            if (existingMember) {
+                alert("User already added!");
+                return;
+            }
+
+            const listItem = document.createElement("li");
+            listItem.textContent = username;
+            listItem.dataset.userId = userId;
+
+            const removeButton = document.createElement("button");
+            removeButton.textContent = "Remove";
+            removeButton.style.marginLeft = "10px";
+            removeButton.addEventListener("click", function () {
+                listItem.remove();
+            });
+
+            listItem.appendChild(removeButton);
+            selectedMembersList.appendChild(listItem);
+        }
+
+        function addActiveChat(userId, username) {
+            // Prevent starting chat, add logic for group selection
+            addToSelectedMembers(userId, username);
+        }
+
+        function filterUsernames() {
+            const searchInput = document.getElementById('searchBar').value.toLowerCase();
+            const userItems = document.querySelectorAll('.checkbox-item');
+
+            userItems.forEach(item => {
+                const username = item.textContent.toLowerCase();
+                if (username.includes(searchInput)) {
+                    item.style.display = "block";
+                } else {
+                    item.style.display = "none";
+                }
+            });
+        }
+
+    </script>
+
+
+</body>
+
+</html>

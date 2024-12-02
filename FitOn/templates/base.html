@@ -32,6 +32,7 @@
                     <li><a href="{% url 'list_exercises' %}">Workouts</a></li>
                     <li><a href="{% url 'get_metric_data' %}">Metrics</a></li>
                     <li><a href="{% url 'profile' %}">Profile</a></li>
+                    <li><a href="{% url 'chat' %}">Chat</a></li>
                     <li><a href="{% url 'logout' %}">Logout</a></li>
                 {% else %}
                     <li><a href="{% url 'login' %}">Login</a></li>
@@ -59,6 +60,7 @@
                     <button onclick="location.href=`{% url 'list_exercises' %}`">Workouts</button>
                     <button onclick="location.href=`{% url 'get_metric_data' %}`">Metrics</button>
                     <button onclick="location.href=`{% url 'profile' %}`">Profile</button>
+                    <button onclick="location.href=`{% url 'chat' %}`">Chat</button>
                     <button onclick="location.href=`{% url 'logout' %}`">Logout</button>
                 {% else %}
                     <button onclick="location.href=`{% url 'login' %}`">Login</button>
