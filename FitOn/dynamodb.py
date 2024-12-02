@@ -247,7 +247,7 @@ def update_reset_request_time(user_id):
 
         # Insert a new entry or update the existing reset request time
         password_reset_table.put_item(
-            Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
+            Item={"user_id": user_id, "last_request_time": datetime.now(tz).isoformat()}
         )
         print(f"Reset request time updated for user_id '{user_id}'.")
     except Exception as e:
