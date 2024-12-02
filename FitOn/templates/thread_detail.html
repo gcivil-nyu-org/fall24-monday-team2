@@ -39,6 +39,10 @@
         <button class="ban-post-btn" data-user-id="{{ thread.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
             Ban
         </button>
+
+        <button class="warn-thread-btn" data-thread-id="{{ thread.ThreadID }}"  data-user-id="{{ thread.UserID }}" style="background-color: orange; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+            ⚠ Warn
+        </button>
         {% endif %}
 
     </div>
@@ -77,6 +81,9 @@
                         <button class="ban-post-btn" data-user-id="{{ post.UserID }}" style="background-color: red; color: black; border: 1px solid red; padding: 5px 10px; cursor: pointer;">
                             Ban
                         </button>
+                        <button class="warn-comment-btn" data-post-id="{{ post.PostID }}" data-user-id="{{ post.UserID }}" style="background-color: orange; color: white; border: none; padding: 5px 15px; cursor: pointer;">
+                            ⚠ Warn
+                        </button>                        
                     {% endif %}
                 {% endif %}
             </div>
@@ -147,6 +154,8 @@
         const postSubmitButton = document.getElementById('post-submit');
         const threadElement = document.querySelector('[data-thread-id]');
         const threadId = document.querySelector('[data-thread-id]').getAttribute('data-thread-id');
+        const warnThreadButtons = document.querySelectorAll('.warn-thread-btn'); // Warn buttons for threads
+        const warnCommentButtons = document.querySelectorAll('.warn-comment-btn'); // Warn buttons for comments
 
         // Like comment
         likeCommentButtons.forEach(button => {
@@ -559,6 +568,89 @@
                 .catch(error => console.error('Error:', error));
             });
         });
+
+
+        // Warn Thread Button Event Listener
+        warnThreadButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const threadId = this.dataset.threadId;
+                const userId = this.dataset.userId; // Extract user ID
+
+                if (!userId) {
+                    alert("User ID is missing.");
+                    return;
+                }
+
+                fetch('/warn_action/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        action: 'warn_thread',
+                        thread_id: threadId,
+                        user_id: userId // Send the user ID
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('User warned for thread successfully.');
+                        this.textContent = 'Warned';
+                        this.disabled = true;
+                        this.style.backgroundColor = '#ccc';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error warning thread:', error));
+            });
+        });
+
+
+        // Warn Comment Button Event Listener
+        warnCommentButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const postId = this.dataset.postId;
+                const userId = this.dataset.userId; // Extract user ID
+
+                if (!userId) {
+                    alert("User ID is missing.");
+                    return;
+                }
+
+                fetch('/warn_action/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json',
+                        'x-requested-with': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        action: 'warn_comment',
+                        post_id: postId,
+                        user_id: userId // Send the user ID
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        alert('User warned for comment successfully.');
+                        this.textContent = 'Warned';
+                        this.disabled = true;
+                        this.style.backgroundColor = '#ccc';
+                    } else {
+                        alert('Error: ' + data.message);
+                    }
+                })
+                .catch(error => console.error('Error warning comment:', error));
+            });
+        });
+
 
        
     });
