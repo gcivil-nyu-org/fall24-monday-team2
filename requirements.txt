@@ -57,3 +57,4 @@ urllib3
 daphne
 channels
 channels-redis
+Pillow
