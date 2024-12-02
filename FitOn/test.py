@@ -1511,7 +1511,6 @@ class HomepageViewTest(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
-    
     # def test_homepage_with_username(self):
     #     request = self.factory.get("/")
     #     request.session = {"username": "sg8002"}  # Directly set the session
