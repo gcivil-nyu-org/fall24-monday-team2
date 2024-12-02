@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, redirect
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.serializers import serialize
 from .models import Exercise, MuscleGroup, User
@@ -18,7 +18,8 @@ from .dynamodb import (
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
-    get_user_by_uid,
+    # get_user_by_uid,
+    get_mock_user_by_uid,
     get_user_by_username,
     update_reset_request_time,
     update_user,
@@ -32,6 +33,11 @@ from .dynamodb import (
     get_fitness_trainers,
     make_fitness_trainer,
     remove_fitness_trainer,
+    get_standard_users,
+    send_data_request_to_user,
+    cancel_data_request_to_user,
+    add_to_list,
+    remove_from_list,
     delete_reply,
     fetch_reported_threads_and_comments,
     mark_thread_as_reported,
@@ -40,7 +46,7 @@ from .dynamodb import (
     delete_thread_by_id,
 )
 
-from .rds import rds_main
+from .rds import rds_main, fetch_user_data
 
 from .forms import (
     FitnessTrainerApplicationForm,
@@ -205,6 +211,9 @@ def signup(request):
             name = form.cleaned_data["name"]
             date_of_birth = form.cleaned_data["date_of_birth"]
             gender = form.cleaned_data["gender"]
+            height = form.cleaned_data["height"]
+            weight = form.cleaned_data["weight"]
+
             password = form.cleaned_data["password"]
 
             # Hash the password before saving it
@@ -215,7 +224,15 @@ def signup(request):
 
             # Sync data with DynamoDB
             if create_user(
-                user_id, username, email, name, date_of_birth, gender, hashed_password
+                user_id,
+                username,
+                email,
+                name,
+                date_of_birth,
+                gender,
+                height,
+                weight,
+                hashed_password,
             ):
                 request.session["username"] = username
                 request.session["user_id"] = user_id
@@ -308,7 +325,7 @@ def password_reset_confirm(request, uidb64, token):
         )
     try:
         user_id = force_str(urlsafe_base64_decode(uidb64))
-        user = get_user_by_uid(user_id)
+        user = get_mock_user_by_uid(user_id)
         if user and default_token_generator.check_token(user, token):
             form = SetNewPasswordForm(request.POST or None)
             if request.method == "POST" and form.is_valid():
@@ -394,6 +411,8 @@ def profile_view(request):
                 "name": {"Value": form.cleaned_data["name"]},
                 "date_of_birth": {"Value": form.cleaned_data["date_of_birth"]},
                 "gender": {"Value": form.cleaned_data["gender"]},
+                "height": {"Value": form.cleaned_data["height"]},
+                "weight": {"Value": form.cleaned_data["weight"]},
                 "bio": {"Value": form.cleaned_data["bio"]},
                 "address": {"Value": form.cleaned_data["address"]},
             }
@@ -420,6 +439,8 @@ def profile_view(request):
                 "email": user.get("email", ""),
                 "gender": user.get("gender", ""),
                 "phone_number": user.get("phone_number", ""),
+                "height": user.get("height", ""),
+                "weight": user.get("weight", ""),
                 "address": user.get("address", ""),
                 "bio": user.get("bio", ""),
                 "country_code": user.get("country_code", ""),  # Default country code
@@ -575,6 +596,11 @@ def delink_google_fit(request):
     return redirect("profile")
 
 
+# --------------------------------- #
+# User + Fitness Trainer Functions  #
+# --------------------------------- #
+
+
 def fitness_trainer_application_view(request):
     user_id = request.session.get("user_id")
     if request.method == "POST":
@@ -627,24 +653,6 @@ def fitness_trainer_applications_list_view(request):
         request,
         "fitness_trainer_applications_list.html",
         {"applications": applications},
-    )
-
-
-def fitness_trainers_list_view(request):
-    # Check if the current user is an admin
-    user_id = request.session.get("user_id")
-    user = get_user(user_id)
-    if not user or not user.get("is_admin"):
-        return HttpResponseForbidden("You do not have permission to access this page")
-
-    # Retrieve list of trainers from DynamoDB
-    trainers = get_fitness_trainers()
-
-    # Render the list of trainers
-    return render(
-        request,
-        "fitness_trainers_list.html",
-        {"trainers": trainers},
     )
 
 
@@ -728,6 +736,287 @@ def reject_fitness_trainer(request):
         )
 
     return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+
+def accept_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+
+        trainer = get_user(trainer_id)
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        # Update access lists in DynamoDB
+        add_to_list(user_id, "trainers_with_access", trainer_id)
+        add_to_list(trainer_id, "users_with_access", user_id)
+
+        # # Remove trainer from the user's waiting list
+        remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
+        remove_from_list(trainer_id, "waiting_list_of_users", user_id)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def deny_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+
+        trainer = get_user(trainer_id)
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        # Remove trainer from the user's waiting list
+        remove_from_list(user_id, "waiting_list_of_trainers", trainer_id)
+        remove_from_list(trainer_id, "waiting_list_of_users", user_id)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def provide_access_to_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+
+        trainer = get_user(trainer_id)
+        user = get_user(user_id)
+
+        if not user or not trainer:
+            return JsonResponse({"status": "error", "message": "User is not found"})
+
+        # Update user and trainer records in DynamoDB
+        add_to_list(user_id, "trainers_with_access", trainer_id)
+        add_to_list(trainer_id, "users_with_access", user_id)
+
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request"})
+
+
+def revoke_access_to_trainer(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        trainer_id = data.get("trainer_id")
+        user_id = request.session.get("user_id")
+
+        if not user_id or not trainer_id:
+            return JsonResponse({"status": "error", "message": "Invalid data"})
+
+        try:
+            remove_from_list(user_id, "trainers_with_access", trainer_id)
+            remove_from_list(trainer_id, "users_with_access", user_id)
+
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "message": f"Revoked access for Trainer: {trainer_id}",
+                }
+            )
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)})
+    else:
+        return JsonResponse({"status": "error", "message": "Invalid request method"})
+
+
+def fitness_trainers_list_view(request):
+    # Make sure that the current user is not a fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of trainers from DynamoDB
+    trainers = get_fitness_trainers()
+
+    # Extract lists from the user's data
+    waiting_list_of_trainers = user.get("waiting_list_of_trainers", [])
+    trainers_with_access = user.get("trainers_with_access", [])
+
+    # Separate trainers into categories
+    trainers_in_waiting_list = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] in waiting_list_of_trainers
+    ]
+    my_trainers = [
+        trainer for trainer in trainers if trainer["user_id"] in trainers_with_access
+    ]
+    remaining_trainers = [
+        trainer
+        for trainer in trainers
+        if trainer["user_id"] not in waiting_list_of_trainers
+        and trainer["user_id"] not in trainers_with_access
+    ]
+
+    # Pass the categorized trainers to the template
+    context = {
+        "trainers_in_waiting_list": trainers_in_waiting_list,
+        "my_trainers": my_trainers,
+        "remaining_trainers": remaining_trainers,
+    }
+    return render(request, "fitness_trainers_list.html", context)
+
+
+def standard_users_list_view(request):
+    # Check if the current user is a verified fitness trainer
+    user_id = request.session.get("user_id")
+    user = get_user(user_id)
+    if not user or not user.get("is_fitness_trainer"):
+        return HttpResponseForbidden("You do not have permission to access this page")
+
+    # Retrieve list of standard users from DynamoDB
+    standard_users = get_standard_users()
+
+    waiting_list_of_users = user.get("waiting_list_of_users", [])
+    users_in_waiting_list = [
+        user for user in standard_users if user["user_id"] in waiting_list_of_users
+    ]
+    users_with_access = user.get("users_with_access", [])
+    my_users = [user for user in standard_users if user["user_id"] in users_with_access]
+    remaining_users = [
+        user
+        for user in standard_users
+        if user["user_id"] not in waiting_list_of_users + users_with_access
+    ]
+
+    return render(
+        request,
+        "standard_users_list.html",
+        {
+            "users_in_waiting_list": users_in_waiting_list,
+            "my_users": my_users,
+            "remaining_users": remaining_users,
+        },
+    )
+
+
+def send_data_request(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
+
+        success = send_data_request_to_user(fitness_trainer_id, standard_user_id)
+
+        if success:
+            return JsonResponse({"message": "Request sent successfully!"}, status=200)
+        else:
+            return JsonResponse({"error": "Failed to send request"}, status=400)
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+def cancel_data_request(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        standard_user_id = data.get("user_id")
+        fitness_trainer_id = request.session.get("user_id")
+
+        if not standard_user_id:
+            return JsonResponse({"error": "User ID is required"}, status=400)
+
+        success = cancel_data_request_to_user(fitness_trainer_id, standard_user_id)
+
+        if success:
+            return JsonResponse(
+                {"message": "Request cancelled successfully"}, status=200
+            )
+        else:
+            return JsonResponse({"error": "Failed to cancel the request"}, status=400)
+    else:
+        return JsonResponse({"error": "Invalid method"}, status=405)
+
+
+def view_user_data(request):
+    print("view_user_data is being called")
+    try:
+        # Retrieve the data from the session
+        user_data = request.session.get("user_data")
+        print("User data in session:", user_data)
+
+        if not user_data:
+            # Handle missing session data
+            raise ValueError("User data is not available in the session.")
+
+        # Render the HTML template with the session data
+        return render(
+            request,
+            "view_user_data.html",
+            {
+                "user_data": user_data,
+            },
+        )
+    except Exception as e:
+        # Handle errors
+        return render(
+            request,
+            "view_user_data.html",
+            {
+                "error": str(e),
+            },
+        )
+
+
+def store_session_data(request, user_data):
+    # Store data in the session
+    request.session["user_data"] = user_data
+    request.session.modified = True  # Ensure the session is marked as modified
+    print(request.session.get("user_data"))
+    return
+
+
+def serialize_data(data):
+    # Handle dictionaries
+    if isinstance(data, dict):
+        return {key: serialize_data(value) for key, value in data.items()}
+
+    # Handle lists and tuples
+    elif isinstance(data, list) or isinstance(data, tuple):
+        return [serialize_data(item) for item in data]
+
+    # Handle dates: Convert datetime.date to ISO format string
+    elif isinstance(data, dt.date):
+        return data.isoformat()
+
+    # Handle other types that can be directly serialized to JSON
+    elif isinstance(data, (str, int, float, bool)):
+        return data
+
+    # If we can't serialize the type, return it as a string
+    return str(data)
+
+
+# Updated code for async_view_user_data
+async def async_view_user_data(request, user_id):
+    try:
+        # Fetch the user data asynchronously
+        user = await sync_to_async(get_user)(user_id)
+        user_email = user.get("email")
+        user_data = await fetch_user_data(user_email)
+
+        # Serialize user data
+        serialized_data = serialize_data(user_data)
+
+        # Store the data in the session
+        await sync_to_async(store_session_data)(request, serialized_data)
+
+        # Send serialized user_data in JSON response
+        return JsonResponse({"success": True, "user_data": serialized_data})
+
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
 
 
 # -------------------------------
@@ -1464,43 +1753,48 @@ async def fetch_metric_data(service, metric, total_data, duration, frequency, em
     else:
         print("Unknown metric")
 
-# @sync_to_async
-# async def get_sleep_scores(total_data, email):
-#     sleep_body = ""
-#     for sleep_data in total_data["sleep"]["sleep_data_json"]:
-#         duration = sleep_data['count']
-#         user = User.objects.get(email=email)
-#         age=26
-#         activity_level=70
-#         given_date = datetime.datetime.strptime(sleep_data['start'], '%b %d, %I %p')
-#         nearest_hr = min(total_data['restingHeartRate']['resting_heart_data_json'], key=lambda x: abs(datetime.datetime.strptime(x['start'], '%b %d, %I %p') - given_date))
-#         heart_rate=nearest_hr['count']
+async def get_sleep_scores(request,total_data):
+    sleep_body = ""
+    for sleep_data in total_data["sleep"]["sleep_data_json"]:
+        duration = sleep_data['count']
+        user_id = request.session.get("user_id")
+        user = get_user(user_id)
+        age=26
+        activity_level=70
+        given_date = dt.datetime.strptime(sleep_data['start'], '%b %d, %I %p')
+        nearest_hr = min(total_data['restingHeartRate']['resting_heart_data_json'], key=lambda x: abs(dt.datetime.strptime(x['start'], '%b %d, %I %p') - given_date))
+        heart_rate=nearest_hr['count']
         
-#         nearest_steps = min(total_data['steps']['steps_data_json'], key=lambda x: abs(datetime.datetime.strptime(x['start'], '%b %d, %I %p') - given_date))
-#         daily_steps=nearest_steps['count']
+        nearest_steps = min(total_data['steps']['steps_data_json'], key=lambda x: abs(dt.datetime.strptime(x['start'], '%b %d, %I %p') - given_date))
+        daily_steps=nearest_steps['count']
         
-#         gender_female=(user.sex == "female")
-#         gender_male=(user.sex == "male")
+        gender_female=(user.get("gender") == "F")
+        gender_male=(user.get("gender") == "M")
         
-#         sleep_body += f"{age},{duration},{activity_level},{heart_rate},{daily_steps},{gender_female},{gender_male},{True},{True},{False},{False},{False},{False}\n"
+        sleep_body += f"{age},{duration},{activity_level},{heart_rate},{daily_steps},{gender_female},{gender_male},{True},{True},{False},{False},{False},{False}\n"
     
-#     if sleep_body and sleep_body[-1] == '\n':
-#         sleep_body = sleep_body[:-1]
+    if sleep_body and sleep_body[-1] == '\n':
+        sleep_body = sleep_body[:-1]
         
-#     url = "https://9pweqg5b1i.execute-api.us-west-2.amazonaws.com/dev/inference"
+    url = "https://9pweqg5b1i.execute-api.us-west-2.amazonaws.com/dev/inference"
     
-#     response = requests.post(url, json=sleep_body)
-#     sleep_score = response.text.split(":")[1][:-1].strip()
-#     try:
-#         sleep_score = ast.literal_eval(sleep_score)
-#     except Exception as e:
-#         print(e)
-#     for i, sleep_data in enumerate(total_data["sleep"]["sleep_data_json"]):
-#         sleep_data["count"] = sleep_score[i]
-#     return total_data
+    response = requests.post(url, json=sleep_body)
+    print("Response:", response)
+    sleep_score = response.text.split(":")[1][:-1].strip()
+    try:
+        sleep_score = ast.literal_eval(sleep_score)
+        print("Sleep Score:", sleep_score)
+
+    except Exception as e:
+        print(e)
+    for i, sleep_data in enumerate(total_data["sleep"]["sleep_data_json"]):
+        sleep_data["count"] = sleep_score[i]
+    print("Total Data:", total_data)
+    return total_data
 
 @sync_to_async
 def get_credentials(request):
+    print("Request:", request)
     if "credentials" in request.session:
         credentials = Credentials(**request.session["credentials"])
         return credentials, request.user.username
@@ -1510,6 +1804,8 @@ def get_credentials(request):
 async def fetch_all_metric_data(request, duration, frequency):
     total_data = {}
     credentials, email = await get_credentials(request)
+    print(f"Credentails: {credentials}. Email: {email}")
+
     user_id = request.session.get("user_id")
     user = get_user(user_id)
     email = user.get("email")
@@ -1525,7 +1821,7 @@ async def fetch_all_metric_data(request, duration, frequency):
             )
 
         await asyncio.gather(*tasks)
-        # total_data = await get_sleep_scores(total_data, email)
+        total_data = await get_sleep_scores(request,total_data)
         total_data = await format_bod_fitness_data(total_data)
 
         # except Exception as e:
@@ -1541,21 +1837,7 @@ async def fetch_all_metric_data(request, duration, frequency):
 async def get_metric_data(request):
     credentials = await sync_to_async(lambda: request.session.get("credentials"))()
     user_id = await sync_to_async(lambda: request.session.get("user_id"))()
-    if not user_id:
-        await add_message(
-            request,
-            messages.ERROR,
-            "User not logged in. Please sign in to access your data.",
-        )
-        return await perform_redirect("profile")
     user = get_user(user_id)
-    if not user:
-        await add_message(
-            request,
-            messages.ERROR,
-            "User details could not be retrieved. Please try again later.",
-        )
-        return await perform_redirect("profile")
     user_email = user.get("email")
     print("Credentials: \n", credentials)
     print("User Email: \n", user_email)
@@ -1570,7 +1852,7 @@ async def get_metric_data(request):
             frequency = request.GET.get("data_freq")
 
         total_data = await fetch_all_metric_data(request, duration, frequency)
-        rds_response = await sync_to_async(rds_main(user_email, total_data))()
+        rds_response = await rds_main(user_email, total_data)
         print("RDS Response: \n", rds_response)
         context = {"data": total_data}
         # print("Inside get metric:", context)
@@ -2074,29 +2356,42 @@ def store_exercises(request):
         return JsonResponse({'error': 'Insertion failed'}, status=500)
 
 def list_exercises(request):
+    print("Request:",request)
     name = request.GET.get('exercise_name')
     level = request.GET.get('exercise_level')
     equipment = request.GET.get('exercise_equipment')
     muscle = request.GET.get('exercise_muscle')
     category = request.GET.get('exercise_category')
+    print(f"Name: {name}, Level:{level}, Equipment:{equipment}, Muscle: {muscle}, Category:{category}")
     
-    user = User.objects.get(email=request.user.username)
+    # user = User.objects.get(email=request.user.username)
+    user_id = request.session.get("username")
+    user = get_user_by_username(user_id)
+    print("User:",user)
     
-    gender = 1 if (user.sex == "male") else 0
-    body = f"26, {gender}, {user.height}, {user.weight}, 70, 5000"
-    url = "https://2pfeath3sg.execute-api.us-east-1.amazonaws.com/dev/recommend"
+    gender = 1 if (user['gender']) == "M" else 0
+    body = f"{gender}, {user['height']}, {user['weight']}, 70, 5000"
+    url = "https://9pweqg5b1i.execute-api.us-west-2.amazonaws.com/dev/recommend"
     response = requests.post(url, json=body).text
-    print(response)
+    print(f"Response:{response}")
     start_index = response.index('[')
     end_index = response.rindex(']')
     list_string = response[start_index:end_index + 1]
+    print(f"List String: {list_string}")
     inference_list = eval(list_string)[0]
-    if(type(inference_list) == int):
-        inference_list = [inference_list]
-    inference_list = [max(50+i, i) for i in inference_list]
-    
+    print(f"Inference String: {inference_list}")
+    # if(type(inference_list) == int):
+    #     inference_list = [inference_list]
+    # inference_list = [max(50+i, i) for i in inference_list]
+    print(f"Inference String 2: {inference_list}")
+
+
+    print(f"Request: {request}")
     selected_exercises = request.GET.getlist('exercise')
+    print(f"Selected Exercises: {selected_exercises}")
+
     exercises = Exercise.objects.all()
+    print(f"Exercises: {exercises}")
 
     if name:
         exercises = exercises.filter(name__icontains=name)
@@ -2118,7 +2413,7 @@ def list_exercises(request):
         "category": category if category else "none",
         "muscle": muscle if muscle else "none"
     }
-    
+
     page_number = request.GET.get('page', 1)  # Default to page 1 if not provided
     paginator = Paginator(exercises, 10)
     
@@ -2137,10 +2432,11 @@ def list_exercises(request):
     for ex in exercises:
         name = re.sub(r"[^a-zA-Z0-9-(),']", '_', ex.name)
         url = {
-            "url_0": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_0.jpg",
-            "url_1": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_1.jpg"
+            "url_0": f"https://fiton-static-files.s3.us-west-2.amazonaws.com/exercise_images/{name}_0.jpg",
+            "url_1": f"https://fiton-static-files.s3.us-west-2.amazonaws.com/exercise_images/{name}_1.jpg"
         }
         image_urls.append(url)
+    print(f"Image URLS: {image_urls}")
     
     if selected_exercises and len(selected_exercises):
         selected_exercises = Exercise.objects.filter(id__in=selected_exercises)
@@ -2152,15 +2448,17 @@ def list_exercises(request):
     else:
         recommended_exercises = []
     
+    print(f"Recommended Exercises 1: {recommended_exercises}")
+
     recommended_image_urls = []
     for ex in recommended_exercises:
         name = re.sub(r"[^a-zA-Z0-9-(),']", '_', ex.name)
         url = {
-            "url_0": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_0.jpg",
-            "url_1": f"https://fiton-exercise-images.s3.amazonaws.com/exercise_images/{name}_1.jpg"
+            "url_0": f"https://fiton-static-files.s3.us-west-2.amazonaws.com/exercise_images/{name}_0.jpg",
+            "url_1": f"https://fiton-static-files.s3.us-west-2.amazonaws.com/exercise_images/{name}_1.jpg"
         }
         recommended_image_urls.append(url)
     
-    print(recommended_exercises)
+    print(f"Recommended Exercises :{recommended_exercises}")
 
-    return render(request, 'exercise/exercise_list.html', {'exercises': zip(exercises, image_urls), 'filter_dict': filter_dict, 'current_page_number': current_page_number, 'page_range': page_range, 'num_pages': num_pages, 'selected_exercises': selected_exercises, 'recommended_exercises': zip(recommended_exercises, recommended_image_urls)})
+    return render(request, 'exercise_list.html', {'exercises': zip(exercises, image_urls), 'filter_dict': filter_dict, 'current_page_number': current_page_number, 'page_range': page_range, 'num_pages': num_pages, 'selected_exercises': selected_exercises, 'recommended_exercises': zip(recommended_exercises, recommended_image_urls)})

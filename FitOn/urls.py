@@ -71,11 +71,47 @@ urlpatterns = [
         views.fitness_trainers_list_view,
         name="fitness_trainers_list",
     ),
+    path(
+        "trainer/standard-users/",
+        views.standard_users_list_view,
+        name="standard_users_list",
+    ),
+    path(
+        "trainer/send-data-request/", views.send_data_request, name="send_data_request"
+    ),
+    path(
+        "trainer/cancel-data-request/",
+        views.cancel_data_request,
+        name="cancel_data_request",
+    ),
+    path(
+        "trainer/view_user_data/async/<str:user_id>/data/",
+        views.async_view_user_data,
+        name="async_view_user_data",
+    ),
+    path(
+        "trainer/view_user_data/<str:user_id>/data/",
+        views.view_user_data,
+        name="view_user_data",
+    ),
+    path("user/accept_trainer/", views.accept_trainer, name="accept_trainer"),
+    path("user/deny_trainer/", views.deny_trainer, name="deny_trainer"),
+    path(
+        "user/provide_access_to_trainer/",
+        views.provide_access_to_trainer,
+        name="provide_access_to_trainer",
+    ),
+    path(
+        "user/revoke_access_to_trainer/",
+        views.revoke_access_to_trainer,
+        name="revoke_access_to_trainer",
+    ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
     path("forum/<str:thread_id>/", views.thread_detail_view, name="thread_detail"),
     path("delete_post/", views.delete_post_view, name="delete_post"),
     path("metrics/", views.list_metrics, name="metrics_list"),
+    path("workouts/", views.list_exercises, name="list_exercises"),
     path("data/", views.get_metric_data, name="get_metric_data"),
     path('store/', views.store_exercises, name='store_exercises'),
     path("submit-health-data/", views.health_data_view, name="submit_health_data"),

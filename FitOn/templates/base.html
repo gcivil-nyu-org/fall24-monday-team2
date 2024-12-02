@@ -23,9 +23,13 @@
                         <li><a href="{% url 'fitness_trainers_list' %}">Fitness Trainers</a></li>
                         <li><a href="{% url 'fitness_trainer_applications_list' %}">Review Applications</a></li>
                         <li><a href="{% url 'punishments' %}">Manage Punishments</a></li>
+                    {% elif is_fitness_trainer %}                        
+                        <li><a href="{% url 'standard_users_list' %}">Users</a></li>
+                    {% else %}
+                        <li><a href="{% url 'fitness_trainers_list' %}">Fitness Trainers</a></li>
                     {% endif %}
                     <li><a href="{% url 'forum' %}">Forums</a></li>
-                    <li><a href="{% url 'homepage' %}">Workouts</a></li>
+                    <li><a href="{% url 'list_exercises' %}">Workouts</a></li>
                     <li><a href="{% url 'get_metric_data' %}">Metrics</a></li>
                     <li><a href="{% url 'profile' %}">Profile</a></li>
                     <li><a href="{% url 'logout' %}">Logout</a></li>
@@ -42,16 +46,20 @@
         <div class="modal-content">
             <div class="modal-buttons">
                 {% if request.session.username %}
-                    <button onclick="location.href=`{% url 'forum' %}`">Forums</button>
-                    <button onclick="location.href=`{% url 'homepage' %}`">Workouts</button>
-                    <button onclick="location.href=`{% url 'get_metric_data' %}`">Metrics</button>
-                    <button onclick="location.href=`{% url 'profile' %}`">Profile</button>
-                    <button onclick="location.href=`{% url 'logout' %}`">Logout</button>
                     {% if is_admin %}
                         <button onclick="location.href=`{% url 'fitness_trainers_list' %}`">Fitness Trainers</button>
                         <button onclick="location.href=`{% url 'fitness_trainer_applications_list' %}`">Review Applications</button>
                         <button onclick="location.href=`{% url 'punishments' %}`">Manage Punishments</button>
+                    {% elif is_fitness_trainer %}                        
+                        <button onclick="location.href=`{% url 'standard_users_list' %}`">Users</button>
+                    {% else %}
+                        <button onclick="location.href=`{% url 'fitness_trainers_list' %}`">Fitness Trainers</button>
                     {% endif %}
+                    <button onclick="location.href=`{% url 'forum' %}`">Forums</button>
+                    <button onclick="location.href=`{% url 'list_exercises' %}`">Workouts</button>
+                    <button onclick="location.href=`{% url 'get_metric_data' %}`">Metrics</button>
+                    <button onclick="location.href=`{% url 'profile' %}`">Profile</button>
+                    <button onclick="location.href=`{% url 'logout' %}`">Logout</button>
                 {% else %}
                     <button onclick="location.href=`{% url 'login' %}`">Login</button>
                     <button onclick="location.href=`{% url 'signup' %}`">Sign Up</button>
