@@ -2250,25 +2250,41 @@ def warn_action(request):
         # Extract the actual user_id from the user record
         user_id = user.get("user_id")
 
-        print(f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}, User ID: {user_id}")
+        print(
+            f"Action: {action}, Thread ID: {thread_id}, Post ID: {post_id}, User ID: {user_id}"
+        )
 
         if action == "warn_thread" and thread_id:
             mark_user_as_warned_thread(thread_id, user_id)
-            return JsonResponse({"status": "success", "message": "User warned for thread successfully."})
+            return JsonResponse(
+                {"status": "success", "message": "User warned for thread successfully."}
+            )
 
         elif action == "warn_comment" and post_id:
             mark_user_as_warned_comment(post_id, user_id)
-            return JsonResponse({"status": "success", "message": "User warned for comment successfully."})
+            return JsonResponse(
+                {
+                    "status": "success",
+                    "message": "User warned for comment successfully.",
+                }
+            )
 
-        return JsonResponse({"status": "error", "message": "Invalid action or ID."}, status=400)
+        return JsonResponse(
+            {"status": "error", "message": "Invalid action or ID."}, status=400
+        )
 
-    return JsonResponse({"status": "error", "message": "Invalid request method."}, status=405)
+    return JsonResponse(
+        {"status": "error", "message": "Invalid request method."}, status=405
+    )
+
 
 def dismiss_warning(request):
     if request.method == "POST":
         user_id = request.session.get("user_id")  # Retrieve the logged-in user's ID
         if not user_id:
-            return JsonResponse({"status": "error", "message": "User ID is missing."}, status=400)
+            return JsonResponse(
+                {"status": "error", "message": "User ID is missing."}, status=400
+            )
 
         # Call the function to set is_warned to False
         result = set_user_warned_to_false(user_id)
@@ -2276,9 +2292,14 @@ def dismiss_warning(request):
         if result["status"] == "success":
             return JsonResponse({"status": "success", "message": result["message"]})
         else:
-            return JsonResponse({"status": "error", "message": result["message"]}, status=500)
+            return JsonResponse(
+                {"status": "error", "message": result["message"]}, status=500
+            )
 
-    return JsonResponse({"status": "error", "message": "Invalid request method."}, status=400)
+    return JsonResponse(
+        {"status": "error", "message": "Invalid request method."}, status=400
+    )
+
 
 # -------------
 # Punishmentsx

@@ -1241,6 +1241,7 @@ def mark_user_as_warned_thread(thread_id, user_id):
         print(f"Error warning user {user_id} for comment {thread_id}: {e}")
         raise
 
+
 def mark_user_as_warned_comment(post_id, user_id):
     try:
         print(f"Fetching user with ID: {user_id}")
@@ -1268,6 +1269,7 @@ def mark_user_as_warned_comment(post_id, user_id):
         print(f"Error warning user {user_id} for comment {post_id}: {e}")
         raise
 
+
 def set_user_warned_to_false(user_id):
     """
     Sets the is_warned attribute to False for a user in the Users table.
@@ -1281,17 +1283,18 @@ def set_user_warned_to_false(user_id):
     try:
         # Update the is_warned attribute to False
         response = users_table.update_item(
-            Key={"user_id": user_id},  # Replace this key with your partition key field name if different
+            Key={
+                "user_id": user_id
+            },  # Replace this key with your partition key field name if different
             UpdateExpression="SET is_warned = :warned",
             ExpressionAttributeValues={":warned": False},
-            ReturnValues="UPDATED_NEW"
+            ReturnValues="UPDATED_NEW",
         )
         print(f"User {user_id} successfully updated: {response}")
         return {"status": "success", "message": f"User {user_id} warning dismissed."}
     except ClientError as e:
         print(f"Error updating user {user_id}: {e.response['Error']['Message']}")
-        return {"status": "error", "message": e.response['Error']['Message']}
-
+        return {"status": "error", "message": e.response["Error"]["Message"]}
 
 
 def get_section_stats(section_name):
