@@ -1463,10 +1463,7 @@ class PasswordResetTests(TestCase):
         )
 
         # Verify the format of the datetime string
-        try:
-            datetime.fromisoformat(last_request_time)
-        except ValueError:
-            self.fail("The 'last_request_time' is not in the expected ISO 8601 format.")
+        datetime.fromisoformat(last_request_time)
 
     def test_password_reset_request_missing_email(self):
         # Make a POST request without providing an email
