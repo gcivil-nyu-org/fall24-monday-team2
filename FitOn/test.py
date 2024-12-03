@@ -2168,3 +2168,44 @@ class ForumViewTests(TestCase):
         self.users_table.delete_item(Key={"user_id": self.user_data["user_id"]})
         for thread in self.test_threads:
             self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
+
+
+class StaticFilesSettingsTests(TestCase):
+    @override_settings(
+        DEBUG=True,
+        IS_PRODUCTION=False,
+        STATIC_URL="/static/",
+        STATICFILES_DIRS=["/path/to/your/project/FitOn/static"],
+    )
+    def test_static_file_settings_for_development(self):
+        # Verify that STATIC_URL is correct for development
+        self.assertEqual(
+            settings.STATIC_URL,
+            "/static/",
+            "STATIC_URL is incorrect for development.",
+        )
+
+        # Verify that STATICFILES_DIRS contains the correct path
+        self.assertIn(
+            "FitOn/static",
+            str(settings.STATICFILES_DIRS[0]),
+            "STATICFILES_DIRS is incorrect for development.",
+        )
+
+    def test_static_file_settings_for_production(self):
+        # Mock the IS_PRODUCTION flag to True
+        with override_settings(IS_PRODUCTION=True):
+            settings = import_module("FitOn.settings")
+            reload(settings)
+
+            # Verify static file settings for production
+            self.assertEqual(
+                settings.STATIC_URL,
+                f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{settings.AWS_LOCATION}/",
+                "STATIC_URL is incorrect for production.",
+            )
+            self.assertEqual(
+                settings.STATICFILES_STORAGE,
+                "storages.backends.s3boto3.S3Boto3Storage",
+                "STATICFILES_STORAGE is incorrect for production.",
+            )
