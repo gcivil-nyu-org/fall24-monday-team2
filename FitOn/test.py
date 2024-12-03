@@ -2107,48 +2107,35 @@ class FitnessGoalsViewTest(TestCase):
             f"Expected updated value '5', got {updated_goal['Value']}.",
         )
 
-    def test_delete_all_goals(self):
-        # Query DynamoDB to get all goals for the user_id
-        query_response = self.goals_table.query(
-            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
-                self.user_id
-            )
+        # --- Delete the updated goal ---
+        delete_data = {
+            "goal_id": initial_goal["GoalID"],
+        }
+
+        # Make POST request to delete the goal
+        response = self.client.post(
+            reverse("delete_goal"),
+            data=json.dumps(delete_data),
+            content_type="application/json",
         )
-        goals = query_response.get("Items", [])
 
-        # Loop through all goals and delete them
-        for goal in goals:
-            delete_data = {
-                "goal_id": goal[
-                    "GoalID"
-                ],  # Ensure it matches the function's expected key
-            }
-            response = self.client.post(
-                reverse("delete_goal"),
-                data=json.dumps(delete_data),
-                content_type="application/json",
-            )
-
-            # Assert successful deletion
-            self.assertEqual(
-                response.status_code, 200, f"Failed to delete goal {goal['GoalID']}."
-            )
-            self.assertEqual(
-                response.json()["message"],
-                "Goal deleted successfully.",
-                f"Unexpected response message for goal {goal['GoalID']}.",
-            )
-
-        # Validate that all goals are deleted
-        query_response = self.goals_table.query(
-            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
-                self.user_id
-            )
-        )
-        remaining_goals = query_response.get("Items", [])
+        # Assert the deletion response
+        self.assertEqual(response.status_code, 200, "Goal delete request failed.")
         self.assertEqual(
-            len(remaining_goals), 0, "Not all goals were deleted from DynamoDB."
+            response.json()["message"],
+            "Goal deleted successfully.",
+            "Unexpected response message for goal deletion.",
         )
+
+        # Validate the goal is deleted
+        deleted_goal_response = self.goals_table.get_item(
+            Key={
+                "GoalID": initial_goal["GoalID"],
+                "user_id": self.user_id,
+            }
+        )
+        deleted_goal = deleted_goal_response.get("Item")
+        self.assertIsNone(deleted_goal, "Deleted goal still found in DynamoDB.")
 
     def tearDown(self):
         response = self.goals_table.query(
