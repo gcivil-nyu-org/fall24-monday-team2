@@ -10,6 +10,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 import boto3
 import json
+import uuid
 
 
 # import unittest
@@ -1017,7 +1018,7 @@ class PasswordResetTests(TestCase):
 
         # Insert the mock user into the Users table
         self.__class__.users_table.put_item(Item=self.mock_user.__dict__)
-        print("Mock user inserted into DynamoDB for testing.")
+        # print("Mock user inserted into DynamoDB for testing.")
 
     def tearDown(self):
         # Delete the mock user from the Users and PasswordResetRequests tables
