@@ -130,6 +130,23 @@
 <script>
     document.addEventListener('DOMContentLoaded', function () {
         const editModal = new bootstrap.Modal(document.getElementById('editGoalModal'));
+        const goalTypeSelect = document.getElementById('goal-type');
+        const nameFields = document.getElementById('name-fields');
+        const goalNameInput = document.getElementById('goal-name');
+
+        // Handle goal type selection for creating new goals
+        goalTypeSelect.addEventListener('change', function () {
+            const selectedType = goalTypeSelect.value;
+
+            if (selectedType === 'custom' || selectedType === 'activity') {
+                nameFields.style.display = 'block';
+                goalNameInput.disabled = false;
+            } else {
+                nameFields.style.display = 'none';
+                goalNameInput.value = ''; // Clear the value if hidden
+                goalNameInput.disabled = true;
+            }
+        });
 
         // Function to initialize Edit button functionality
         function initializeEditButtons() {
@@ -252,6 +269,7 @@
         });
     });
 </script>
+
 </body>
 </html>
 {% endblock %}

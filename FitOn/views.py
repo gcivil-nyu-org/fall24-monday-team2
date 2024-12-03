@@ -2933,7 +2933,6 @@ def fitness_goals_view(request):
         # Add the goal to DynamoDB
         try:
             user_goals_table.put_item(Item=item)
-            messages.success(request, "Goal added successfully!")
         except Exception as e:
             messages.error(request, f"Failed to add goal: {e}")
 
@@ -3000,3 +2999,5 @@ def delete_goal(request):
             return JsonResponse({"error": str(e)}, status=500)
 
     return JsonResponse({"error": "Invalid request method."}, status=400)
+
+
