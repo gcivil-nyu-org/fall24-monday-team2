@@ -29,6 +29,7 @@ from django.utils.encoding import force_bytes
 from django.core import mail
 from django.conf import settings
 from importlib import reload, import_module
+from pathlib import Path
 
 # from django.utils import timezone
 
@@ -2171,41 +2172,46 @@ class ForumViewTests(TestCase):
 
 
 class StaticFilesSettingsTests(TestCase):
+    def setUp(self):
+        # Define BASE_DIR dynamically to avoid issues
+        self.base_dir = Path(__file__).resolve().parent.parent
+
     @override_settings(
         DEBUG=True,
         IS_PRODUCTION=False,
         STATIC_URL="/static/",
-        STATICFILES_DIRS=["/path/to/your/project/FitOn/static"],
+        STATICFILES_DIRS=[Path(__file__).resolve().parent.parent / "FitOn/static"],
     )
     def test_static_file_settings_for_development(self):
-        # Verify that STATIC_URL is correct for development
+        from django.conf import settings
+
+        # Verify STATIC_URL
         self.assertEqual(
             settings.STATIC_URL,
             "/static/",
             "STATIC_URL is incorrect for development.",
         )
 
-        # Verify that STATICFILES_DIRS contains the correct path
+        # Verify STATICFILES_DIRS dynamically
+        static_dir = str(self.base_dir / "FitOn/static")
         self.assertIn(
-            "FitOn/static",
-            str(settings.STATICFILES_DIRS[0]),
+            static_dir,
+            [str(dir) for dir in settings.STATICFILES_DIRS],
             "STATICFILES_DIRS is incorrect for development.",
         )
 
+    @override_settings(IS_PRODUCTION=True)
     def test_static_file_settings_for_production(self):
-        # Mock the IS_PRODUCTION flag to True
-        with override_settings(IS_PRODUCTION=True):
-            settings = import_module("FitOn.settings")
-            reload(settings)
+        from django.conf import settings
 
-            # Verify static file settings for production
-            self.assertEqual(
-                settings.STATIC_URL,
-                f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{settings.AWS_LOCATION}/",
-                "STATIC_URL is incorrect for production.",
-            )
-            self.assertEqual(
-                settings.STATICFILES_STORAGE,
-                "storages.backends.s3boto3.S3Boto3Storage",
-                "STATICFILES_STORAGE is incorrect for production.",
-            )
+        # Verify static file settings for production
+        self.assertEqual(
+            settings.STATIC_URL,
+            f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{settings.AWS_LOCATION}/",
+            "STATIC_URL is incorrect for production.",
+        )
+        self.assertEqual(
+            settings.STATICFILES_STORAGE,
+            "storages.backends.s3boto3.S3Boto3Storage",
+            "STATICFILES_STORAGE is incorrect for production.",
+        )
