@@ -51,6 +51,7 @@ from .dynamodb import (
     get_thread_details,
     delete_post,
     get_section_stats,
+    verify_user_credentials,
     MockUser,
     # users_table,
 )
@@ -172,8 +173,21 @@ class UserCreationAndDeletionTests(TestCase):
         self.assertIsNotNone(updated_user, "User not found after password update.")
 
         # Step 3: Verify the password was updated correctly
+        print(self.user_data["username"])
         is_password_correct = check_password(new_password, updated_user["password"])
         self.assertTrue(is_password_correct, "The password was not updated correctly.")
+
+    def test_verify_false_credentials(self):
+        username = "wasd"
+        password = "wasd"
+        result = verify_user_credentials(username, password)
+        self.assertIsNone(result, "User was found. ")
+
+    def test_verify_true_credentials(self):
+        username = "sg8002"
+        password = "sg8002"
+        result = verify_user_credentials(username, password)
+        self.assertIsNotNone(result, "Invalid credentials. ")
 
     def test_update_user(self):
         # Step 1: Define the updates
