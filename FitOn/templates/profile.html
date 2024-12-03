@@ -138,6 +138,11 @@
                         Delink Google Account
                     </button>
                 </div>
+                <div class="button-container">
+                    <button type="button" class="submit-button" onclick="redirectToFitnessGoals()">
+                        View & Edit Goals
+                    </button>
+                </div>
                 
                 
             </form>
@@ -206,6 +211,10 @@
         // Function to redirect to the fitness trainer application view
         function redirectToFitnessTrainerApplication() {
             window.location.href = "{% url 'fitness_trainer_application_view' %}";
+        }
+
+        function redirectToFitnessGoals() {
+            window.location.href = "{% url 'fitness_goals' %}"
         }
 
         function redirectToPunishments() {

@@ -2875,3 +2875,78 @@ def mark_messages_as_read(request, room_id):
             UpdateExpression="SET is_read = :true",
             ExpressionAttributeValues={":true": True},
         )
+
+
+# Fitness Goals View
+def fitness_goals_view(request):
+    user_id = request.session.get("user_id")
+
+    user = get_user(user_id)
+
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
+
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+
+    if request.method == "POST":
+        # Retrieve form data
+        goal_type = request.POST.get("goal_type")  # e.g., "weight", "steps", etc.
+        custom_name = request.POST.get("goal_name", "")  # Only for custom goals
+        goal_value = request.POST.get(
+            "goal_value"
+        )  # Goal value, e.g., 150 lbs, 10,000 steps
+
+        restricted_types = ["weight", "steps", "sleep"]
+        if goal_type in restricted_types:
+            try:
+                response = user_goals_table.query(
+                    KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                        user_id
+                    )
+                )
+                existing_goals = response.get("Items", [])
+                if any(goal["Type"] == goal_type for goal in existing_goals):
+                    messages.error(
+                        request,
+                        f"You already have a {goal_type} goal. Please edit it instead.",
+                    )
+                    return redirect(
+                        "fitness_goals"
+                    )  # Redirect back to the fitness goals page
+            except Exception as e:
+                messages.error(request, f"Failed to check existing goals: {e}")
+                return redirect("fitness_goals")
+
+        # Create a new GoalID and get the user_id
+        goal_id = str(uuid.uuid4())
+
+        # Prepare the item for DynamoDB
+        item = {
+            "GoalID": goal_id,
+            "user_id": user_id,
+            "Type": goal_type,
+            "Name": custom_name if goal_type in ["custom", "activity"] else None,
+            "Value": goal_value,
+        }
+
+        # Add the goal to DynamoDB
+        try:
+            user_goals_table.put_item(Item=item)
+            messages.success(request, "Goal added successfully!")
+        except Exception as e:
+            messages.error(request, f"Failed to add goal: {e}")
+
+        return redirect("fitness_goals")  # Redirect back to the fitness goals page
+
+    try:
+        response = user_goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(user_id)
+        )
+        goals = response.get("Items", [])
+    except Exception as e:
+        goals = []
+        messages.error(request, f"Failed to fetch goals: {e}")
+
+    return render(request, "fitness_goals.html", {"user": user, "goals": goals})
