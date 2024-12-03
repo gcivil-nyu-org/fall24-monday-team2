@@ -14,7 +14,16 @@ from FitOn.rds import (
     convert_to_mysql_datetime,
 )  # Adjust the import path based on your project structure
 from unittest import IsolatedAsyncioTestCase
-from FitOn.rds import get_secret_rds, create_connection
+from FitOn.rds import (
+    get_secret_rds,
+    create_connection,
+    create_steps_table,
+    create_glucose_table,
+    create_heartRate_table,
+    create_oxygen_table,
+    create_pressure_table,
+    create_restingHeartRate_table,
+)
 import aiomysql
 from FitOn.rds import create_table, insert_data
 from unittest import IsolatedAsyncioTestCase
@@ -37,6 +46,7 @@ from django.contrib.auth.hashers import make_password
 
 # import time
 from .views import SCOPES
+
 from .dynamodb import (
     create_user,
     delete_user_by_username,
@@ -843,9 +853,9 @@ class ForumTests(TestCase):
         delete_threads_by_user("test_user_123")
 
 
-###########################################################
+# ##########################################################
 #       TEST CASE FOR GOOGLE AUTHENTICATION               #
-###########################################################
+# ##########################################################
 # class GoogleAuthTestCase(TestCase):
 #     @classmethod
 #     def setUpClass(cls):
@@ -2041,3 +2051,74 @@ class TestDatabaseOperations(IsolatedAsyncioTestCase):
         self.assertIsNotNone(result, "Data was not inserted into test_table.")
         self.assertEqual(result[1], "Alice", "Inserted name does not match.")
         self.assertEqual(result[2], 30, "Inserted age does not match.")
+
+
+class TestHealthMetricTables(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop the test tables to clean up
+            tables = [
+                "STEPS",
+                "HEART_RATE",
+                "RESTING_HEART_RATE",
+                "OXYGEN",
+                "GLUCOSE",
+                "PRESSURE",
+            ]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_create_steps_table(self):
+        """Test the creation of the STEPS table."""
+        await create_steps_table(self.conn)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute("SHOW TABLES LIKE 'STEPS';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, "STEPS table was not created.")
+
+    async def test_create_heartRate_table(self):
+        """Test the creation of the HEART_RATE table."""
+        await create_heartRate_table(self.conn)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute("SHOW TABLES LIKE 'HEART_RATE';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, "HEART_RATE table was not created.")
+
+    async def test_create_restingHeartRate_table(self):
+        """Test the creation of the RESTING_HEART_RATE table."""
+        await create_restingHeartRate_table(self.conn)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute("SHOW TABLES LIKE 'RESTING_HEART_RATE';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, "RESTING_HEART_RATE table was not created.")
+
+    async def test_create_oxygen_table(self):
+        """Test the creation of the OXYGEN table."""
+        await create_oxygen_table(self.conn)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute("SHOW TABLES LIKE 'OXYGEN';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, "OXYGEN table was not created.")
+
+    async def test_create_glucose_table(self):
+        """Test the creation of the GLUCOSE table."""
+        await create_glucose_table(self.conn)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute("SHOW TABLES LIKE 'GLUCOSE';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, "GLUCOSE table was not created.")
+
+    async def test_create_pressure_table(self):
+        """Test the creation of the PRESSURE table."""
+        await create_pressure_table(self.conn)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute("SHOW TABLES LIKE 'PRESSURE';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, "PRESSURE table was not created.")
