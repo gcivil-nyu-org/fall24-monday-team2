@@ -52,6 +52,11 @@ from .dynamodb import (
     delete_post,
     get_section_stats,
     verify_user_credentials,
+    get_users_by_username_query,
+    # make_fitness_trainer,
+    # remove_fitness_trainer,
+    # get_user_by_username,
+    calculate_age_group,
     MockUser,
     # users_table,
 )
@@ -173,7 +178,6 @@ class UserCreationAndDeletionTests(TestCase):
         self.assertIsNotNone(updated_user, "User not found after password update.")
 
         # Step 3: Verify the password was updated correctly
-        print(self.user_data["username"])
         is_password_correct = check_password(new_password, updated_user["password"])
         self.assertTrue(is_password_correct, "The password was not updated correctly.")
 
@@ -188,6 +192,51 @@ class UserCreationAndDeletionTests(TestCase):
         password = "sg8002"
         result = verify_user_credentials(username, password)
         self.assertIsNotNone(result, "Invalid credentials. ")
+
+    def test_get_users_by_username_query(self):
+        query = "sg8002"
+        results = get_users_by_username_query(query)
+        assert len(results) > 0, "Query should return 1 user"
+
+    # def test_make_fitness_trainer(self):
+    #     user = get_user_by_username("sg8002")
+    #     uid = user.get("user_id")
+    #     make_fitness_trainer(uid)
+
+    #     is_FT = user.get("is_fitness_trainer")
+    #     self.assertTrue(is_FT, "sg8002 is not a Fitness Trainer")
+
+    #     remove_fitness_trainer(uid)
+    #     is_FT = user.get("is_fitness_trainer")
+    #     self.assertFalse(is_FT, "sg8002 is still a Fitness Trainer")
+
+    def test_calculate_age_group(self):
+        test_cases = [
+            ("2015-06-15", "Child"),  # Age: 9
+            ("2007-01-01", "Teenager"),  # Age: 17
+            ("1995-11-20", "Young Adult"),  # Age: 29
+            ("1980-05-10", "Middle-aged"),  # Age: 44
+            ("1950-12-25", "Senior"),  # Age: 74
+            ("1940-01-01", "Elderly"),  # Age: 84
+        ]
+
+        for date_of_birth, expected_group in test_cases:
+            result = calculate_age_group(date_of_birth)
+            assert (
+                result == expected_group
+            ), f"Expected {expected_group}, got {result} for DOB {date_of_birth}"
+
+        invalid_cases = [
+            ("invalid-date", "Unknown"),  # Invalid date format
+            ("", "Unknown"),  # Empty string
+            (None, "Unknown"),  # None as input
+        ]
+
+        for date_of_birth, expected_group in invalid_cases:
+            result = calculate_age_group(date_of_birth)
+            assert (
+                result == expected_group
+            ), f"Expected {expected_group}, got {result} for DOB {date_of_birth}"
 
     def test_update_user(self):
         # Step 1: Define the updates
