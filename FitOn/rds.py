@@ -6,7 +6,11 @@ from datetime import datetime
 
 # Function to convert date strings to MySQL-compatible datetime strings
 def convert_to_mysql_datetime(date_str):
+    # Parse the date string assuming it lacks a year
     dt = datetime.strptime(date_str, "%b %d, %I %p")
+    # Add the current or a default year (e.g., 2024)
+    dt = dt.replace(year=2024)
+    # Format it into MySQL datetime format
     mysql_datetime = dt.strftime("%Y-%m-%d %H:%M:%S")
     return mysql_datetime
 

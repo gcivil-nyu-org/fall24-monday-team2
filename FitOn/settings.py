@@ -3,7 +3,6 @@ import os
 import sys
 from datetime import timedelta
 from pathlib import Path
-
 import boto3
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.

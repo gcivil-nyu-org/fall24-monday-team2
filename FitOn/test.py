@@ -10,7 +10,14 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 import boto3
 import json
-
+from FitOn.rds import (
+    convert_to_mysql_datetime,
+)  # Adjust the import path based on your project structure
+from unittest import IsolatedAsyncioTestCase
+from FitOn.rds import get_secret_rds, create_connection
+import aiomysql
+from FitOn.rds import create_table, insert_data
+from unittest import IsolatedAsyncioTestCase
 
 # import unittest
 
@@ -839,11 +846,8 @@ class ForumTests(TestCase):
 ###########################################################
 #       TEST CASE FOR GOOGLE AUTHENTICATION               #
 ###########################################################
-
-
 # class GoogleAuthTestCase(TestCase):
 #     @classmethod
-#     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 #     def setUpClass(cls):
 #         super().setUpClass()
 #         cls.client = Client()
@@ -866,21 +870,25 @@ class ForumTests(TestCase):
 #         session.save()
 
 #         # Assertions
-#         self.assertEqual(response.status_code, 302)  # Check if redirect status code
+#         self.assertEqual(response.status_code, 302)  # Check redirect status code
 #         self.assertIn("http://mock-auth-url", response.url)  # Verify redirection URL
-#         # self.assertIn("mock-state", session)  # Check if state is in session
 #         self.assertEqual(session["google_fit_state"], "mock-state")  # Verify the value
 
 #     @patch("FitOn.views.get_user")
 #     @patch("FitOn.views.Flow")
 #     @patch("FitOn.views.Credentials")
+
 #     def test_callback_google_fit(self, mock_credentials, mock_flow, mock_get_user):
 #         # Set up a mock user return value
 #         mock_get_user.return_value = {
 #             "name": "Test User",
 #             "email": "testuser@example.com",
 #             "gender": "Other",
-#             # Add other fields as needed
+#             "date_of_birth": "2000-01-01",
+#             "phone_number": "1234567890",
+#             "address": "Test Address",
+#             "bio": "Test Bio",
+#             "country_code": "91",
 #         }
 
 #         # Set up the mock credentials
@@ -908,7 +916,10 @@ class ForumTests(TestCase):
 
 #         # Assertions
 #         self.assertEqual(response.status_code, 200)
+#         self.assertTemplateUsed(response, "profile.html")
 #         self.assertIn("Signed in Successfully", response.content.decode())
+#         self.assertTrue(response.context["login_success"])
+#         self.assertIsInstance(response.context["form"], ProfileForm)
 
 #     @classmethod
 #     def tearDownClass(cls):
@@ -934,53 +945,48 @@ class ForumTests(TestCase):
 #         }
 #         session.save()
 
-# @patch("FitOn.views.requests.post")
-# def test_delink_google_fit(self, mock_post):
-#     # Mock the response for the revoke endpoint
-#     mock_post.return_value.status_code = 200  # Simulate successful revocation
+#     @patch("FitOn.views.requests.post")
+#     def test_delink_google_fit(self, mock_post):
+#         # Mock the response for the revoke endpoint
+#         mock_post.return_value.status_code = 200  # Simulate successful revocation
 
-#     response = self.client.post(reverse("delink_google_fit"), follow=True)
+#         response = self.client.post(reverse("delink_google_fit"), follow=True)
 
-#     # Assertions for final response status after following redirects
-#     self.assertEqual(
-#         response.status_code, 200
-#     )  # Expect the final status code to be 200 after redirects
+#         # Assertions
+#         self.assertEqual(response.status_code, 200)  # Final status code after redirects
 
-#     # Verify that the session no longer contains credentials
-#     session = self.client.session
-#     self.assertNotIn("credentials", session)
+#         # Verify that the session no longer contains credentials
+#         session = self.client.session
+#         self.assertNotIn("credentials", session)
 
-#     # Check if the success message is added to the messages framework
-#     messages_list = list(messages.get_messages(response.wsgi_request))
-#     self.assertTrue(
-#         any(
-#             message.message == "Your Google account has been successfully delinked."
-#             and message.level == messages.SUCCESS
-#             for message in messages_list
-#         ),
-#         "Expected success message not found in messages framework.",
-#     )
+#         # Check if the success message is added to the messages framework
+#         messages_list = list(get_messages(response.wsgi_request))
+#         print("Messages list:", messages_list)
+#         self.assertTrue(
+#             any(
+#                 message.message == "Your Google account has been successfully delinked."
+#                 and message.level == messages.SUCCESS
+#                 for message in messages_list
+#             )
+#         )
 
-#     # Check if the revocation endpoint was called
-#     mock_post.assert_called_once_with(
-#         "https://accounts.google.com/o/oauth2/revoke",
-#         params={"token": "mock-token"},
-#         headers={"content-type": "application/x-www-form-urlencoded"},
-#     )
+#         # Check if the revocation endpoint was called
+#         mock_post.assert_called_once_with(
+#             "https://accounts.google.com/o/oauth2/revoke",
+#             params={"token": "mock-token"},
+#             headers={"content-type": "application/x-www-form-urlencoded"},
+#         )
 
-# def tearDown(self):
-#     # Clear the session and any test data after each test
-#     session = self.client.session
-#     if "credentials" in session:
-#         del session["credentials"]
-#         session.save()
+#     def tearDown(self):
+#         # Clear the session and any test data after each test
+#         session = self.client.session
+#         if "credentials" in session:
+#             del session["credentials"]
+#             session.save()
 
-#     # Add other cleanup steps if necessary
-
-# @classmethod
-# def tearDownClass(cls):
-#     # Perform any additional cleanup if needed
-#     super().tearDownClass()
+#     @classmethod
+#     def tearDownClass(cls):
+#         super().tearDownClass()
 
 
 ###########################################################
@@ -1872,3 +1878,166 @@ class ForumViewTests(TestCase):
         self.users_table.delete_item(Key={"user_id": self.user_data["user_id"]})
         for thread in self.test_threads:
             self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
+
+
+###################################################
+# Test Case For rds.py
+###################################################
+
+
+class TestConvertToMysqlDatetime(TestCase):
+    def test_valid_date_conversion(self):
+        """
+        Test the function with a valid date string in the specified format.
+        """
+        input_date = "Dec 03, 11 PM"
+        expected_output = "2024-12-03 23:00:00"
+        self.assertEqual(convert_to_mysql_datetime(input_date), expected_output)
+
+    def test_valid_date_am(self):
+        """
+        Test the function with a valid date string for AM time.
+        """
+        input_date = "Jan 15, 9 AM"
+        expected_output = "2024-01-15 09:00:00"
+        self.assertEqual(convert_to_mysql_datetime(input_date), expected_output)
+
+    def test_invalid_date_format(self):
+        """
+        Test the function with an invalid date string format.
+        """
+        input_date = "03-12-2024 23:00"
+        with self.assertRaises(ValueError):
+            convert_to_mysql_datetime(input_date)
+
+    def test_empty_date_string(self):
+        """
+        Test the function with an empty date string.
+        """
+        input_date = ""
+        with self.assertRaises(ValueError):
+            convert_to_mysql_datetime(input_date)
+
+    def test_incomplete_date_string(self):
+        """
+        Test the function with an incomplete date string.
+        """
+        input_date = "Dec 03"
+        with self.assertRaises(ValueError):
+            convert_to_mysql_datetime(input_date)
+
+
+class TestGetSecretRds(IsolatedAsyncioTestCase):
+    async def test_get_secret_rds(self):
+        # Expected secret values (match this with the secret in AWS Secrets Manager)
+        expected_secret = {
+            "host": "fiton.cxkgakkyk8zs.us-west-2.rds.amazonaws.com",
+            "database": "fiton",
+            "port": 3306,
+            "password": "Fiton#swe-2024",
+            "username": "admin",
+        }
+
+        # Call the actual function
+        result = await get_secret_rds()
+
+        # Assert the results
+        self.assertEqual(result["host"], expected_secret["host"])
+        self.assertEqual(result["database"], expected_secret["database"])
+        self.assertEqual(result["port"], str(expected_secret["port"]))
+        self.assertEqual(result["password"], expected_secret["password"])
+        self.assertEqual(result["username"], expected_secret["username"])
+
+
+class TestCreateConnection(IsolatedAsyncioTestCase):
+    async def test_create_connection(self):
+        """
+        Test the create_connection function with a live MySQL database.
+        Ensure the connection is successfully established.
+        """
+        conn = None
+        try:
+            # Call the create_connection function
+            conn = await create_connection()
+
+            # Verify the connection is established
+            self.assertIsNotNone(conn, "Connection object is None.")
+            # self.assertTrue(conn.open, "Connection is not open.")
+
+            # Execute a simple query to test the connection
+            async with conn.cursor() as cursor:
+                await cursor.execute("SELECT DATABASE();")
+                result = await cursor.fetchone()
+                self.assertIsNotNone(result, "Query returned no result.")
+                self.assertEqual(result[0], "fiton", "Connected to the wrong database.")
+
+        except aiomysql.Error as e:
+            self.fail(f"Database connection failed: {e}")
+
+        finally:
+            # Ensure the connection is closed even if an exception occurs
+            if conn:
+                conn.close()
+
+
+# Assuming create_table and insert_data are imported
+
+
+class TestDatabaseOperations(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop the test table to clean up
+            await cursor.execute("DROP TABLE IF EXISTS test_table;")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_create_table(self):
+        """Test the create_table function."""
+        table_sql = """
+        CREATE TABLE test_table (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            age INT NOT NULL
+        );
+        """
+        # Call the function to create the table
+        await create_table(self.conn, table_sql)
+
+        # Verify the table was created
+        async with self.conn.cursor() as cursor:
+            await cursor.execute("SHOW TABLES LIKE 'test_table';")
+            result = await cursor.fetchone()
+            self.assertIsNotNone(result, "Table test_table was not created.")
+
+    async def test_insert_data(self):
+        """Test the insert_data function."""
+        # Create the test table
+        table_sql = """
+        CREATE TABLE test_table (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            age INT NOT NULL
+        );
+        """
+        await create_table(self.conn, table_sql)
+
+        # Insert data into the table
+        insert_query = "INSERT INTO test_table (name, age) VALUES (%s, %s);"
+        test_data = ("Alice", 30)
+        await insert_data(self.conn, insert_query, test_data)
+
+        # Verify the data was inserted
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT * FROM test_table WHERE name = %s;", (test_data[0],)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, "Data was not inserted into test_table.")
+        self.assertEqual(result[1], "Alice", "Inserted name does not match.")
+        self.assertEqual(result[2], 30, "Inserted age does not match.")
