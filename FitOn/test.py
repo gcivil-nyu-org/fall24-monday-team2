@@ -2,6 +2,7 @@ from datetime import datetime
 from django.test import TestCase, Client, override_settings, RequestFactory
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+import unittest
 from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
 
@@ -10,6 +11,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 import boto3
 import json
+import sys
 
 
 # import unittest
@@ -25,8 +27,8 @@ from django.contrib.auth.hashers import make_password
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.core import mail
-from django.core.mail import send_mail
 from django.conf import settings
+from importlib import reload, import_module
 
 # from django.utils import timezone
 
@@ -1598,59 +1600,47 @@ class PasswordResetTests(TestCase):
         )
 
 
-class EmailBackendTests(TestCase):
-    @override_settings(
-        EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
-        EMAIL_HOST="smtp.gmail.com",
-        EMAIL_PORT=587,
-        EMAIL_USE_TLS=True,
-        EMAIL_HOST_USER="fiton.notifications@gmail.com",
-        EMAIL_HOST_PASSWORD="usfb imrp rhyq npif",
-    )
-    def test_smtp_email_backend_and_settings(self):
-        # Verify that all email settings are correctly applied
-        self.assertEqual(
-            settings.EMAIL_BACKEND,
-            "django.core.mail.backends.smtp.EmailBackend",
-            "EMAIL_BACKEND is not set correctly.",
-        )
-        self.assertEqual(
-            settings.EMAIL_HOST,
-            "smtp.gmail.com",
-            "EMAIL_HOST is not set correctly.",
-        )
-        self.assertEqual(
-            settings.EMAIL_PORT,
-            587,
-            "EMAIL_PORT is not set correctly.",
-        )
-        self.assertTrue(
-            settings.EMAIL_USE_TLS,
-            "EMAIL_USE_TLS should be True but is not set correctly.",
-        )
-        self.assertEqual(
-            settings.EMAIL_HOST_USER,
-            "fiton.notifications@gmail.com",
-            "EMAIL_HOST_USER is not set correctly.",
-        )
-        self.assertEqual(
-            settings.EMAIL_HOST_PASSWORD,
-            "usfb imrp rhyq npif",
-            "EMAIL_HOST_PASSWORD is not set correctly.",
-        )
+class EmailBackendTests(unittest.TestCase):
+    def test_testing_flag_true_uses_locmem_backend(self):
+        # Mock sys.argv to simulate a testing environment
+        with patch("sys.argv", new=["manage.py", "test"]):
+            settings = import_module("FitOn.settings")
+            reload(settings)  # Reload the module to apply changes
 
-        # Send a test email to verify the SMTP backend
-        try:
-            send_mail(
-                subject="Test Email",
-                message="This is a test email sent using the SMTP backend.",
-                from_email="fiton.notifications@gmail.com",
-                recipient_list=["recipient@example.com"],
+            # Check that the testing email backend is applied
+            self.assertEqual(
+                settings.EMAIL_BACKEND,
+                "django.core.mail.backends.locmem.EmailBackend",
+                "Expected locmem email backend in testing mode.",
             )
-        except Exception as e:
-            self.fail(f"SMTP email backend failed with exception: {e}")
 
-        # Confirm that the email was sent using the SMTP backend (no mail.outbox check)
+    def test_testing_flag_false_uses_smtp_backend(self):
+        # Mock sys.argv to simulate a production-like environment
+        with patch("sys.argv", new=["manage.py", "runserver"]):
+            settings = import_module("FitOn.settings")
+            reload(settings)  # Reload the module to apply changes
+
+            # Check that the production SMTP email backend is applied
+            self.assertEqual(
+                settings.EMAIL_BACKEND,
+                "django.core.mail.backends.smtp.EmailBackend",
+                "Expected SMTP email backend in production mode.",
+            )
+            self.assertEqual(
+                settings.EMAIL_HOST, "smtp.gmail.com", "EMAIL_HOST is incorrect."
+            )
+            self.assertEqual(settings.EMAIL_PORT, 587, "EMAIL_PORT is incorrect.")
+            self.assertTrue(settings.EMAIL_USE_TLS, "EMAIL_USE_TLS should be True.")
+            self.assertEqual(
+                settings.EMAIL_HOST_USER,
+                "fiton.notifications@gmail.com",
+                "EMAIL_HOST_USER is incorrect.",
+            )
+            self.assertEqual(
+                settings.EMAIL_HOST_PASSWORD,
+                "usfb imrp rhyq npif",
+                "EMAIL_HOST_PASSWORD is incorrect.",
+            )
 
 
 ###########################################################
