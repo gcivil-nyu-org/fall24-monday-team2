@@ -133,23 +133,11 @@ def create_user(
         }
     )
 
-    # Test to check if inserted user was inserted
-    # response = users_table.get_item(Key={"user_id": user_id})
-    # if "Item" in response:
-    #     print("User found in DynamoDB:", response["Item"])
-    # else:
-    #     print("User not found in DynamoDB after insertion.")
-
-    # print("User created successfully.")
     return True
-    # except Exception as e:
-    #     print(f"Error creating user in DynamoDB: {e}")
-    #     return False
 
 
 def delete_user_by_username(username):
-    # try:
-    # First, get the user by username
+
     response = users_table.scan(
         FilterExpression="#n = :username",
         ExpressionAttributeNames={"#n": "username"},
@@ -158,7 +146,6 @@ def delete_user_by_username(username):
 
     users = response.get("Items", [])
     if not users:
-        # print(f"No user found with username: {username}")
         return False  # No user to delete
 
     # Assuming the 'user_id' is the partition key

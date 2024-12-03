@@ -1872,3 +1872,297 @@ class ForumViewTests(TestCase):
         self.users_table.delete_item(Key={"user_id": self.user_data["user_id"]})
         for thread in self.test_threads:
             self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
+
+
+class FitnessGoalsViewTest(TestCase):
+    def setUp(self):
+        # Set up DynamoDB resource and table
+        self.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+        self.goals_table = self.dynamodb.Table("UserGoals")
+
+        # Create test user with updated username
+        hashed = make_password("secure_password")
+        create_user(
+            "test_user789",  # user_id
+            "test_user789",  # username
+            "test_user789@example.com",  # email
+            "Test User 789",  # name
+            "1990-01-01",  # date_of_birth
+            "O",  # gender
+            "183",  # height
+            "83",  # weight
+            hashed,  # plaintext password
+        )
+
+        # Set user_id for the test session
+        self.user_id = "test_user789"
+
+        # Simulate a login request to your login view
+        self.client = Client()
+        response = self.client.post(
+            "/login/",
+            {
+                "username": "test_user789",
+                "password": "secure_password",
+            },
+        )
+
+        # Assert that login succeeded
+        assert (
+            response.status_code == 302
+        ), "Login request did not redirect as expected."
+
+        # Confirm session setup
+        session = self.client.session
+        assert "user_id" in session, "User ID not found in session after login."
+        assert (
+            session["user_id"] == self.user_id
+        ), "Session user_id does not match the test user."
+
+    def test_view_renders_goals_page(self):
+        response = self.client.get("/fitness-goals/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_goals.html")
+
+    def test_add_new_goal(self):
+        # Ensure the session is properly set up
+        self.assertIn("user_id", self.client.session, "User ID not found in session.")
+        self.assertEqual(
+            self.client.session["user_id"], self.user_id, "Session user_id mismatch."
+        )
+
+        # Test adding a new goal
+        data = {
+            "goal_type": "steps",
+            "goal_name": "",
+            "goal_value": "10000",
+        }
+        response = self.client.post("/fitness-goals/", data)
+
+        # Assert redirect
+        self.assertEqual(response.status_code, 302, "Expected redirect status code.")
+        self.assertEqual(
+            response.url, reverse("fitness_goals"), "Redirect URL mismatch."
+        )
+
+        # Validate DynamoDB for the new goal
+        response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            )
+        )
+        goals = response.get("Items", [])
+
+        # Ensure that at least one goal is found
+        self.assertGreater(
+            len(goals), 0, "No goals found for the given user_id in DynamoDB."
+        )
+
+        # Validate the first goal (since you're expecting only one goal to exist for the test case)
+        goal = goals[0]
+        self.assertIn("GoalID", goal, "GoalID not found in the goal item.")
+        self.assertEqual(
+            goal["Type"], "steps", f"Expected goal type 'steps', got {goal['Type']}."
+        )
+        self.assertEqual(
+            goal["Value"], "10000", f"Expected goal value '10000', got {goal['Value']}."
+        )
+
+    def test_prevent_duplicate_goal_type(self):
+        # Insert an initial goal
+        initial_goal = {
+            "GoalID": str(uuid.uuid4()),
+            "user_id": self.user_id,
+            "Type": "steps",
+            "Name": None,
+            "Value": "10000",
+        }
+        self.goals_table.put_item(Item=initial_goal)
+
+        # Validate the initial state
+        query_response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            )
+        )
+        initial_goals = query_response.get("Items", [])
+        self.assertGreater(
+            len(initial_goals), 0, "Initial goal was not added to DynamoDB."
+        )
+
+        # Attempt to add a duplicate goal
+        data = {
+            "goal_type": "steps",
+            "goal_name": "",
+            "goal_value": "15000",
+        }
+        response = self.client.post("/fitness-goals/", data)
+
+        # Assert redirect
+        self.assertEqual(response.status_code, 302, "Expected redirect status code.")
+        self.assertEqual(
+            response.url, reverse("fitness_goals"), "Redirected to an incorrect URL."
+        )
+
+        # Check for error message in session messages
+        messages = list(response.wsgi_request._messages)
+        self.assertEqual(len(messages), 1, "Expected one error message in session.")
+        self.assertEqual(
+            str(messages[0]),
+            "You already have a steps goal. Please edit it instead.",
+            "Error message mismatch for duplicate goal prevention.",
+        )
+
+    def test_fetch_goals_on_get(self):
+        # Insert a sample goal
+        sample_goal = {
+            "GoalID": str(uuid.uuid4()),
+            "user_id": self.user_id,
+            "Type": "sleep",
+            "Name": None,
+            "Value": "10",
+        }
+        self.goals_table.put_item(Item=sample_goal)
+
+        # Validate the initial state
+        query_response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            )
+        )
+        goals = query_response.get("Items", [])
+        self.assertGreater(len(goals), 0, "Initial goal was not added to DynamoDB.")
+
+        # Fetch goals via GET request
+        response = self.client.get(reverse("fitness_goals"))
+        self.assertEqual(
+            response.status_code, 200, "GET request to fetch goals failed."
+        )
+
+        # Check if the inserted goal is displayed
+        response_content = str(response.content)
+        self.assertIn(
+            "sleep",
+            response_content,
+            "Goal type 'sleep' not found in response content.",
+        )
+        self.assertIn(
+            "10", response_content, "Goal value '10' not found in response content."
+        )
+
+    def test_edit_goal(self):
+        # Insert an initial goal
+        initial_goal = {
+            "GoalID": str(uuid.uuid4()),
+            "user_id": self.user_id,
+            "Type": "sleep",
+            "Name": None,
+            "Value": "8",
+        }
+        self.goals_table.put_item(Item=initial_goal)
+
+        # Validate the initial state
+        query_response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            ),
+            FilterExpression=boto3.dynamodb.conditions.Attr("Type").eq("sleep"),
+        )
+        goals = query_response.get("Items", [])
+        self.assertEqual(goals[0]["Value"], "8", "Initial goal value mismatch.")
+
+        # Data for editing the goal
+        edit_data = {
+            "goal_id": initial_goal["GoalID"],
+            "goal_value": "5",
+        }
+
+        # Make POST request to edit the goal
+        response = self.client.post(
+            reverse("edit_goal"),
+            data=json.dumps(edit_data),
+            content_type="application/json",
+        )
+
+        # Assert the response
+        self.assertEqual(response.status_code, 200, "Goal edit request failed.")
+        self.assertEqual(
+            response.json()["message"],
+            "Goal updated successfully!",
+            "Success message mismatch.",
+        )
+
+        # Validate the updated goal in DynamoDB
+        updated_goal_response = self.goals_table.get_item(
+            Key={
+                "GoalID": initial_goal["GoalID"],
+                "user_id": self.user_id,
+            }
+        )
+        updated_goal = updated_goal_response.get("Item")
+        self.assertIsNotNone(updated_goal, "Updated goal not found in DynamoDB.")
+        self.assertEqual(
+            updated_goal["Value"],
+            "5",
+            f"Expected updated value '5', got {updated_goal['Value']}.",
+        )
+
+    def test_delete_all_goals(self):
+        # Query DynamoDB to get all goals for the user_id
+        query_response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            )
+        )
+        goals = query_response.get("Items", [])
+
+        # Loop through all goals and delete them
+        for goal in goals:
+            delete_data = {
+                "goal_id": goal[
+                    "GoalID"
+                ],  # Ensure it matches the function's expected key
+            }
+            response = self.client.post(
+                reverse("delete_goal"),
+                data=json.dumps(delete_data),
+                content_type="application/json",
+            )
+
+            # Assert successful deletion
+            self.assertEqual(
+                response.status_code, 200, f"Failed to delete goal {goal['GoalID']}."
+            )
+            self.assertEqual(
+                response.json()["message"],
+                "Goal deleted successfully.",
+                f"Unexpected response message for goal {goal['GoalID']}.",
+            )
+
+        # Validate that all goals are deleted
+        query_response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            )
+        )
+        remaining_goals = query_response.get("Items", [])
+        self.assertEqual(
+            len(remaining_goals), 0, "Not all goals were deleted from DynamoDB."
+        )
+
+    def tearDown(self):
+        response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            )
+        )
+        goals = response.get("Items", [])
+
+        # Delete each goal
+        for goal in goals:
+            self.goals_table.delete_item(
+                Key={
+                    "GoalID": goal["GoalID"],
+                    "user_id": self.user_id,
+                }
+            )
