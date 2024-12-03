@@ -156,4 +156,6 @@ urlpatterns = [
     path("warn_action/", views.warn_action, name="warn_action"),
     path("dismiss_warning/", views.dismiss_warning, name="dismiss_warning"),
     path("fitness-goals/", views.fitness_goals_view, name="fitness_goals"),
+    path("fitness-goals/edit/", views.edit_goal, name="edit_goal"),
+    path("fitness-goals/delete/", views.delete_goal, name="delete_goal"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

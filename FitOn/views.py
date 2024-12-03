@@ -2950,3 +2950,54 @@ def fitness_goals_view(request):
         messages.error(request, f"Failed to fetch goals: {e}")
 
     return render(request, "fitness_goals.html", {"user": user, "goals": goals})
+
+
+def edit_goal(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            goal_id = data.get("goal_id")
+            goal_value = data.get("goal_value")
+            goal_name = data.get("goal_name", None)
+
+            dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+            user_goals_table = dynamodb.Table("UserGoals")
+
+            user_id = request.session.get("user_id")
+
+            # Update the goal in DynamoDB
+            user_goals_table.update_item(
+                Key={
+                    "GoalID": goal_id,
+                    "user_id": user_id,
+                },
+                UpdateExpression="SET #val = :val, #name = :name",
+                ExpressionAttributeNames={"#val": "Value", "#name": "Name"},
+                ExpressionAttributeValues={":val": goal_value, ":name": goal_name},
+            )
+            return JsonResponse({"message": "Goal updated successfully!"}, status=200)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+def delete_goal(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            goal_id = data.get("goal_id")
+            user_id = request.session.get("user_id")
+
+            if not goal_id or not user_id:
+                return JsonResponse({"error": "Invalid request."}, status=400)
+
+            dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+            user_goals_table = dynamodb.Table("UserGoals")
+            # Delete the goal from DynamoDB
+            user_goals_table.delete_item(Key={"GoalID": goal_id, "user_id": user_id})
+            return JsonResponse({"message": "Goal deleted successfully."}, status=200)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"error": "Invalid request method."}, status=400)

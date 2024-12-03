@@ -3,7 +3,6 @@
 {% block title %}Profile{% endblock %}
 
 {% block content %}
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -48,6 +47,7 @@
         <button type="submit" class="btn btn-success">Add Goal</button>
     </form>
 
+    <!-- Display Messages -->
     <div class="container mt-3">
         {% if messages %}
             {% for message in messages %}
@@ -59,7 +59,6 @@
         {% endif %}
     </div>
     
-
     <!-- Goals Table -->
     <div class="mt-5">
         <h2 class="text-center">Your Goals</h2>
@@ -74,7 +73,7 @@
             </thead>
             <tbody id="goals-table-body">
                 {% for goal in goals %}
-                <tr>
+                <tr data-goal-id="{{ goal.GoalID }}">
                     <td>{{ goal.Type }}</td>
                     <td>{{ goal.Name|default:"-" }}</td> <!-- Display "-" if Name is None -->
                     <td>{{ goal.Value }}</td>
@@ -93,47 +92,166 @@
     </div>
 </div>
 
+<!-- Edit Goal Modal -->
+<div class="modal fade" id="editGoalModal" tabindex="-1" aria-labelledby="editGoalModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editGoalModalLabel">Edit Goal</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-goal-form">
+                    <input type="hidden" id="edit-goal-id" name="goal_id"> <!-- Hidden field for GoalID -->
+                    
+                    <div class="mb-3">
+                        <label for="edit-goal-type" class="form-label">Goal Type</label>
+                        <input type="text" id="edit-goal-type" name="goal_type" class="form-control" readonly>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit-goal-name" class="form-label">Goal Name</label>
+                        <input type="text" id="edit-goal-name" name="goal_name" class="form-control">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="edit-goal-value" class="form-label">Goal Value</label>
+                        <input type="number" id="edit-goal-value" name="goal_value" class="form-control" min="1" max="9999" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    const goalsTableBody = document.getElementById('goals-table-body');
-    let editRow = null; // Track the row being edited
+    document.addEventListener('DOMContentLoaded', function () {
+        const editModal = new bootstrap.Modal(document.getElementById('editGoalModal'));
 
-    // Add event listeners to Edit and Delete buttons
-    function addRowEventListeners() {
-        const editButtons = document.querySelectorAll('.edit-btn');
-        const deleteButtons = document.querySelectorAll('.delete-btn');
+        // Function to initialize Edit button functionality
+        function initializeEditButtons() {
+            const editButtons = document.querySelectorAll('.edit-btn');
 
-        editButtons.forEach((btn) => {
-            btn.onclick = function () {
-                const row = this.closest('tr');
-                editRow = row; // Save the row being edited
-            };
-        });
+            editButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    const row = this.closest('tr'); // Get the table row
+                    const goalId = row.getAttribute('data-goal-id'); // Get GoalID
+                    const goalType = row.cells[0].innerText.trim();
+                    const goalName = row.cells[1].innerText.trim();
+                    const goalValue = row.cells[2].innerText.trim();
 
-        deleteButtons.forEach((btn) => {
-            btn.onclick = function () {
-                const row = this.closest('tr');
-                row.remove();
-            };
-        });
-    }
+                    // Populate modal fields
+                    document.getElementById('edit-goal-id').value = goalId;
+                    document.getElementById('edit-goal-type').value = goalType;
+                    document.getElementById('edit-goal-name').value = goalName !== '-' ? goalName : '';
+                    document.getElementById('edit-goal-value').value = goalValue;
 
-    // Initialize event listeners for existing rows
-    addRowEventListeners();
+                    // Disable Name field for restricted types
+                    const restrictedTypes = ['weight', 'steps', 'sleep'];
+                    document.getElementById('edit-goal-name').disabled = restrictedTypes.includes(goalType.toLowerCase());
 
-    const goalType = document.getElementById('goal-type');
-    const nameFields = document.getElementById('name-fields');
-
-    // Toggle name input visibility for activity and custom goals
-    goalType.addEventListener('change', function () {
-        if (this.value === 'custom' || this.value === 'activity') {
-            nameFields.style.display = 'block';
-        } else {
-            nameFields.style.display = 'none';
+                    // Show the modal
+                    editModal.show();
+                });
+            });
         }
+
+        // Function to initialize Delete button functionality
+        function initializeDeleteButtons() {
+            const deleteButtons = document.querySelectorAll('.delete-btn');
+
+            deleteButtons.forEach(button => {
+                button.addEventListener('click', function () {
+                    const row = this.closest('tr'); // Get the table row
+                    const goalId = row.getAttribute('data-goal-id'); // Get GoalID
+
+                    if (!goalId) {
+                        alert('Goal ID not found. Cannot delete.');
+                        return;
+                    }
+
+                    // Confirm deletion
+                    if (!confirm('Are you sure you want to delete this goal?')) {
+                        return;
+                    }
+
+                    // Send delete request to server
+                    fetch(`/fitness-goals/delete/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': '{{ csrf_token }}'
+                        },
+                        body: JSON.stringify({ goal_id: goalId })
+                    })
+                    .then(response => {
+                        if (response.ok) {
+                            // Remove the row from the table
+                            row.remove();
+                            alert('Goal deleted successfully.');
+                        } else {
+                            alert('Failed to delete the goal. Please try again.');
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error:', err);
+                        alert('An unexpected error occurred. Please try again.');
+                    });
+                });
+            });
+        }
+
+        // Initialize Edit and Delete button functionality
+        initializeEditButtons();
+        initializeDeleteButtons();
+
+        // Handle Edit form submission
+        document.getElementById('edit-goal-form').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            // Gather updated data
+            const goalId = document.getElementById('edit-goal-id').value;
+            const goalType = document.getElementById('edit-goal-type').value;
+            const goalName = document.getElementById('edit-goal-name').value;
+            const goalValue = document.getElementById('edit-goal-value').value;
+
+            // Validate goal value
+            if (goalValue <= 0 || goalValue > 9999) {
+                alert('Goal Value must be between 1 and 9999.');
+                return;
+            }
+
+            // Send updated data to server
+            fetch(`/fitness-goals/edit/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    goal_id: goalId,
+                    goal_type: goalType,
+                    goal_name: goalName,
+                    goal_value: goalValue
+                })
+            })
+            .then(response => {
+                if (response.ok) {
+                    window.location.reload(); // Refresh page on success
+                } else {
+                    alert('Failed to update the goal. Please try again.');
+                }
+            })
+            .catch(err => {
+                console.error('Error:', err);
+                alert('An unexpected error occurred. Please try again.');
+            });
+        });
     });
 </script>
 </body>
 </html>
-
 {% endblock %}
