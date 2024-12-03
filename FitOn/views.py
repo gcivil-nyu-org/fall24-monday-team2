@@ -1177,7 +1177,7 @@ def new_thread_view(request):
             )
 
     # If the request method is GET, simply show the form
-    return render(request, "new_thread.html")
+    return render(request, "new_thread.html", {"user": user})
 
 
 def delete_post_view(request):
