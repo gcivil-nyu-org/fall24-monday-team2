@@ -57,9 +57,9 @@ async def insert_data(conn, query, data):
 
 
 # Functions to create tables
-async def create_steps_table(conn):
-    table_sql = """
-        CREATE TABLE IF NOT EXISTS STEPS (
+async def create_steps_table(conn, table_name):
+    table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
             email VARCHAR(255),
             start_time DATETIME,
             end_time DATETIME,
@@ -70,9 +70,9 @@ async def create_steps_table(conn):
     await create_table(conn, table_sql)
 
 
-async def create_heartRate_table(conn):
-    table_sql = """
-        CREATE TABLE IF NOT EXISTS HEART_RATE (
+async def create_heartRate_table(conn, table_name):
+    table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
             email VARCHAR(255),
             start_time DATETIME,
             end_time DATETIME,
@@ -83,9 +83,9 @@ async def create_heartRate_table(conn):
     await create_table(conn, table_sql)
 
 
-async def create_restingHeartRate_table(conn):
-    table_sql = """
-        CREATE TABLE IF NOT EXISTS RESTING_HEART_RATE (
+async def create_restingHeartRate_table(conn, table_name):
+    table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
             email VARCHAR(255),
             start_time DATETIME,
             end_time DATETIME,
@@ -96,9 +96,9 @@ async def create_restingHeartRate_table(conn):
     await create_table(conn, table_sql)
 
 
-async def create_oxygen_table(conn):
-    table_sql = """
-        CREATE TABLE IF NOT EXISTS OXYGEN (
+async def create_oxygen_table(conn, table_name):
+    table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
             email VARCHAR(255),
             start_time DATETIME,
             end_time DATETIME,
@@ -109,9 +109,9 @@ async def create_oxygen_table(conn):
     await create_table(conn, table_sql)
 
 
-async def create_glucose_table(conn):
-    table_sql = """
-        CREATE TABLE IF NOT EXISTS GLUCOSE (
+async def create_glucose_table(conn, table_name):
+    table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {table_name}(
             email VARCHAR(255),
             start_time DATETIME,
             end_time DATETIME,
@@ -122,9 +122,9 @@ async def create_glucose_table(conn):
     await create_table(conn, table_sql)
 
 
-async def create_pressure_table(conn):
-    table_sql = """
-        CREATE TABLE IF NOT EXISTS PRESSURE (
+async def create_pressure_table(conn, table_name):
+    table_sql = f"""
+        CREATE TABLE IF NOT EXISTS {table_name} (
             email VARCHAR(255),
             start_time DATETIME,
             end_time DATETIME,
@@ -136,92 +136,102 @@ async def create_pressure_table(conn):
 
 
 # Functions to insert data into tables
-async def insert_into_steps_table(conn, email, start_time, end_time, count):
-    await create_steps_table(conn)
+async def insert_into_steps_table(conn, email, start_time, end_time, count, table_name):
+    await create_steps_table(conn, table_name)
     c_start_time = convert_to_mysql_datetime(start_time)
     c_end_time = convert_to_mysql_datetime(end_time)
-    insert_sql = """
-        INSERT INTO STEPS (email, start_time, end_time, count)
+    insert_sql = f"""
+        INSERT INTO {table_name} (email, start_time, end_time, count)
         VALUES (%s, %s, %s, %s)
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        # print("Inserted into Steps Table successfully.")
+        print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
 
-async def insert_into_heartRate_table(conn, email, start_time, end_time, count):
-    await create_heartRate_table(conn)
+async def insert_into_heartRate_table(
+    conn, email, start_time, end_time, count, table_name
+):
+    await create_heartRate_table(conn, table_name)
     c_start_time = convert_to_mysql_datetime(start_time)
     c_end_time = convert_to_mysql_datetime(end_time)
-    insert_sql = """
-        INSERT INTO HEART_RATE (email, start_time, end_time, count)
+    insert_sql = f"""
+        INSERT INTO {table_name} (email, start_time, end_time, count)
         VALUES (%s, %s, %s, %s)
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print("Inserted into Heart Rate Table successfully.")
+        print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
 
-async def insert_into_restingHeartRate_table(conn, email, start_time, end_time, count):
-    await create_restingHeartRate_table(conn)
+async def insert_into_restingHeartRate_table(
+    conn, email, start_time, end_time, count, table_name
+):
+    await create_restingHeartRate_table(conn, table_name)
     c_start_time = convert_to_mysql_datetime(start_time)
     c_end_time = convert_to_mysql_datetime(end_time)
-    insert_sql = """
-        INSERT INTO RESTING_HEART_RATE (email, start_time, end_time, count)
+    insert_sql = f"""
+        INSERT INTO {table_name} (email, start_time, end_time, count)
         VALUES (%s, %s, %s, %s)
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print("Inserted into Resting Heart Rate Table successfully.")
+        print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
 
-async def insert_into_oxygen_table(conn, email, start_time, end_time, count):
-    await create_oxygen_table(conn)
+async def insert_into_oxygen_table(
+    conn, email, start_time, end_time, count, table_name
+):
+    await create_oxygen_table(conn, table_name)
     c_start_time = convert_to_mysql_datetime(start_time)
     c_end_time = convert_to_mysql_datetime(end_time)
-    insert_sql = """
-        INSERT INTO OXYGEN (email, start_time, end_time, count)
+    insert_sql = f"""
+        INSERT INTO {table_name} (email, start_time, end_time, count)
         VALUES (%s, %s, %s, %s)
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print("Inserted into Oxygen Table successfully.")
+        print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
 
-async def insert_into_glucose_table(conn, email, start_time, end_time, count):
-    await create_glucose_table(conn)
+async def insert_into_glucose_table(
+    conn, email, start_time, end_time, count, table_name
+):
+    await create_glucose_table(conn, table_name)
     c_start_time = convert_to_mysql_datetime(start_time)
     c_end_time = convert_to_mysql_datetime(end_time)
-    insert_sql = """
-        INSERT INTO GLUCOSE (email, start_time, end_time, count)
+    insert_sql = f"""
+        INSERT INTO {table_name} (email, start_time, end_time, count)
         VALUES (%s, %s, %s, %s)
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print("Inserted into Glucose Table successfully.")
+        print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
 
-async def insert_into_pressure_table(conn, email, start_time, end_time, count):
-    await create_pressure_table(conn)
+async def insert_into_pressure_table(
+    conn, email, start_time, end_time, count, table_name
+):
+    await create_pressure_table(conn, table_name)
     c_start_time = convert_to_mysql_datetime(start_time)
     c_end_time = convert_to_mysql_datetime(end_time)
-    insert_sql = """
-        INSERT INTO PRESSURE (email, start_time, end_time, count)
+    insert_sql = f"""
+        INSERT INTO {table_name} (email, start_time, end_time, count)
         VALUES (%s, %s, %s, %s)
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print("Inserted into Pressure Table successfully.")
+        print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -239,27 +249,27 @@ async def insert_into_tables(email, total_data):
                 count = d.get("count")
                 if data_type == "steps":
                     await insert_into_steps_table(
-                        conn, email, start_time, end_time, count
+                        conn, email, start_time, end_time, count, "STEPS"
                     )
                 elif data_type == "heartRate":
                     await insert_into_heartRate_table(
-                        conn, email, start_time, end_time, count
+                        conn, email, start_time, end_time, count, "HEART_RATE"
                     )
                 elif data_type == "restingHeartRate":
                     await insert_into_restingHeartRate_table(
-                        conn, email, start_time, end_time, count
+                        conn, email, start_time, end_time, count, "RESTING_HEART_RATE"
                     )
                 elif data_type == "oxygen":
                     await insert_into_oxygen_table(
-                        conn, email, start_time, end_time, count
+                        conn, email, start_time, end_time, count, "OXYGEN"
                     )
                 elif data_type == "glucose":
                     await insert_into_glucose_table(
-                        conn, email, start_time, end_time, count
+                        conn, email, start_time, end_time, count, "GLUCOSE"
                     )
                 elif data_type == "pressure":
                     await insert_into_pressure_table(
-                        conn, email, start_time, end_time, count
+                        conn, email, start_time, end_time, count, "PRESSURE"
                     )
     conn.close()
 

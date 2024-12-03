@@ -23,6 +23,12 @@ from FitOn.rds import (
     create_oxygen_table,
     create_pressure_table,
     create_restingHeartRate_table,
+    insert_into_steps_table,
+    insert_into_glucose_table,
+    insert_into_heartRate_table,
+    insert_into_oxygen_table,
+    insert_into_pressure_table,
+    insert_into_restingHeartRate_table,
 )
 import aiomysql
 from FitOn.rds import create_table, insert_data
@@ -2059,16 +2065,16 @@ class TestHealthMetricTables(IsolatedAsyncioTestCase):
         self.conn = await create_connection()
 
     async def asyncTearDown(self):
-        """Clean up database connection after each test."""
+        """Clean up test case entries after each test."""
         async with self.conn.cursor() as cursor:
-            # Drop the test tables to clean up
+            # Drop only test-specific tables
             tables = [
-                "STEPS",
-                "HEART_RATE",
-                "RESTING_HEART_RATE",
-                "OXYGEN",
-                "GLUCOSE",
-                "PRESSURE",
+                "test_steps",
+                "test_heart_rate",
+                "test_resting_heart_rate",
+                "test_oxygen",
+                "test_glucose",
+                "test_pressure",
             ]
             for table in tables:
                 await cursor.execute(f"DROP TABLE IF EXISTS {table};")
@@ -2077,48 +2083,221 @@ class TestHealthMetricTables(IsolatedAsyncioTestCase):
 
     async def test_create_steps_table(self):
         """Test the creation of the STEPS table."""
-        await create_steps_table(self.conn)
+        table_name = "test_steps"  # Use a test-specific table name
+        await create_steps_table(self.conn, table_name)
         async with self.conn.cursor() as cursor:
-            await cursor.execute("SHOW TABLES LIKE 'STEPS';")
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
             result = await cursor.fetchone()
-        self.assertIsNotNone(result, "STEPS table was not created.")
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
 
     async def test_create_heartRate_table(self):
         """Test the creation of the HEART_RATE table."""
-        await create_heartRate_table(self.conn)
+        table_name = "test_heart_rate"
+        await create_heartRate_table(self.conn, table_name)
         async with self.conn.cursor() as cursor:
-            await cursor.execute("SHOW TABLES LIKE 'HEART_RATE';")
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
             result = await cursor.fetchone()
-        self.assertIsNotNone(result, "HEART_RATE table was not created.")
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
 
     async def test_create_restingHeartRate_table(self):
         """Test the creation of the RESTING_HEART_RATE table."""
-        await create_restingHeartRate_table(self.conn)
+        table_name = "test_resting_heart_rate"
+        await create_restingHeartRate_table(self.conn, table_name)
         async with self.conn.cursor() as cursor:
-            await cursor.execute("SHOW TABLES LIKE 'RESTING_HEART_RATE';")
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
             result = await cursor.fetchone()
-        self.assertIsNotNone(result, "RESTING_HEART_RATE table was not created.")
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
 
     async def test_create_oxygen_table(self):
         """Test the creation of the OXYGEN table."""
-        await create_oxygen_table(self.conn)
+        table_name = "test_oxygen"
+        await create_oxygen_table(self.conn, table_name)
         async with self.conn.cursor() as cursor:
-            await cursor.execute("SHOW TABLES LIKE 'OXYGEN';")
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
             result = await cursor.fetchone()
-        self.assertIsNotNone(result, "OXYGEN table was not created.")
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
 
     async def test_create_glucose_table(self):
         """Test the creation of the GLUCOSE table."""
-        await create_glucose_table(self.conn)
+        table_name = "test_glucose"
+        await create_glucose_table(self.conn, table_name)
         async with self.conn.cursor() as cursor:
-            await cursor.execute("SHOW TABLES LIKE 'GLUCOSE';")
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
             result = await cursor.fetchone()
-        self.assertIsNotNone(result, "GLUCOSE table was not created.")
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
 
     async def test_create_pressure_table(self):
         """Test the creation of the PRESSURE table."""
-        await create_pressure_table(self.conn)
+        table_name = "test_pressure"
+        await create_pressure_table(self.conn, table_name)
         async with self.conn.cursor() as cursor:
-            await cursor.execute("SHOW TABLES LIKE 'PRESSURE';")
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
             result = await cursor.fetchone()
-        self.assertIsNotNone(result, "PRESSURE table was not created.")
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
+
+
+class TestInsertIntoMetricTables(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop test-specific tables
+            tables = [
+                "test_steps",
+                "test_heart_rate",
+                "test_resting_heart_rate",
+                "test_oxygen",
+                "test_glucose",
+                "test_pressure",
+            ]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_insert_into_steps_table(self):
+        """Test inserting data into the test-specific STEPS table."""
+        table_name = "test_steps"
+        await create_steps_table(self.conn, table_name)
+
+        email = "test_user2@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 1000
+
+        await insert_into_steps_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Step count does not match.")
+
+    async def test_insert_into_heartRate_table(self):
+        """Test inserting data into the test-specific HEART_RATE table."""
+        table_name = "test_heart_rate"
+        await create_heartRate_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 80
+
+        await insert_into_heartRate_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Heart rate count does not match.")
+
+    async def test_insert_into_restingHeartRate_table(self):
+        """Test inserting data into the test-specific RESTING_HEART_RATE table."""
+        table_name = "test_resting_heart_rate"
+        await create_restingHeartRate_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 60
+
+        await insert_into_restingHeartRate_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Resting heart rate count does not match.")
+
+    async def test_insert_into_oxygen_table(self):
+        """Test inserting data into the test-specific OXYGEN table."""
+        table_name = "test_oxygen"
+        await create_oxygen_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 95
+
+        await insert_into_oxygen_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Oxygen level count does not match.")
+
+    async def test_insert_into_glucose_table(self):
+        """Test inserting data into the test-specific GLUCOSE table."""
+        table_name = "test_glucose"
+        await create_glucose_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 120
+
+        await insert_into_glucose_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Glucose level count does not match.")
+
+    async def test_insert_into_pressure_table(self):
+        """Test inserting data into the test-specific PRESSURE table."""
+        table_name = "test_pressure"
+        await create_pressure_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 120
+
+        await insert_into_pressure_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Pressure count does not match.")
