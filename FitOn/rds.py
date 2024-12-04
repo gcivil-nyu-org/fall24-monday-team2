@@ -326,6 +326,17 @@ async def show_tables():
         conn.close()
 
 
+async def table_exists(cursor, table_name):
+    """Check if a table exists in the database."""
+    try:
+        await cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+        result = await cursor.fetchone()
+        return result is not None
+    except Exception as e:
+        print(f"Error checking table existence for {table_name}: {e}")
+        return False
+
+
 async def fetch_user_data(email):
     conn = await create_connection()
     user_data = {
@@ -349,19 +360,9 @@ async def fetch_user_data(email):
                 "pressure": "SELECT start_time, end_time, count FROM PRESSURE WHERE email = %s",
             }
 
-            # Check table existence dynamically
-            async def table_exists(table_name):
-                try:
-                    await cursor.execute("SHOW TABLES LIKE %s", (table_name,))
-                    result = await cursor.fetchone()
-                    return result is not None
-                except Exception as e:
-                    print(f"Error checking table existence for {table_name}: {e}")
-                    return False
-
             for key, query in queries.items():
                 table_name = query.split("FROM")[1].strip().split(" ")[0]
-                if await table_exists(table_name):
+                if await table_exists(cursor, table_name):  # Use the imported function
                     try:
                         await cursor.execute(query, (email,))
                         records = await cursor.fetchall()
