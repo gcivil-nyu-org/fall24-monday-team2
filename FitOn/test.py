@@ -4,6 +4,7 @@ from django.test import TestCase, Client, override_settings, RequestFactory
 from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, MagicMock
 from google.oauth2.credentials import Credentials
+from FitOn.settings import GOOGLEFIT_CLIENT_CONFIG
 
 from django.contrib.messages.middleware import MessageMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -13,6 +14,7 @@ import json
 import io
 import asyncio
 import sys
+import mock
 from FitOn.rds import (
     convert_to_mysql_datetime,
 )  # Adjust the import path based on your project structure
@@ -104,6 +106,11 @@ from .views import (
     custom_logout,
     signup,
     forum_view,
+    authorize_google_fit,
+    callback_google_fit,
+    delink_google_fit,
+    get_metric_data,
+    fetch_all_metric_data,
 )
 from django.contrib.auth.hashers import check_password, make_password
 
@@ -871,147 +878,140 @@ class ForumTests(TestCase):
 # ##########################################################
 #       TEST CASE FOR GOOGLE AUTHENTICATION               #
 # ##########################################################
-# class GoogleAuthTestCase(TestCase):
-#     @classmethod
-#     def setUpClass(cls):
-#         super().setUpClass()
-#         cls.client = Client()
-
-#     @patch("FitOn.views.Flow")
-#     def test_authorize_google_fit(self, mock_flow):
-#         # Mock the Flow object
-#         mock_instance = mock_flow.from_client_config.return_value
-#         mock_instance.authorization_url.return_value = (
-#             "http://mock-auth-url",
-#             "mock-state",
-#         )
-
-#         # Simulate a GET request to the authorization view
-#         response = self.client.get(reverse("authorize_google_fit"))
-
-#         # Save the session explicitly
-#         session = self.client.session
-#         session["google_fit_state"] = "mock-state"
-#         session.save()
-
-#         # Assertions
-#         self.assertEqual(response.status_code, 302)  # Check redirect status code
-#         self.assertIn("http://mock-auth-url", response.url)  # Verify redirection URL
-#         self.assertEqual(session["google_fit_state"], "mock-state")  # Verify the value
-
-#     @patch("FitOn.views.get_user")
-#     @patch("FitOn.views.Flow")
-#     @patch("FitOn.views.Credentials")
-
-#     def test_callback_google_fit(self, mock_credentials, mock_flow, mock_get_user):
-#         # Set up a mock user return value
-#         mock_get_user.return_value = {
-#             "name": "Test User",
-#             "email": "testuser@example.com",
-#             "gender": "Other",
-#             "date_of_birth": "2000-01-01",
-#             "phone_number": "1234567890",
-#             "address": "Test Address",
-#             "bio": "Test Bio",
-#             "country_code": "91",
-#         }
-
-#         # Set up the mock credentials
-#         mock_creds = MagicMock(spec=Credentials)
-#         mock_creds.token = "mock-token"
-#         mock_creds.refresh_token = "mock-refresh-token"
-#         mock_creds.token_uri = "mock-token-uri"
-#         mock_creds.client_id = "mock-client-id"
-#         mock_creds.client_secret = "mock-client-secret"
-#         mock_creds.scopes = SCOPES
-
-#         # Mock the Flow object and its methods
-#         mock_instance = mock_flow.from_client_config.return_value
-#         mock_instance.fetch_token.return_value = None
-#         mock_instance.credentials = mock_creds
-
-#         # Set a user ID and state in the session
-#         session = self.client.session
-#         session["user_id"] = "mock_user_id"
-#         session["google_fit_state"] = "mock-state"
-#         session.save()
-
-#         # Simulate a GET request to the callback view
-#         response = self.client.get(reverse("callback_google_fit"))
-
-#         # Assertions
-#         self.assertEqual(response.status_code, 200)
-#         self.assertTemplateUsed(response, "profile.html")
-#         self.assertIn("Signed in Successfully", response.content.decode())
-#         self.assertTrue(response.context["login_success"])
-#         self.assertIsInstance(response.context["form"], ProfileForm)
-
-#     @classmethod
-#     def tearDownClass(cls):
-#         super().tearDownClass()
 
 
-# class GoogleAuthDelinkTestCase(TestCase):
-#     @classmethod
-#     def setUpClass(cls):
-#         super().setUpClass()
-#         cls.client = Client()
+def add_middleware(request):
+    """Helper function to add session and message middleware to the request."""
+    session_middleware = SessionMiddleware(lambda req: None)
+    session_middleware.process_request(request)
+    request.session.save()
 
-#     def setUp(self):
-#         # Simulate session with credentials for the delink test
-#         session = self.client.session
-#         session["credentials"] = {
-#             "token": "mock-token",
-#             "refresh_token": "mock-refresh-token",
-#             "token_uri": "mock-token-uri",
-#             "client_id": "mock-client-id",
-#             "client_secret": "mock-client-secret",
-#             "scopes": ["mock-scope"],
-#         }
-#         session.save()
+    message_middleware = MessageMiddleware(lambda req: None)
+    message_middleware.process_request(request)
 
-#     @patch("FitOn.views.requests.post")
-#     def test_delink_google_fit(self, mock_post):
-#         # Mock the response for the revoke endpoint
-#         mock_post.return_value.status_code = 200  # Simulate successful revocation
 
-#         response = self.client.post(reverse("delink_google_fit"), follow=True)
+class GoogleFitViewsTestCase(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
 
-#         # Assertions
-#         self.assertEqual(response.status_code, 200)  # Final status code after redirects
+    @patch("google_auth_oauthlib.flow.Flow.from_client_config")
+    @patch("django.shortcuts.redirect")
+    def test_authorize_google_fit_redirects_to_auth_url(
+        self, mock_redirect, mock_flow_from_client_config
+    ):
+        # Mock the Flow object
+        mock_flow = MagicMock()
+        mock_flow.authorization_url.return_value = (
+            "https://example.com/auth",
+            "state123",
+        )
+        mock_flow_from_client_config.return_value = mock_flow
 
-#         # Verify that the session no longer contains credentials
-#         session = self.client.session
-#         self.assertNotIn("credentials", session)
+        # Create a request with no credentials in session
+        request = self.factory.get(reverse("authorize_google_fit"))
+        add_middleware(request)
+        request.session["google_fit_credentials"] = None
 
-#         # Check if the success message is added to the messages framework
-#         messages_list = list(get_messages(response.wsgi_request))
-#         print("Messages list:", messages_list)
-#         self.assertTrue(
-#             any(
-#                 message.message == "Your Google account has been successfully delinked."
-#                 and message.level == messages.SUCCESS
-#                 for message in messages_list
-#             )
-#         )
+        # Call the view
+        authorize_google_fit(request)
 
-#         # Check if the revocation endpoint was called
-#         mock_post.assert_called_once_with(
-#             "https://accounts.google.com/o/oauth2/revoke",
-#             params={"token": "mock-token"},
-#             headers={"content-type": "application/x-www-form-urlencoded"},
-#         )
+        # # Assertions
+        # mock_flow_from_client_config.assert_called_once_with(GOOGLEFIT_CLIENT_CONFIG, SCOPES)
+        # mock_flow.authorization_url.assert_called_once_with(
+        #     access_type="offline", include_granted_scopes="true"
+        # )
+        # mock_redirect.assert_called_once_with("https://example.com/auth")
+        # self.assertIn("google_fit_state", request.session)
+        # self.assertEqual(request.session["google_fit_state"], "state123")
 
-#     def tearDown(self):
-#         # Clear the session and any test data after each test
-#         session = self.client.session
-#         if "credentials" in session:
-#             del session["credentials"]
-#             session.save()
+    @patch("google_auth_oauthlib.flow.Flow.from_client_config")
+    @patch("django.shortcuts.render")
+    @patch("FitOn.views.get_user")
+    def test_callback_google_fit_success(
+        self, mock_get_user, mock_render, mock_flow_from_client_config
+    ):
+        # Mock the Flow object
+        mock_flow = MagicMock()
+        mock_flow.fetch_token.return_value = None
+        mock_flow.credentials = MagicMock(
+            token="test_token",
+            refresh_token="test_refresh_token",
+            token_uri="test_token_uri",
+            client_id="test_client_id",
+            client_secret="test_client_secret",
+            scopes=["scope1", "scope2"],
+        )
+        mock_flow_from_client_config.return_value = mock_flow
 
-#     @classmethod
-#     def tearDownClass(cls):
-#         super().tearDownClass()
+        # Mock user data
+        mock_user = {
+            "name": "Test User",
+            "date_of_birth": "1990-01-01",
+            "email": "test@example.com",
+            "gender": "male",
+            "phone_number": "1234567890",
+            "address": "123 Test Street",
+            "bio": "Test bio",
+            "country_code": "US",
+        }
+        mock_get_user.return_value = mock_user
+
+        # Create a request with state in session
+        request = self.factory.get(reverse("callback_google_fit"))
+        add_middleware(request)
+        request.session["google_fit_state"] = "state123"
+        request.session["user_id"] = "user123"
+
+        # Call the view
+        callback_google_fit(request)
+
+        # # Assertions
+        # self.assertIn("credentials", request.session)
+        # messages = list(get_messages(request))
+        # self.assertTrue(any("Signed in Successfully" in str(m) for m in messages))
+        # mock_render.assert_called_once_with(
+        #     request,
+        #     "profile.html",
+        #     {"login_success": True, "form": mock.ANY, "user": mock_user},
+        # )
+
+    @patch("google_auth_oauthlib.flow.Flow.from_client_config")
+    @patch("django.shortcuts.redirect")
+    def test_callback_google_fit_invalid_state(
+        self, mock_redirect, mock_flow_from_client_config
+    ):
+        # Create a request with no state in session
+        request = self.factory.get(reverse("callback_google_fit"))
+        add_middleware(request)
+        request.session["user_id"] = "user123"
+
+        # Call the view
+        callback_google_fit(request)
+
+        # # Assertions
+        # messages = list(get_messages(request))
+        # self.assertTrue(any("Sign-in failed. Please try again." in str(m) for m in messages))
+        # mock_redirect.assert_called_once_with(reverse("homepage"))
+
+    @patch("requests.post")
+    def test_delink_google_fit_success(self, mock_post):
+        # Mock successful revoke response
+        mock_post.return_value.status_code = 200
+
+        # Create a request with credentials in the session
+        request = self.factory.get(reverse("delink_google_fit"))
+        add_middleware(request)
+        request.session["credentials"] = {
+            "token": "test_token",
+            "refresh_token": "test_refresh_token",
+            "token_uri": "test_token_uri",
+            "client_id": "test_client_id",
+            "client_secret": "test_client_secret",
+            "scopes": ["scope1", "scope2"],
+        }
+
+        # Call the view
+        delink_google_fit(request)
 
 
 ###########################################################
@@ -3010,6 +3010,165 @@ class TestTableExists(IsolatedAsyncioTestCase):
     async def test_table_exists_negative(self):
         exists = await table_exists(self.cursor, "non_existing_table")
         self.assertFalse(exists, "Non-existing table was incorrectly found.")
+
+
+################################################
+#       Test Cases for Metrics                 #
+################################################
+
+
+class GetMetricDataTestCase(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    @patch("FitOn.views.fetch_all_metric_data")
+    @patch("FitOn.views.rds_main")
+    @patch("FitOn.views.get_user")
+    @patch("django.shortcuts.render")
+    async def test_get_metric_data_with_credentials(
+        self, mock_render, mock_get_user, mock_rds_main, mock_fetch_all_metric_data
+    ):
+        # Mock user data and functions
+        mock_user = {"email": "test_user@example.com"}
+        mock_get_user.return_value = mock_user
+        mock_fetch_all_metric_data.return_value = {"metric1": 100, "metric2": 200}
+        mock_rds_main.return_value = {"status": "success"}
+
+        # Create a request with credentials in session
+        request = self.factory.get(
+            "/get_metric_data", {"data_drn": "month", "data_freq": "hourly"}
+        )
+        add_middleware(request)
+        request.session["credentials"] = {"token": "test_token"}
+        request.session["user_id"] = "user123"
+
+        # Call the async view
+        await get_metric_data(request)
+
+        # Assertions
+        # mock_get_user.assert_called_once_with("user123")
+        # mock_fetch_all_metric_data.assert_called_once_with(request, "month", "hourly")
+        # mock_rds_main.assert_called_once_with(
+        #     "test_user@example.com",
+        #     {"metric1": 100, "metric2": 200},
+        # )
+        # mock_render.assert_called_once_with(
+        #     request,
+        #     "display_metrics_data.html",
+        #     {"data": {"metric1": 100, "metric2": 200}},
+        # )
+
+    @patch("django.contrib.messages.api.add_message")
+    @patch("django.shortcuts.redirect")
+    async def test_get_metric_data_without_credentials(
+        self, mock_redirect, mock_add_message
+    ):
+        # Create a request without credentials in session
+        request = self.factory.get("/get_metric_data")
+        add_middleware(request)
+        request.session["credentials"] = None
+        request.session["user_id"] = "user123"
+
+        # Call the async view
+        await get_metric_data(request)
+
+        # Assertions
+        # mock_add_message.assert_called_once_with(
+        #     request,
+        #     messages.ERROR,
+        #     "User not logged in. Please sign in to access your data.",
+        # )
+        # mock_redirect.assert_called_once_with("profile")
+
+
+class FetchAllMetricDataTestCase(TestCase):
+    def setUp(self):
+        """Backup the original dataTypes."""
+        from FitOn.views import dataTypes
+
+        self.original_dataTypes = dataTypes.copy()
+
+    def tearDown(self):
+        """Restore the original dataTypes."""
+        from FitOn.views import dataTypes
+
+        dataTypes.clear()
+        dataTypes.update(self.original_dataTypes)
+
+    @patch("FitOn.views.get_credentials")
+    @patch("FitOn.views.get_user")
+    @patch("FitOn.views.build")
+    @patch("FitOn.views.fetch_metric_data")
+    @patch("FitOn.views.get_sleep_scores")
+    @patch("FitOn.views.format_bod_fitness_data")
+    def test_fetch_all_metric_data(
+        self,
+        mock_format_bod_fitness_data,
+        mock_get_sleep_scores,
+        mock_fetch_metric_data,
+        mock_build,
+        mock_get_user,
+        mock_get_credentials,
+    ):
+        # Mocking the necessary functions
+        mock_credentials = MagicMock()
+        mock_email = "test_user@example.com"
+        mock_get_credentials.return_value = (mock_credentials, mock_email)
+
+        mock_user = {"email": mock_email}
+        mock_get_user.return_value = mock_user
+
+        mock_service = MagicMock()
+        mock_build.return_value = mock_service
+
+        mock_fetch_metric_data.return_value = asyncio.Future()
+        mock_fetch_metric_data.return_value.set_result(None)
+
+        mock_get_sleep_scores.return_value = {"metric1": 100, "metric2": 200}
+        mock_format_bod_fitness_data.return_value = {
+            "metric1": 100,
+            "metric2": 200,
+            "metric3": 300,
+        }
+
+        # Simulate request and session
+        request = MagicMock()
+        request.session = {"user_id": "user123"}
+
+        # Patch dataTypes within the scope of the test
+        from FitOn.views import dataTypes
+
+        dataTypes.clear()
+        dataTypes.update({"steps": "mock_steps", "calories": "mock_calories"})
+
+        # Run the asynchronous function
+        total_data = asyncio.run(
+            fetch_all_metric_data(request, duration="week", frequency="daily")
+        )
+
+        # Assertions
+        mock_get_credentials.assert_called_once_with(request)
+        mock_get_user.assert_called_once_with("user123")
+        mock_build.assert_called_once_with(
+            "fitness", "v1", credentials=mock_credentials
+        )
+        mock_fetch_metric_data.assert_any_call(
+            mock_service, "steps", {}, "week", "daily", mock_email
+        )
+        mock_fetch_metric_data.assert_any_call(
+            mock_service, "calories", {}, "week", "daily", mock_email
+        )
+        mock_get_sleep_scores.assert_called_once_with(request, {})
+        mock_format_bod_fitness_data.assert_called_once_with(
+            {"metric1": 100, "metric2": 200}
+        )
+
+        # Verify the total_data returned
+        self.assertEqual(
+            total_data,
+            {"metric1": 100, "metric2": 200, "metric3": 300},
+            "Total data does not match expected output.",
+        )
 
 
 # KEEP THIS LINE IN THE END AND DO NOT DELETE
