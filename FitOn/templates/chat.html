@@ -355,16 +355,20 @@
                 chatSocket.close();
             }
 
-            chatSocket = new WebSocket("ws://" + window.location.host + "/ws/chat/" + roomId + "/");
+            //chatSocket = new WebSocket("ws://" + window.location.host + "/ws/chat/" + roomId + "/");
             // chatSocket = new WebSocket(
             //     (window.location.protocol === "https:" ? "wss://" : "ws://") + 
             //     window.location.host + 
             //     "/ws/chat/" + roomId + "/"
             // );
+            chatSocket = new WebSocket(
+                "{% if WEBSOCKET_PROTOCOL == 'wss://' %}wss://{% else %}ws://{% endif %}" + window.location.host + "/ws/chat/" + roomId + "/"
+            );
 
             chatSocket.onopen = function () {
                 console.log("WebSocket connection established");
             };
+
         }
 
         function clearUnreadBadge(chatElement) {

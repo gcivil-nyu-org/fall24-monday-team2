@@ -282,17 +282,14 @@ body {
     white-space: nowrap; /* Prevent text wrapping */
     text-overflow: ellipsis; /* Add ellipsis for overflowed text */
 }
-.chatlist .block .details .listHead
-{
+.chatlist .block .details .listHead {
     display: flex;
-    justify-content: space-between;
-    margin-bottom: 5px;
+    align-items: center;
+    justify-content: flex-start; /* Ensure all content aligns to the left */
 }
-.chatlist .block .details .listHead h4
-{
-    font-size: 1.1em;
-    font-weight: 600;
-    color: #111;
+.chatlist .block .details .listHead h4 {
+    margin-left: 10px; /* Add margin to create space between the dot and username */
+    white-space: nowrap;
 }
 .chatlist .block .details .listHead .time
 {
@@ -629,7 +626,7 @@ body {
     height: 8px;
     background-color: blue; /* Blue color for unread badge */
     border-radius: 50%; /* Makes it a circle */
-    margin-left: 10px; 
+    margin-right: 5px; 
 }
 .new-messages {
     font-size: 0.8em;

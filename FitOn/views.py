@@ -2845,9 +2845,9 @@ def search_users(request):
             for user in all_users
             if query in user["username"].lower()
         ]
-        print(f"Search query: {query}")
-        print(f"Matching users: {matching_users}")
-        print(f"Matching users after filtering: {matching_users}")
+        # print(f"Search query: {query}")
+        # print(f"Matching users: {matching_users}")
+        # print(f"Matching users after filtering: {matching_users}")
         return JsonResponse(matching_users, safe=False)
     except Exception as e:
         print(f"Error in search_users function: {e}")
