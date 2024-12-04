@@ -236,9 +236,19 @@ async def insert_into_pressure_table(
         print(f"Error: {e}")
 
 
-# Main function to insert data into all tables
-async def insert_into_tables(email, total_data):
+async def insert_into_tables(email, total_data, table_names=None):
     conn = await create_connection()
+    # Default table names
+    default_table_names = {
+        "steps": "STEPS",
+        "heartRate": "HEART_RATE",
+        "restingHeartRate": "RESTING_HEART_RATE",
+        "oxygen": "OXYGEN",
+        "glucose": "GLUCOSE",
+        "pressure": "PRESSURE",
+    }
+    table_names = table_names or default_table_names
+
     for data_type, data_list in total_data.items():
         for entry in data_list.values():
             for d in entry:
@@ -247,29 +257,30 @@ async def insert_into_tables(email, total_data):
                 start_time = d.get("start")
                 end_time = d.get("end")
                 count = d.get("count")
+                table_name = table_names.get(data_type)
                 if data_type == "steps":
                     await insert_into_steps_table(
-                        conn, email, start_time, end_time, count, "STEPS"
+                        conn, email, start_time, end_time, count, table_name
                     )
                 elif data_type == "heartRate":
                     await insert_into_heartRate_table(
-                        conn, email, start_time, end_time, count, "HEART_RATE"
+                        conn, email, start_time, end_time, count, table_name
                     )
                 elif data_type == "restingHeartRate":
                     await insert_into_restingHeartRate_table(
-                        conn, email, start_time, end_time, count, "RESTING_HEART_RATE"
+                        conn, email, start_time, end_time, count, table_name
                     )
                 elif data_type == "oxygen":
                     await insert_into_oxygen_table(
-                        conn, email, start_time, end_time, count, "OXYGEN"
+                        conn, email, start_time, end_time, count, table_name
                     )
                 elif data_type == "glucose":
                     await insert_into_glucose_table(
-                        conn, email, start_time, end_time, count, "GLUCOSE"
+                        conn, email, start_time, end_time, count, table_name
                     )
                 elif data_type == "pressure":
                     await insert_into_pressure_table(
-                        conn, email, start_time, end_time, count, "PRESSURE"
+                        conn, email, start_time, end_time, count, table_name
                     )
     conn.close()
 

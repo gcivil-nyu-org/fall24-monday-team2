@@ -36,6 +36,8 @@ from FitOn.rds import (
     rds_main,
     fetch_user_data,
     table_exists,
+    insert_into_tables,
+    show_tables,
 )
 import aiomysql
 from FitOn.rds import create_table, insert_data
@@ -2387,73 +2389,8 @@ class TestInsertIntoAllTables(IsolatedAsyncioTestCase):
         await create_glucose_table(self.conn, table_names["glucose"])
         await create_pressure_table(self.conn, table_names["pressure"])
 
-        # Modify the main function to accept test-specific table names
-        async def insert_into_tables_test(email, total_data, table_names):
-            for data_type, data_list in total_data.items():
-                for entry in data_list.values():
-                    for d in entry:
-                        if isinstance(d, tuple):
-                            continue
-                        start_time = d.get("start")
-                        end_time = d.get("end")
-                        count = d.get("count")
-                        if data_type == "steps":
-                            await insert_into_steps_table(
-                                self.conn,
-                                email,
-                                start_time,
-                                end_time,
-                                count,
-                                table_names["steps"],
-                            )
-                        elif data_type == "heartRate":
-                            await insert_into_heartRate_table(
-                                self.conn,
-                                email,
-                                start_time,
-                                end_time,
-                                count,
-                                table_names["heartRate"],
-                            )
-                        elif data_type == "restingHeartRate":
-                            await insert_into_restingHeartRate_table(
-                                self.conn,
-                                email,
-                                start_time,
-                                end_time,
-                                count,
-                                table_names["restingHeartRate"],
-                            )
-                        elif data_type == "oxygen":
-                            await insert_into_oxygen_table(
-                                self.conn,
-                                email,
-                                start_time,
-                                end_time,
-                                count,
-                                table_names["oxygen"],
-                            )
-                        elif data_type == "glucose":
-                            await insert_into_glucose_table(
-                                self.conn,
-                                email,
-                                start_time,
-                                end_time,
-                                count,
-                                table_names["glucose"],
-                            )
-                        elif data_type == "pressure":
-                            await insert_into_pressure_table(
-                                self.conn,
-                                email,
-                                start_time,
-                                end_time,
-                                count,
-                                table_names["pressure"],
-                            )
-
-        # Call the modified main function
-        await insert_into_tables_test(email, total_data, table_names)
+        # Call the original function with test-specific table names
+        await insert_into_tables(email, total_data, table_names)
 
         # Verify data was inserted into all test-specific tables
         async with self.conn.cursor() as cursor:
@@ -2809,20 +2746,8 @@ class TestShowTables(IsolatedAsyncioTestCase):
         captured_output = io.StringIO()
         sys.stdout = captured_output
 
-        # Test-specific show_tables logic
-        async def show_tables_test():
-            try:
-                await show_table(self.conn, self.table_names["steps"])
-                await show_table(self.conn, self.table_names["heartRate"])
-                await show_table(self.conn, self.table_names["restingHeartRate"])
-                await show_table(self.conn, self.table_names["oxygen"])
-                await show_table(self.conn, self.table_names["glucose"])
-                await show_table(self.conn, self.table_names["pressure"])
-            except Exception as e:
-                print(f"Error during table display: {e}")
-
-        # Execute the function
-        await show_tables_test()
+        # Call the actual show_tables function
+        await show_tables()
 
         # Restore stdout
         sys.stdout = sys.__stdout__
