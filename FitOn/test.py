@@ -3080,6 +3080,7 @@ class TestRDSMain(IsolatedAsyncioTestCase):
                         record["count"], expected["count"], f"{key} count mismatch."
                     )
 
+
 class TestTableExists(IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """Set up database connection and create test tables."""
@@ -3125,13 +3126,18 @@ class TestTableExists(IsolatedAsyncioTestCase):
         async with self.conn.cursor() as cursor:
             for table_name in self.test_tables:
                 exists = await self.table_exists(cursor, table_name)
-                self.assertTrue(exists, f"Table '{table_name}' should exist but was not found.")
+                self.assertTrue(
+                    exists, f"Table '{table_name}' should exist but was not found."
+                )
 
     async def test_table_exists_negative(self):
         """Test that the function correctly identifies non-existing tables."""
         async with self.conn.cursor() as cursor:
             exists = await self.table_exists(cursor, self.non_existing_table)
-            self.assertFalse(exists, f"Table '{self.non_existing_table}' should not exist but was found.")
+            self.assertFalse(
+                exists,
+                f"Table '{self.non_existing_table}' should not exist but was found.",
+            )
 
     async def test_table_exists_empty_string(self):
         """Test that the function handles an empty table name gracefully."""
