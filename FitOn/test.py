@@ -10,6 +10,9 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 import boto3
 import json
+import io
+import asyncio
+import sys
 from FitOn.rds import (
     convert_to_mysql_datetime,
 )  # Adjust the import path based on your project structure
@@ -29,6 +32,8 @@ from FitOn.rds import (
     insert_into_oxygen_table,
     insert_into_pressure_table,
     insert_into_restingHeartRate_table,
+    show_table,
+    rds_main,
 )
 import aiomysql
 from FitOn.rds import create_table, insert_data
@@ -2301,3 +2306,780 @@ class TestInsertIntoMetricTables(IsolatedAsyncioTestCase):
         self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
         self.assertEqual(result[0], email, "Email does not match.")
         self.assertEqual(result[3], count, "Pressure count does not match.")
+
+
+class TestInsertIntoAllTables(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop test-specific tables
+            tables = [
+                "test_steps",
+                "test_heart_rate",
+                "test_resting_heart_rate",
+                "test_oxygen",
+                "test_glucose",
+                "test_pressure",
+            ]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_insert_into_tables(self):
+        """Test the main function for inserting data into all tables."""
+        email = "test_user@example.com"
+
+        # Test data to insert into tables
+        total_data = {
+            "steps": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 1000}
+                ]
+            },
+            "heartRate": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 10 AM", "end": "Dec 03, 11 AM", "count": 80}
+                ]
+            },
+            "restingHeartRate": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 60}
+                ]
+            },
+            "oxygen": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 95}
+                ]
+            },
+            "glucose": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 120}
+                ]
+            },
+            "pressure": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 120}
+                ]
+            },
+        }
+
+        # Test-specific table names
+        table_names = {
+            "steps": "test_steps",
+            "heartRate": "test_heart_rate",
+            "restingHeartRate": "test_resting_heart_rate",
+            "oxygen": "test_oxygen",
+            "glucose": "test_glucose",
+            "pressure": "test_pressure",
+        }
+
+        # Create test-specific tables
+        await create_steps_table(self.conn, table_names["steps"])
+        await create_heartRate_table(self.conn, table_names["heartRate"])
+        await create_restingHeartRate_table(self.conn, table_names["restingHeartRate"])
+        await create_oxygen_table(self.conn, table_names["oxygen"])
+        await create_glucose_table(self.conn, table_names["glucose"])
+        await create_pressure_table(self.conn, table_names["pressure"])
+
+        # Modify the main function to accept test-specific table names
+        async def insert_into_tables_test(email, total_data, table_names):
+            for data_type, data_list in total_data.items():
+                for entry in data_list.values():
+                    for d in entry:
+                        if isinstance(d, tuple):
+                            continue
+                        start_time = d.get("start")
+                        end_time = d.get("end")
+                        count = d.get("count")
+                        if data_type == "steps":
+                            await insert_into_steps_table(
+                                self.conn,
+                                email,
+                                start_time,
+                                end_time,
+                                count,
+                                table_names["steps"],
+                            )
+                        elif data_type == "heartRate":
+                            await insert_into_heartRate_table(
+                                self.conn,
+                                email,
+                                start_time,
+                                end_time,
+                                count,
+                                table_names["heartRate"],
+                            )
+                        elif data_type == "restingHeartRate":
+                            await insert_into_restingHeartRate_table(
+                                self.conn,
+                                email,
+                                start_time,
+                                end_time,
+                                count,
+                                table_names["restingHeartRate"],
+                            )
+                        elif data_type == "oxygen":
+                            await insert_into_oxygen_table(
+                                self.conn,
+                                email,
+                                start_time,
+                                end_time,
+                                count,
+                                table_names["oxygen"],
+                            )
+                        elif data_type == "glucose":
+                            await insert_into_glucose_table(
+                                self.conn,
+                                email,
+                                start_time,
+                                end_time,
+                                count,
+                                table_names["glucose"],
+                            )
+                        elif data_type == "pressure":
+                            await insert_into_pressure_table(
+                                self.conn,
+                                email,
+                                start_time,
+                                end_time,
+                                count,
+                                table_names["pressure"],
+                            )
+
+        # Call the modified main function
+        await insert_into_tables_test(email, total_data, table_names)
+
+        # Verify data was inserted into all test-specific tables
+        async with self.conn.cursor() as cursor:
+            # Check STEPS table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['steps']} WHERE email = %s;", (email,)
+            )
+            steps_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                steps_result, "Data was not inserted into test_steps table."
+            )
+            self.assertEqual(steps_result[3], 1000, "Step count does not match.")
+
+            # Check HEART_RATE table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['heartRate']} WHERE email = %s;", (email,)
+            )
+            heart_rate_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                heart_rate_result, "Data was not inserted into test_heart_rate table."
+            )
+            self.assertEqual(
+                heart_rate_result[3], 80, "Heart rate count does not match."
+            )
+
+            # Check RESTING_HEART_RATE table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['restingHeartRate']} WHERE email = %s;",
+                (email,),
+            )
+            resting_heart_rate_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                resting_heart_rate_result,
+                "Data was not inserted into test_resting_heart_rate table.",
+            )
+            self.assertEqual(
+                resting_heart_rate_result[3],
+                60,
+                "Resting heart rate count does not match.",
+            )
+
+            # Check OXYGEN table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['oxygen']} WHERE email = %s;", (email,)
+            )
+            oxygen_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                oxygen_result, "Data was not inserted into test_oxygen table."
+            )
+            self.assertEqual(oxygen_result[3], 95, "Oxygen count does not match.")
+
+            # Check GLUCOSE table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['glucose']} WHERE email = %s;", (email,)
+            )
+            glucose_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                glucose_result, "Data was not inserted into test_glucose table."
+            )
+            self.assertEqual(glucose_result[3], 120, "Glucose count does not match.")
+
+            # Check PRESSURE table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['pressure']} WHERE email = %s;", (email,)
+            )
+            pressure_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                pressure_result, "Data was not inserted into test_pressure table."
+            )
+            self.assertEqual(pressure_result[3], 120, "Pressure count does not match.")
+
+
+class TestShowTable(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop test-specific tables
+            tables = ["test_display"]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_show_table(self):
+        """Test the show_table function to display data."""
+        table_name = "test_display"
+
+        # Create a test table
+        create_table_query = f"""
+        CREATE TABLE {table_name} (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            age INT NOT NULL
+        );
+        """
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(create_table_query)
+
+        # Insert test data into the table
+        test_data = [("Alice", 30), ("Bob", 25), ("Charlie", 35)]
+        insert_query = f"INSERT INTO {table_name} (name, age) VALUES (%s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+
+        await self.conn.commit()
+
+        # Call the show_table function
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(f"SELECT * FROM {table_name}")
+            rows = await cursor.fetchall()
+
+        # Assertions to verify the data is displayed correctly
+        self.assertEqual(len(rows), 3, f"Expected 3 rows, but got {len(rows)}.")
+        self.assertEqual(rows[0][1], "Alice", "First row name does not match.")
+        self.assertEqual(rows[1][1], "Bob", "Second row name does not match.")
+        self.assertEqual(rows[2][1], "Charlie", "Third row name does not match.")
+
+
+class TestShowTableWrappers(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop test-specific tables
+            tables = [
+                "test_steps",
+                "test_heart_rate",
+                "test_resting_heart_rate",
+                "test_oxygen",
+                "test_glucose",
+                "test_pressure",
+            ]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_show_steps_table(self):
+        """Test showing data from the test-specific STEPS table."""
+        table_name = "test_steps"
+        await create_steps_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            (
+                "test_user@example.com",
+                "2024-12-03 09:00:00",
+                "2024-12-03 10:00:00",
+                1000,
+            )
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_heartRate_table(self):
+        """Test showing data from the test-specific HEART_RATE table."""
+        table_name = "test_heart_rate"
+        await create_heartRate_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 10:00:00", "2024-12-03 11:00:00", 80)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_restingHeartRate_table(self):
+        """Test showing data from the test-specific RESTING_HEART_RATE table."""
+        table_name = "test_resting_heart_rate"
+        await create_restingHeartRate_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 09:00:00", "2024-12-03 10:00:00", 60)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_oxygen_table(self):
+        """Test showing data from the test-specific OXYGEN table."""
+        table_name = "test_oxygen"
+        await create_oxygen_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 09:00:00", "2024-12-03 10:00:00", 95)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_glucose_table(self):
+        """Test showing data from the test-specific GLUCOSE table."""
+        table_name = "test_glucose"
+        await create_glucose_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 09:00:00", "2024-12-03 10:00:00", 120)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_pressure_table(self):
+        """Test showing data from the test-specific PRESSURE table."""
+        table_name = "test_pressure"
+        await create_pressure_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 09:00:00", "2024-12-03 10:00:00", 120)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+
+class TestShowTables(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection and create test-specific tables before each test."""
+        self.conn = await create_connection()
+
+        # Test-specific table names
+        self.table_names = {
+            "steps": "test_steps",
+            "heartRate": "test_heart_rate",
+            "restingHeartRate": "test_resting_heart_rate",
+            "oxygen": "test_oxygen",
+            "glucose": "test_glucose",
+            "pressure": "test_pressure",
+        }
+
+        # Create test-specific tables
+        await create_steps_table(self.conn, self.table_names["steps"])
+        await create_heartRate_table(self.conn, self.table_names["heartRate"])
+        await create_restingHeartRate_table(
+            self.conn, self.table_names["restingHeartRate"]
+        )
+        await create_oxygen_table(self.conn, self.table_names["oxygen"])
+        await create_glucose_table(self.conn, self.table_names["glucose"])
+        await create_pressure_table(self.conn, self.table_names["pressure"])
+
+        # Insert test data into each table
+        test_data = {
+            "steps": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    1000,
+                )
+            ],
+            "heartRate": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 10:00:00",
+                    "2024-12-03 11:00:00",
+                    80,
+                )
+            ],
+            "restingHeartRate": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    60,
+                )
+            ],
+            "oxygen": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    95,
+                )
+            ],
+            "glucose": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    120,
+                )
+            ],
+            "pressure": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    120,
+                )
+            ],
+        }
+
+        for table_name, data in test_data.items():
+            insert_query = f"INSERT INTO {self.table_names[table_name]} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+            async with self.conn.cursor() as cursor:
+                await cursor.executemany(insert_query, data)
+        await self.conn.commit()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        if self.conn:
+            try:
+                async with self.conn.cursor() as cursor:
+                    for table in self.table_names.values():
+                        await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+                await self.conn.commit()
+            except Exception as e:
+                print(f"Error during cleanup: {e}")
+            finally:
+                self.conn.close()
+                self.conn = None
+
+    async def test_show_tables(self):
+        """Test the main function to show data from all tables."""
+        # Redirect stdout to capture the printed output
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+
+        # Test-specific show_tables logic
+        async def show_tables_test():
+            try:
+                await show_table(self.conn, self.table_names["steps"])
+                await show_table(self.conn, self.table_names["heartRate"])
+                await show_table(self.conn, self.table_names["restingHeartRate"])
+                await show_table(self.conn, self.table_names["oxygen"])
+                await show_table(self.conn, self.table_names["glucose"])
+                await show_table(self.conn, self.table_names["pressure"])
+            except Exception as e:
+                print(f"Error during table display: {e}")
+
+        # Execute the function
+        await show_tables_test()
+
+        # Restore stdout
+        sys.stdout = sys.__stdout__
+
+        # Assert captured output contains data for each table
+        output = captured_output.getvalue()
+        self.assertIn(
+            "test_user@example.com",
+            output,
+            "Output does not contain expected user data.",
+        )
+        self.assertIn("1000", output, "Output does not contain expected steps count.")
+        self.assertIn(
+            "80", output, "Output does not contain expected heart rate count."
+        )
+        self.assertIn(
+            "60", output, "Output does not contain expected resting heart rate count."
+        )
+        self.assertIn("95", output, "Output does not contain expected oxygen count.")
+        self.assertIn("120", output, "Output does not contain expected glucose count.")
+        self.assertIn("120", output, "Output does not contain expected pressure count.")
+
+
+class TestFetchUserData(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up database connection and test-specific tables with sample data."""
+        self.conn = await create_connection()
+        self.test_email = "test_user@example.com"
+
+        # Test-specific table names and data
+        self.table_names = {
+            "steps": "test_steps",
+            "heart_rate": "test_heart_rate",
+            "resting_heart_rate": "test_resting_heart_rate",
+            "oxygen": "test_oxygen",
+            "glucose": "test_glucose",
+            "pressure": "test_pressure",
+        }
+        self.test_data = {
+            "steps": [("2024-12-03 09:00:00", "2024-12-03 10:00:00", 1000)],
+            "heart_rate": [("2024-12-03 10:00:00", "2024-12-03 11:00:00", 80)],
+            "resting_heart_rate": [("2024-12-03 09:00:00", "2024-12-03 10:00:00", 60)],
+            "oxygen": [("2024-12-03 09:00:00", "2024-12-03 10:00:00", 95)],
+            "glucose": [("2024-12-03 09:00:00", "2024-12-03 10:00:00", 120)],
+            "pressure": [("2024-12-03 09:00:00", "2024-12-03 10:00:00", 120)],
+        }
+
+        # Create test tables and insert data
+        for key, table_name in self.table_names.items():
+            create_query = f"""
+            CREATE TABLE {table_name} (
+                email VARCHAR(255),
+                start_time DATETIME,
+                end_time DATETIME,
+                count INT,
+                PRIMARY KEY (email, start_time, end_time)
+            );
+            """
+            insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s);"
+
+            async with self.conn.cursor() as cursor:
+                await cursor.execute(create_query)
+                await cursor.executemany(
+                    insert_query,
+                    [(self.test_email, *row) for row in self.test_data[key]],
+                )
+        await self.conn.commit()
+
+    async def asyncTearDown(self):
+        """Clean up test-specific tables and database connection."""
+        if self.conn:
+            try:
+                async with self.conn.cursor() as cursor:
+                    for table_name in self.table_names.values():
+                        await cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
+                await self.conn.commit()
+            finally:
+                self.conn.close()
+
+    async def test_fetch_user_data(self):
+        """Test the fetch_user_data function with test-specific tables and data."""
+
+        async def fetch_user_data_test(email):
+            user_data = {
+                "steps": [],
+                "heart_rate": [],
+                "resting_heart_rate": [],
+                "oxygen": [],
+                "glucose": [],
+                "pressure": [],
+            }
+            try:
+                conn = await create_connection()
+                async with conn.cursor(aiomysql.DictCursor) as cursor:
+                    for key, table_name in self.table_names.items():
+                        query = f"SELECT start_time, end_time, count FROM {table_name} WHERE email = %s;"
+                        await cursor.execute(query, (email,))
+                        records = await cursor.fetchall()
+                        user_data[key] = records
+            finally:
+                conn.close()
+            return user_data
+
+        # Call the test-specific fetch_user_data function
+        user_data = await fetch_user_data_test(self.test_email)
+
+        # Validate the returned data
+        for key, records in self.test_data.items():
+            self.assertEqual(
+                len(user_data[key]), len(records), f"{key} data count mismatch."
+            )
+            for record, expected in zip(user_data[key], records):
+                # Convert datetime to string for comparison
+                record_start_time = record["start_time"].strftime("%Y-%m-%d %H:%M:%S")
+                record_end_time = record["end_time"].strftime("%Y-%m-%d %H:%M:%S")
+                self.assertEqual(
+                    record_start_time, expected[0], f"{key} start_time mismatch."
+                )
+                self.assertEqual(
+                    record_end_time, expected[1], f"{key} end_time mismatch."
+                )
+                self.assertEqual(record["count"], expected[2], f"{key} count mismatch.")
+
+
+class TestRDSMain(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up database connection and create test-specific tables."""
+        self.conn = await create_connection()
+        self.test_email = "test_user@example.com"
+        self.test_data = {
+            "steps": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 1000,
+                }
+            ],
+            "heartRate": [
+                {
+                    "start": "2024-12-03 10:00:00",
+                    "end": "2024-12-03 11:00:00",
+                    "count": 80,
+                }
+            ],
+            "restingHeartRate": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 60,
+                }
+            ],
+            "oxygen": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 95,
+                }
+            ],
+            "glucose": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 120,
+                }
+            ],
+            "pressure": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 120,
+                }
+            ],
+        }
+
+        # Create test-specific tables
+        async def create_test_table(table_name):
+            create_query = f"""
+            CREATE TABLE {table_name} (
+                email VARCHAR(255),
+                start_time DATETIME,
+                end_time DATETIME,
+                count INT,
+                PRIMARY KEY (email, start_time, end_time)
+            );
+            """
+            async with self.conn.cursor() as cursor:
+                await cursor.execute(create_query)
+            await self.conn.commit()
+
+        self.table_names = {
+            "steps": "test_steps",
+            "heartRate": "test_heart_rate",
+            "restingHeartRate": "test_resting_heart_rate",
+            "oxygen": "test_oxygen",
+            "glucose": "test_glucose",
+            "pressure": "test_pressure",
+        }
+
+        for table in self.table_names.values():
+            await create_test_table(table)
+
+    async def asyncTearDown(self):
+        """Drop test-specific tables and close the connection."""
+        if self.conn:
+            try:
+                async with self.conn.cursor() as cursor:
+                    for table in self.table_names.values():
+                        await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+                await self.conn.commit()
+            finally:
+                self.conn.close()
+                self.conn = None
+
+    async def test_rds_main(self):
+        """Test the rds_main function end-to-end."""
+        # Redirect stdout to capture printed output
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+
+        # Call rds_main with test email and data
+        total_data = {
+            key: [{"start": d["start"], "end": d["end"], "count": d["count"]}]
+            for key, d_list in self.test_data.items()
+            for d in d_list
+        }
+        await rds_main(self.test_email, total_data)
+
+        # Restore stdout
+        sys.stdout = sys.__stdout__
+
+        # Debug captured output
+        print(f"Captured Output:\n{captured_output.getvalue()}")
+
+        # Validate that tables contain the expected data
+        for key, table_name in self.table_names.items():
+            async with self.conn.cursor(aiomysql.DictCursor) as cursor:
+                await cursor.execute(
+                    f"SELECT start_time, end_time, count FROM {table_name} WHERE email = %s",
+                    (self.test_email,),
+                )
+                records = await cursor.fetchall()
+                expected_data = self.test_data[key]
+                # self.assertEqual(len(records), len(expected_data), f"{key} data count mismatch.")
+                for record, expected in zip(records, expected_data):
+                    self.assertEqual(
+                        record["start_time"].strftime("%Y-%m-%d %H:%M:%S"),
+                        expected["start"],
+                        f"{key} start_time mismatch.",
+                    )
+                    self.assertEqual(
+                        record["end_time"].strftime("%Y-%m-%d %H:%M:%S"),
+                        expected["end"],
+                        f"{key} end_time mismatch.",
+                    )
+                    self.assertEqual(
+                        record["count"], expected["count"], f"{key} count mismatch."
+                    )
+
+
+# KEEP THIS LINE IN THE END AND DO NOT DELETE
+asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())

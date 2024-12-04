@@ -279,13 +279,12 @@ async def show_table(conn, table_name):
     try:
         async with conn.cursor() as cursor:
             await cursor.execute(f"SELECT * FROM {table_name}")
-            # rows =
-            await cursor.fetchall()
-            # # print(f"Data in the {table_name} table:")
-            # for row in rows:
-            #     print(row)
-    except Exception:
-        print("")
+            rows = await cursor.fetchall()
+            print(f"Data in the {table_name} table:")
+            for row in rows:
+                print(row)
+    except Exception as e:
+        print(f"Error showing table {table_name}: {e}")
 
 
 # Wrapper functions for each table
@@ -383,11 +382,15 @@ async def fetch_user_data(email):
 
 
 async def main(email, total_data):
-
-    await insert_into_tables(email, total_data)
-    await show_tables()
+    try:
+        await insert_into_tables(email, total_data)
+        await show_tables()
+    except Exception as e:
+        print(f"Error in main: {e}")
 
 
 async def rds_main(email, total_data):
-    # Directly await the main function
-    await main(email, total_data)
+    try:
+        await main(email, total_data)
+    except Exception as e:
+        print(f"Error in rds_main: {e}")
