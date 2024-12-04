@@ -3080,6 +3080,71 @@ class TestRDSMain(IsolatedAsyncioTestCase):
                         record["count"], expected["count"], f"{key} count mismatch."
                     )
 
+class TestTableExists(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up database connection and create test tables."""
+        self.conn = await create_connection()
+        self.test_tables = ["existing_table_1", "existing_table_2"]
+        self.non_existing_table = "non_existing_table"
+
+        async with self.conn.cursor() as cursor:
+            # Create test tables
+            for table_name in self.test_tables:
+                create_query = f"""
+                CREATE TABLE {table_name} (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(255)
+                );
+                """
+                await cursor.execute(create_query)
+        await self.conn.commit()
+
+    async def asyncTearDown(self):
+        """Clean up test-specific tables and database connection."""
+        if self.conn:
+            try:
+                async with self.conn.cursor() as cursor:
+                    for table_name in self.test_tables:
+                        await cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
+                await self.conn.commit()
+            finally:
+                self.conn.close()
+
+    async def table_exists(self, cursor, table_name):
+        """The function under test."""
+        try:
+            await cursor.execute("SHOW TABLES LIKE %s", (table_name,))
+            result = await cursor.fetchone()
+            return result is not None
+        except Exception as e:
+            print(f"Error checking table existence for {table_name}: {e}")
+            return False
+
+    async def test_table_exists_positive(self):
+        """Test that the function correctly identifies existing tables."""
+        async with self.conn.cursor() as cursor:
+            for table_name in self.test_tables:
+                exists = await self.table_exists(cursor, table_name)
+                self.assertTrue(exists, f"Table '{table_name}' should exist but was not found.")
+
+    async def test_table_exists_negative(self):
+        """Test that the function correctly identifies non-existing tables."""
+        async with self.conn.cursor() as cursor:
+            exists = await self.table_exists(cursor, self.non_existing_table)
+            self.assertFalse(exists, f"Table '{self.non_existing_table}' should not exist but was found.")
+
+    async def test_table_exists_empty_string(self):
+        """Test that the function handles an empty table name gracefully."""
+        async with self.conn.cursor() as cursor:
+            exists = await self.table_exists(cursor, "")
+            self.assertFalse(exists, "Empty table name should return False.")
+
+    async def test_table_exists_invalid_name(self):
+        """Test that the function handles invalid table names gracefully."""
+        async with self.conn.cursor() as cursor:
+            exists = await self.table_exists(cursor, "invalid!table#name")
+            self.assertFalse(exists, "Invalid table name should return False.")
+
 
 # KEEP THIS LINE IN THE END AND DO NOT DELETE
 asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
