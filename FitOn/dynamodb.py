@@ -247,7 +247,7 @@ def update_reset_request_time(user_id):
 
         # Insert a new entry or update the existing reset request time
         password_reset_table.put_item(
-            Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
+            Item={"user_id": user_id, "last_request_time": datetime.now(tz).isoformat()}
         )
         print(f"Reset request time updated for user_id '{user_id}'.")
     except Exception as e:
@@ -1212,6 +1212,89 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
         # print(f"Successfully reported comment {post_id} in thread {thread_id}")
     except Exception as e:
         print(f"Error reporting comment: {e}")
+
+
+def mark_user_as_warned_thread(thread_id, user_id):
+    try:
+        print(f"Fetching user with ID: {user_id}")
+        response = users_table.get_item(Key={"user_id": user_id})
+        user = response.get("Item", {})
+
+        if not user:
+            print(f"User with ID {user_id} not found in users_table.")
+            raise ValueError(f"User with ID {user_id} not found.")
+
+        print(f"User fetched successfully: {user}")
+
+        warning_reason = f"Warned for behavior in thread {thread_id}"
+
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_warned = :warned, warning_reason = :reason",
+            ExpressionAttributeValues={
+                ":warned": True,
+                ":reason": warning_reason,
+            },
+        )
+        print(f"User {user_id} has been warned for comment {thread_id}.")
+    except Exception as e:
+        print(f"Error warning user {user_id} for comment {thread_id}: {e}")
+        raise
+
+
+def mark_user_as_warned_comment(post_id, user_id):
+    try:
+        print(f"Fetching user with ID: {user_id}")
+        response = users_table.get_item(Key={"user_id": user_id})
+        user = response.get("Item", {})
+
+        if not user:
+            print(f"User with ID {user_id} not found in users_table.")
+            raise ValueError(f"User with ID {user_id} not found.")
+
+        print(f"User fetched successfully: {user}")
+
+        warning_reason = f"Warned for behavior in comment {post_id}"
+
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_warned = :warned, warning_reason = :reason",
+            ExpressionAttributeValues={
+                ":warned": True,
+                ":reason": warning_reason,
+            },
+        )
+        print(f"User {user_id} has been warned for comment {post_id}.")
+    except Exception as e:
+        print(f"Error warning user {user_id} for comment {post_id}: {e}")
+        raise
+
+
+def set_user_warned_to_false(user_id):
+    """
+    Sets the is_warned attribute to False for a user in the Users table.
+
+    :param user_id: The ID of the user to update.
+    """
+    # Initialize DynamoDB resource
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    try:
+        # Update the is_warned attribute to False
+        response = users_table.update_item(
+            Key={
+                "user_id": user_id
+            },  # Replace this key with your partition key field name if different
+            UpdateExpression="SET is_warned = :warned",
+            ExpressionAttributeValues={":warned": False},
+            ReturnValues="UPDATED_NEW",
+        )
+        print(f"User {user_id} successfully updated: {response}")
+        return {"status": "success", "message": f"User {user_id} warning dismissed."}
+    except ClientError as e:
+        print(f"Error updating user {user_id}: {e.response['Error']['Message']}")
+        return {"status": "error", "message": e.response["Error"]["Message"]}
 
 
 def get_section_stats(section_name):
