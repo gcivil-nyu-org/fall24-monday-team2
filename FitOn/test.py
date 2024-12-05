@@ -2,17 +2,18 @@ from datetime import datetime
 from django.test import TestCase, Client, override_settings, RequestFactory
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+
 from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import timedelta
 from FitOn import views
 import pandas as pd
-
 
 from django.contrib.messages.middleware import MessageMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 import boto3
 import json
+
 import io
 import asyncio
 import sys
@@ -59,6 +60,9 @@ from django.contrib.auth.hashers import make_password
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.core import mail
+from django.conf import settings
+from importlib import reload, import_module
+from pathlib import Path
 
 # from django.utils import timezone
 
@@ -85,6 +89,8 @@ from .dynamodb import (
     get_section_stats,
     MockUser,
     # users_table,
+    get_last_reset_request_time,
+    update_reset_request_time,
 )
 from botocore.exceptions import ClientError, ValidationError
 import pytz
@@ -1386,6 +1392,297 @@ class PasswordResetTests(TestCase):
         )
         self.assertContains(response, "Enter a valid email address.", status_code=200)
 
+    def test_get_last_reset_request_time_existing_item(self):
+        # Insert a mock item into the password reset table
+        self.__class__.password_reset_table.put_item(
+            Item={
+                "user_id": self.mock_user.user_id,
+                "last_request_time": "2024-12-03T00:00:00Z",
+            }
+        )
+
+        # Call the function and verify it retrieves the correct time
+        last_request_time = get_last_reset_request_time(self.mock_user.user_id)
+        self.assertEqual(
+            last_request_time,
+            "2024-12-03T00:00:00Z",
+            "The function did not return the expected last reset request time.",
+        )
+
+        # Clean up after the test
+        self.__class__.password_reset_table.delete_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+
+    def test_get_last_reset_request_time_missing_item(self):
+        # Ensure the user_id does not exist in the password reset table
+        self.__class__.password_reset_table.delete_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+
+        # Call the function and verify it returns None
+        last_request_time = get_last_reset_request_time(self.mock_user.user_id)
+        self.assertIsNone(
+            last_request_time,
+            "The function should return None when the item does not exist.",
+        )
+
+    @patch("FitOn.dynamodb.password_reset_table.get_item")
+    def test_get_last_reset_request_time_handles_exception(self, mock_get_item):
+        # Simulate an exception when `get_item` is called
+        mock_get_item.side_effect = Exception("Simulated DynamoDB error")
+
+        # Call the function and verify it handles the exception gracefully
+        with self.assertRaises(Exception):
+            get_last_reset_request_time(self.mock_user.user_id)
+
+    def test_update_reset_request_time_new_entry(self):
+        # Call the function to insert a new reset request time
+        update_reset_request_time(self.mock_user.user_id)
+
+        # Verify the item was created in the table
+        response = self.__class__.password_reset_table.get_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+        self.assertIn("Item", response, "Expected the item to be created in the table.")
+        self.assertIn(
+            "last_request_time",
+            response["Item"],
+            "Expected the 'last_request_time' field to exist in the item.",
+        )
+
+    def test_update_reset_request_time_update_existing_entry(self):
+        # Insert an existing entry
+        self.__class__.password_reset_table.put_item(
+            Item={
+                "user_id": self.mock_user.user_id,
+                "last_request_time": "2024-12-01T10:00:00Z",
+            }
+        )
+
+        # Call the function to update the reset request time
+        update_reset_request_time(self.mock_user.user_id)
+
+        # Verify the item was updated in the table
+        response = self.__class__.password_reset_table.get_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+        self.assertIn("Item", response, "Expected the item to exist in the table.")
+        updated_time = response["Item"].get("last_request_time")
+        self.assertIsNotNone(
+            updated_time, "Expected 'last_request_time' to be updated."
+        )
+        self.assertNotEqual(
+            updated_time,
+            "2024-12-01T10:00:00Z",
+            "Expected 'last_request_time' to be updated to a new value.",
+        )
+
+    def test_update_reset_request_time_invalid_user_id(self):
+        # Call the function with an invalid user ID
+        with self.assertRaises(Exception):
+            update_reset_request_time(None)
+
+    @patch("FitOn.dynamodb.password_reset_table.put_item")
+    def test_update_reset_request_time_handles_exception(self, mock_put_item):
+        # Simulate an exception when `put_item` is called
+        mock_put_item.side_effect = Exception("Simulated DynamoDB error")
+
+        # Call the function and ensure it raises an exception
+        with self.assertRaises(Exception):
+            update_reset_request_time(self.mock_user.user_id)
+
+    def test_update_reset_request_time_datetime_format(self):
+        # Call the function to insert a new reset request time
+        update_reset_request_time(self.mock_user.user_id)
+
+        # Verify the datetime format in the table
+        response = self.__class__.password_reset_table.get_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+        self.assertIn("Item", response, "Expected the item to be created in the table.")
+        last_request_time = response["Item"].get("last_request_time")
+        self.assertIsNotNone(
+            last_request_time, "Expected 'last_request_time' to be present."
+        )
+
+        # Verify the format of the datetime string
+        datetime.fromisoformat(last_request_time)
+
+    def test_password_reset_request_missing_email(self):
+        # Make a POST request without providing an email
+        response = self.client.post(reverse("password_reset_request"), {"email": ""})
+
+        # Verify the form-specific error message for empty email
+        self.assertContains(
+            response,
+            "This field is required.",
+            status_code=200,
+            msg_prefix="Expected a form error when email is not provided.",
+        )
+
+        # Verify that the rendered template is correct
+        self.assertTemplateUsed(response, "password_reset_request.html")
+
+        # Verify that no email is sent
+        self.assertEqual(
+            len(mail.outbox), 0, "No email should be sent when no email is provided."
+        )
+
+    def test_password_reset_done_view(self):
+        # Make a GET request to the password_reset_done URL
+        response = self.client.get(reverse("password_reset_done"))
+
+        # Verify the response status code
+        self.assertEqual(
+            response.status_code,
+            200,
+            "Expected status code 200 when accessing the password reset done page.",
+        )
+
+        # Verify that the correct template is used
+        self.assertTemplateUsed(
+            response,
+            "password_reset_done.html",
+            "Expected the password_reset_done.html template to be rendered.",
+        )
+
+        # Verify that the response contains the correct heading
+        self.assertContains(
+            response,
+            "Password Reset Email Sent",
+            msg_prefix="Expected the heading 'Password Reset Email Sent' on the password reset done page.",
+        )
+
+        # Verify that the response contains the correct paragraph
+        self.assertContains(
+            response,
+            "Please check your email for a link to reset your password.",
+            msg_prefix="Expected the message 'Please check your email for a link to reset your password.' on the password reset done page.",
+        )
+
+    def test_password_reset_confirm_mismatched_passwords(self):
+        # Generate a valid token and UID
+        user_id = self.mock_user.user_id
+        token = default_token_generator.make_token(self.mock_user)
+        uidb64 = urlsafe_base64_encode(force_bytes(user_id))
+
+        # Post mismatched passwords to the password reset confirm view
+        response = self.client.post(
+            reverse(
+                "password_reset_confirm", kwargs={"uidb64": uidb64, "token": token}
+            ),
+            {
+                "new_password": "newpassword123",
+                "confirm_password": "differentpassword456",
+            },
+        )
+
+        # Verify that the response contains the form error
+        self.assertContains(
+            response,
+            "Passwords do not match.",
+            status_code=200,
+            msg_prefix="Expected an error message when passwords do not match.",
+        )
+
+        # Verify that the correct template is used
+        self.assertTemplateUsed(response, "password_reset_confirm.html")
+
+        # Verify that the password is not updated (since it's a mock object, check manually)
+        mock_user_data = self.__class__.users_table.get_item(Key={"user_id": user_id})
+        self.assertIn(
+            "Item",
+            mock_user_data,
+            "Expected the mock user to still exist in the database.",
+        )
+        stored_password = mock_user_data["Item"].get("password")
+        self.assertNotEqual(
+            stored_password,
+            "newpassword123",
+            "Password should not be updated when passwords do not match.",
+        )
+
+    def test_password_reset_confirm_invalid_uid_or_token(self):
+        # Simulate an invalid uidb64 and token
+        invalid_uidb64 = "invalid-uid"
+        invalid_token = "invalid-token"
+
+        # Make a GET request to the password_reset_confirm view with invalid data
+        response = self.client.get(
+            reverse(
+                "password_reset_confirm",
+                kwargs={"uidb64": invalid_uidb64, "token": invalid_token},
+            )
+        )
+
+        # Verify the status code
+        self.assertEqual(
+            response.status_code,
+            200,
+            "Expected status code 200 when accessing with an invalid UID or token.",
+        )
+
+        # Verify the correct template is used
+        self.assertTemplateUsed(response, "password_reset_invalid.html")
+
+        # Verify that the error message is displayed in the response
+        self.assertContains(
+            response,
+            "The password reset link is invalid or has expired.",
+            msg_prefix="Expected an error message when UID or token is invalid.",
+        )
+
+        # Verify that the HTML structure matches the invalid page
+        self.assertContains(
+            response,
+            "<h2>Password Reset Error</h2>",
+            msg_prefix="Expected the heading 'Password Reset Error' on the invalid password reset page.",
+        )
+
+
+class EmailBackendTests(unittest.TestCase):
+    def test_testing_flag_true_uses_locmem_backend(self):
+        # Mock sys.argv to simulate a testing environment
+        with patch("sys.argv", new=["manage.py", "test"]):
+            settings = import_module("FitOn.settings")
+            reload(settings)  # Reload the module to apply changes
+
+            # Check that the testing email backend is applied
+            self.assertEqual(
+                settings.EMAIL_BACKEND,
+                "django.core.mail.backends.locmem.EmailBackend",
+                "Expected locmem email backend in testing mode.",
+            )
+
+    def test_testing_flag_false_uses_smtp_backend(self):
+        # Mock sys.argv to simulate a production-like environment
+        with patch("sys.argv", new=["manage.py", "runserver"]):
+            settings = import_module("FitOn.settings")
+            reload(settings)  # Reload the module to apply changes
+
+            # Check that the production SMTP email backend is applied
+            self.assertEqual(
+                settings.EMAIL_BACKEND,
+                "django.core.mail.backends.smtp.EmailBackend",
+                "Expected SMTP email backend in production mode.",
+            )
+            self.assertEqual(
+                settings.EMAIL_HOST, "smtp.gmail.com", "EMAIL_HOST is incorrect."
+            )
+            self.assertEqual(settings.EMAIL_PORT, 587, "EMAIL_PORT is incorrect.")
+            self.assertTrue(settings.EMAIL_USE_TLS, "EMAIL_USE_TLS should be True.")
+            self.assertEqual(
+                settings.EMAIL_HOST_USER,
+                "fiton.notifications@gmail.com",
+                "EMAIL_HOST_USER is incorrect.",
+            )
+            self.assertEqual(
+                settings.EMAIL_HOST_PASSWORD,
+                "usfb imrp rhyq npif",
+                "EMAIL_HOST_PASSWORD is incorrect.",
+            )
+
 
 ###########################################################
 #       TEST CASEs FOR VARIOUS FORMS                      #
@@ -1915,7 +2212,6 @@ class ForumViewTests(TestCase):
         self.users_table.delete_item(Key={"user_id": self.user_data["user_id"]})
         for thread in self.test_threads:
             self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
-
 
 ###################################################
 # Test Case For rds.py
@@ -3983,6 +4279,50 @@ class TestHeartRatePlot(TestCase):
         # Call the function
         heartrate_plot(mock_data)
 
+class StaticFilesSettingsTests(TestCase):
+    def setUp(self):
+        # Define BASE_DIR dynamically to avoid issues
+        self.base_dir = Path(__file__).resolve().parent.parent
+
+    @override_settings(
+        DEBUG=True,
+        IS_PRODUCTION=False,
+        STATIC_URL="/static/",
+        STATICFILES_DIRS=[Path(__file__).resolve().parent.parent / "FitOn/static"],
+    )
+    def test_static_file_settings_for_development(self):
+        from django.conf import settings
+
+        # Verify STATIC_URL
+        self.assertEqual(
+            settings.STATIC_URL,
+            "/static/",
+            "STATIC_URL is incorrect for development.",
+        )
+
+        # Verify STATICFILES_DIRS dynamically
+        static_dir = str(self.base_dir / "FitOn/static")
+        self.assertIn(
+            static_dir,
+            [str(dir) for dir in settings.STATICFILES_DIRS],
+            "STATICFILES_DIRS is incorrect for development.",
+        )
+
+    @override_settings(IS_PRODUCTION=True)
+    def test_static_file_settings_for_production(self):
+        from django.conf import settings
+
+        # Verify static file settings for production
+        self.assertEqual(
+            settings.STATIC_URL,
+            f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{settings.AWS_LOCATION}/",
+            "STATIC_URL is incorrect for production.",
+        )
+        self.assertEqual(
+            settings.STATICFILES_STORAGE,
+            "storages.backends.s3boto3.S3Boto3Storage",
+            "STATICFILES_STORAGE is incorrect for production.",
+        )
 
 # KEEP THIS LINE IN THE END AND DO NOT DELETE
 asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())

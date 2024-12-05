@@ -18,13 +18,13 @@ def get_secrets():
     return (GOOGLEFIT_CLIENT_ID, GOOGLEFIT_CLIENT_SECRET)
 
 
-def get_aws_secrets():
-    client = boto3.client("secretsmanager", region_name="us-west-2")
-    response = client.get_secret_value(SecretId="aws_secrets")
-    response = json.loads(response["SecretString"])
-    AWS_ACCESS_KEY_ID = response.get("AWS_ACCESS_KEY_ID")
-    AWS_SECRET_ACCESS_KEY = response.get("AWS_SECRET_ACCESS_KEY")
-    return (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+# def get_aws_secrets():
+#     client = boto3.client("secretsmanager", region_name="us-west-2")
+#     response = client.get_secret_value(SecretId="aws_secrets")
+#     response = json.loads(response["SecretString"])
+#     AWS_ACCESS_KEY_ID = response.get("AWS_ACCESS_KEY_ID")
+#     AWS_SECRET_ACCESS_KEY = response.get("AWS_SECRET_ACCESS_KEY")
+#     return (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 
 
 def get_aws_secrets():
@@ -139,18 +139,12 @@ WSGI_APPLICATION = "FitOn.wsgi.application"
 
 ASGI_APPLICATION = "FitOn.asgi.application"
 
-# Set Redis host based on environment
-# REDIS_HOST = os.getenv("REDIS_HOST", "127.0.0.1")
-# REDIS_PORT = os.getenv("REDIS_PORT", "6379")
+# Websocket protocol
+if DEBUG:
+    WEBSOCKET_PROTOCOL = "ws://"
+else:
+    WEBSOCKET_PROTOCOL = "wss://"
 
-# CHANNEL_LAYERS = {
-#     "default": {
-#         "BACKEND": "channels_redis.core.RedisChannelLayer",
-#         "CONFIG": {
-#             "hosts": [(REDIS_HOST, int(REDIS_PORT))],
-#         },
-#     },
-# }
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels.layers.InMemoryChannelLayer",
