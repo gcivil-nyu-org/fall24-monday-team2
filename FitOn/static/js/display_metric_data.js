@@ -95,16 +95,26 @@ const stepsChart = new Chart(stepsCtx, {
     type: 'bar',
     data: {
         labels: stepsDates,
-        datasets: [{
-            label: 'Steps Count',
-            data: stepsCount,
-            backgroundColor: '#772014',
-            borderWidth: 1
-        }]
+        datasets: [
+            {
+                label: 'Steps Count',
+                data: stepsCount,
+                backgroundColor: '#772014',
+                borderWidth: 1
+            },
+        ]
     },
     options: {
-        maintainAspectRatio:true,
+        maintainAspectRatio: true,
         responsive: true,
+        plugins: {
+            legend: {
+                display: true
+            },
+            tooltip: {
+                enabled: true
+            }
+        },
         scales: {
             x: {
                 title: {
@@ -118,7 +128,7 @@ const stepsChart = new Chart(stepsCtx, {
                 title: {
                     display: true,
                     text: 'Steps Count',
-                    color:'black'
+                    color: 'black'
                 },
                 ticks: {
                     color: 'black'
@@ -127,6 +137,7 @@ const stepsChart = new Chart(stepsCtx, {
         }
     }
 });
+
 const heartRateChart = new Chart(heartRateCtx, {
     type: 'line',
     data: {

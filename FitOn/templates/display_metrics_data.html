@@ -180,7 +180,15 @@
     </div>
     <script>
         let total_data = {{ data | safe }} ;
-        console.log(total_data)
+        console.log(total_data);
+
+        const stepGoal = {{ step_goal }};
+        const weightGoal = {{ weight_goal }};
+        const sleepGoal = {{ sleep_goal }};
+
+        console.log("Step Goal:", stepGoal);
+        console.log("Weight Goal:", weightGoal);
+        console.log("Sleep Goal:", sleepGoal);
     </script>
     {% endif %}
 <script src="{% static 'js/display_metric_data.js' %}"></script>

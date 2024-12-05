@@ -1865,7 +1865,17 @@ async def get_metric_data(request):
         total_data = await fetch_all_metric_data(request, duration, frequency)
         rds_response = await rds_main(user_email, total_data)
         print("RDS Response: \n", rds_response)
-        context = {"data": total_data}
+
+        steps = get_step_user_goals(user_id)
+        weight = get_weight_user_goals(user_id)
+        sleep = get_sleep_user_goals(user_id)
+
+        context = {
+            "data": total_data,
+            "step_goal": steps,
+            "weight_goal": weight,
+            "sleep_goal": sleep,
+        }
         # print("Inside get metric:", context)
         return await sync_to_async(render)(
             request, "display_metrics_data.html", context
@@ -1919,7 +1929,16 @@ def health_data_view(request):
     step_goal = get_step_user_goals(user_id)
     weight_goal = get_weight_user_goals(user_id)
     sleep_goal = get_sleep_user_goals(user_id)
-    return render(request, "display_metric_data.html", {"metrics_data": metrics_data, "step_goal": step_goal, "weight_goal": weight_goal, "sleep_goal": sleep_goal})
+    return render(
+        request,
+        "display_metric_data.html",
+        {
+            "metrics_data": metrics_data,
+            "step_goal": step_goal,
+            "weight_goal": weight_goal,
+            "sleep_goal": sleep_goal,
+        },
+    )
     # return render(
     #     request,
     #     "forums.html",

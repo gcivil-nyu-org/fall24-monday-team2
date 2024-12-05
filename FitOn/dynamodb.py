@@ -1449,32 +1449,38 @@ def get_users_with_chat_history(user_id):
         print(f"Error fetching users with chat history: {e}")
         return []
 
+
 def get_step_user_goals(user_id):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
     user_goals_table = dynamodb.Table("UserGoals")
     response = user_goals_table.query(
-        KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(user_id),
-        FilterExpression=boto3.dynamodb.conditions.Attr("type").eq("steps")
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("steps"),
     )
     existing_goals = response.get("Items", [])
-    return existing_goals
+    value = existing_goals[0]["Value"] if existing_goals else None
+    return value
+
 
 def get_weight_user_goals(user_id):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
     user_goals_table = dynamodb.Table("UserGoals")
     response = user_goals_table.query(
-        KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(user_id),
-        FilterExpression=boto3.dynamodb.conditions.Attr("type").eq("weight")
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("weight"),
     )
     existing_goals = response.get("Items", [])
-    return existing_goals
+    value = existing_goals[0]["Value"] if existing_goals else None
+    return value
+
 
 def get_sleep_user_goals(user_id):
     dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
     user_goals_table = dynamodb.Table("UserGoals")
     response = user_goals_table.query(
-        KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(user_id),
-        FilterExpression=boto3.dynamodb.conditions.Attr("type").eq("sleep")
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("sleep"),
     )
     existing_goals = response.get("Items", [])
-    return existing_goals
+    value = existing_goals[0]["Value"] if existing_goals else None
+    return value
