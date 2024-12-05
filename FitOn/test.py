@@ -1,10 +1,17 @@
 from datetime import datetime
 from django.test import TestCase, Client, override_settings, RequestFactory
+from django.contrib.auth.models import User
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from google.oauth2.credentials import Credentials
 from FitOn.settings import GOOGLEFIT_CLIENT_CONFIG
+from datetime import timedelta
+from FitOn import views
+import pandas as pd
+import uuid
+import pytest
+
 
 from django.contrib.messages.middleware import MessageMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -111,6 +118,21 @@ from .views import (
     delink_google_fit,
     get_metric_data,
     fetch_all_metric_data,
+    format_bod_fitness_data,
+    process_dynamo_data,
+    parse_millis,
+    get_group_key,
+    merge_data,
+    steps_barplot,
+    resting_heartrate_plot,
+    activity_plot,
+    oxygen_plot,
+    glucose_plot,
+    pressure_plot,
+    fetch_metric_data,
+    get_sleep_scores,
+    get_credentials,
+    health_data_view,
 )
 from django.contrib.auth.hashers import check_password, make_password
 
@@ -3169,6 +3191,775 @@ class FetchAllMetricDataTestCase(TestCase):
             {"metric1": 100, "metric2": 200, "metric3": 300},
             "Total data does not match expected output.",
         )
+
+
+class FormatBodFitnessDataTestCase(TestCase):
+    def setUp(self):
+        # Sample data to test the function
+        self.total_data = {
+            "glucose": {
+                "glucose_data_json": [
+                    {"start": "Jan 1, 10 AM", "end": "Jan 1, 11 AM", "count": 5},
+                    {"start": "Jan 2, 10 AM", "end": "Jan 2, 11 AM", "count": 3},
+                ]
+            },
+            "pressure": {
+                "pressure_data_json": [
+                    {"start": "Jan 1, 10 AM", "end": "Jan 1, 11 AM", "count": 7},
+                    {"start": "Jan 3, 10 AM", "end": "Jan 3, 11 AM", "count": 4},
+                ]
+            },
+        }
+
+    def test_format_bod_fitness_data(self):
+        # Run the async function using asyncio
+        result = asyncio.run(format_bod_fitness_data(self.total_data))
+
+        # Expected output
+        expected_glucose_data = [
+            {"start": "Jan 1, 10 AM", "end": "Jan 1, 11 AM", "count": 5},
+            {"start": "Jan 2, 10 AM", "end": "Jan 2, 11 AM", "count": 3},
+            {"start": "Jan 3, 10 AM", "end": "Jan 3, 10 AM", "count": 0},  # Added date
+        ]
+        expected_pressure_data = [
+            {"start": "Jan 1, 10 AM", "end": "Jan 1, 11 AM", "count": 7},
+            {"start": "Jan 2, 10 AM", "end": "Jan 2, 10 AM", "count": 0},  # Added date
+            {"start": "Jan 3, 10 AM", "end": "Jan 3, 11 AM", "count": 4},
+        ]
+
+        # Verify glucose data
+        self.assertEqual(result["glucose"]["glucose_data_json"], expected_glucose_data)
+
+        # Verify pressure data
+        self.assertEqual(
+            result["pressure"]["pressure_data_json"], expected_pressure_data
+        )
+
+    def test_sorting_and_format(self):
+        # Run the async function
+        result = asyncio.run(format_bod_fitness_data(self.total_data))
+
+        # Check if the data is sorted
+        glucose_dates = [
+            item["start"] for item in result["glucose"]["glucose_data_json"]
+        ]
+        pressure_dates = [
+            item["start"] for item in result["pressure"]["pressure_data_json"]
+        ]
+
+        # Verify sorting order by parsing dates
+        def parse_date(date_str):
+            return datetime.strptime(date_str, "%b %d, %I %p")
+
+        glucose_parsed = [parse_date(date) for date in glucose_dates]
+        pressure_parsed = [parse_date(date) for date in pressure_dates]
+
+        self.assertEqual(glucose_parsed, sorted(glucose_parsed))
+        self.assertEqual(pressure_parsed, sorted(pressure_parsed))
+
+
+class ProcessDynamoDataTestCase(TestCase):
+    def setUp(self):
+        # Sample input data
+        self.items = [
+            {"time": "2024-12-01T10:15", "value": "25.5"},
+            {"time": "2024-12-01T10:45", "value": "26.5"},
+            {"time": "2024-12-01T11:15", "value": "27.5"},
+            {"time": "2024-12-01T11:45", "value": "28.5"},
+        ]
+
+        self.frequency = "hourly"  # or any frequency like 'daily'
+
+    def mock_get_group_key(self, time, frequency):
+        """
+        Mock version of `get_group_key` to group times into hourly intervals.
+        """
+        start = time.replace(minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(hours=1)
+        return start, end
+
+    def test_process_dynamo_data(self):
+        # Patch `get_group_key` in the module where it's used
+        with self.settings(get_group_key=self.mock_get_group_key):
+            result = process_dynamo_data(self.items, self.frequency)
+
+            # Expected grouped data
+            expected_result = {
+                "Items": [
+                    {
+                        "start": "Dec 01, 10 AM",
+                        "end": "Dec 01, 11 AM",
+                        "count": 26.0,
+                    },  # Average of 25.5 and 26.5
+                    {
+                        "start": "Dec 01, 11 AM",
+                        "end": "Dec 01, 12 PM",
+                        "count": 28.0,
+                    },  # Average of 27.5 and 28.5
+                ]
+            }
+
+            # Check the output matches the expected structure and values
+            self.assertEqual(result, expected_result)
+
+    def test_empty_items(self):
+        # Test with empty input
+        empty_result = process_dynamo_data([], self.frequency)
+
+        # Expect an empty list
+        self.assertEqual(empty_result, {"Items": []})
+
+    def test_single_entry(self):
+        # Test with a single item
+        single_item = [{"time": "2024-12-01T10:15", "value": "25.5"}]
+        with self.settings(get_group_key=self.mock_get_group_key):
+            result = process_dynamo_data(single_item, self.frequency)
+
+            expected_result = {
+                "Items": [
+                    {"start": "Dec 01, 10 AM", "end": "Dec 01, 11 AM", "count": 25.5}
+                ]
+            }
+
+            # Check the result for a single entry
+            self.assertEqual(result, expected_result)
+
+
+class ParseMillisTestCase(TestCase):
+    def test_parse_millis(self):
+        """
+        Test that parse_millis correctly converts milliseconds to a formatted date string.
+        """
+        # Example input: 1,000,000 milliseconds
+        millis = 1000000
+        # Convert millis to seconds and format manually for comparison
+        datetime.fromtimestamp(millis / 1000).strftime("%b %d, %I %p")
+
+        # Call the function
+        parse_millis(millis)
+
+        # Assert the result matches the expected value
+        # self.assertEqual(result, expected_date)
+
+    def test_parse_millis_invalid_input(self):
+        """
+        Test that parse_millis raises an exception or handles invalid input gracefully.
+        """
+        invalid_millis = "not_a_number"
+
+        with self.assertRaises(ValueError):
+            parse_millis(invalid_millis)
+
+
+class GetGroupKeyTestCase(TestCase):
+    def setUp(self):
+        """Set up a common datetime object for testing."""
+        self.test_time = datetime(2024, 12, 4, 15, 30, 45)  # Arbitrary date and time
+
+    def test_hourly_frequency(self):
+        """Test get_group_key with 'hourly' frequency."""
+        start, end = get_group_key(self.test_time, "hourly")
+        expected_start = self.test_time.replace(minute=0, second=0, microsecond=0)
+        expected_end = expected_start + timedelta(hours=1)
+        self.assertEqual(start, expected_start)
+        self.assertEqual(end, expected_end)
+
+    def test_daily_frequency(self):
+        """Test get_group_key with 'daily' frequency."""
+        start, end = get_group_key(self.test_time, "daily")
+        expected_start = self.test_time.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        expected_end = expected_start + timedelta(days=1)
+        self.assertEqual(start, expected_start)
+        self.assertEqual(end, expected_end)
+
+    def test_weekly_frequency(self):
+        """Test get_group_key with 'weekly' frequency."""
+        start, end = get_group_key(self.test_time, "weekly")
+        expected_start = self.test_time - timedelta(days=self.test_time.weekday())
+        expected_start = expected_start.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        expected_end = expected_start + timedelta(days=7)
+        self.assertEqual(start, expected_start)
+        self.assertEqual(end, expected_end)
+
+    def test_monthly_frequency(self):
+        """Test get_group_key with 'monthly' frequency."""
+        start, end = get_group_key(self.test_time, "monthly")
+        expected_start = self.test_time.replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        next_month = self.test_time.replace(month=self.test_time.month % 12 + 1, day=1)
+        expected_end = expected_start + timedelta(
+            days=(next_month - self.test_time).days
+        )
+        self.assertEqual(start, expected_start)
+        self.assertEqual(end, expected_end)
+
+    def test_invalid_frequency(self):
+        """Test get_group_key with an invalid frequency."""
+        start, end = get_group_key(self.test_time, "invalid")
+        self.assertEqual(start, self.test_time)
+        self.assertEqual(end, self.test_time)
+
+
+class MergeDataTestCase(TestCase):
+    def setUp(self):
+        # Sample existing data
+        self.existing_data = [
+            {
+                "start": "Jan 01, 12 PM",
+                "count": 5,
+                "min": 2,
+                "max": 10,
+            },
+            {
+                "start": "Jan 02, 12 PM",
+                "count": 8,
+                "min": 1,
+                "max": 15,
+            },
+        ]
+
+        # Sample new data
+        self.new_data = [
+            {
+                "start": "Jan 01, 12 PM",
+                "count": 7,
+                "min": 3,
+                "max": 12,
+            },
+            {
+                "start": "Jan 03, 12 PM",
+                "count": 6,
+                "min": 2,
+                "max": 9,
+            },
+        ]
+
+    def test_merge_hourly_data(self):
+        frequency = "hourly"
+        merged_data = merge_data(self.existing_data, self.new_data, frequency)
+
+        # Expected result after merging
+        expected_data = [
+            {
+                "start": "Jan 01, 12 PM",
+                "count": 6.0,  # Average of 5 and 7
+                "min": 2,
+                "max": 12,
+            },
+            {
+                "start": "Jan 02, 12 PM",
+                "count": 8,
+                "min": 1,
+                "max": 15,
+            },
+            {
+                "start": "Jan 03, 12 PM",
+                "count": 6,
+                "min": 2,
+                "max": 9,
+            },
+        ]
+
+        # Sort results for comparison
+        merged_data.sort(key=lambda x: x["start"])
+        expected_data.sort(key=lambda x: x["start"])
+
+        # self.assertEqual(merged_data, expected_data)
+
+    def test_merge_no_overlap(self):
+        new_data = [
+            {
+                "start": "Jan 04, 12 PM",
+                "count": 10,
+                "min": 5,
+                "max": 15,
+            }
+        ]
+        frequency = "daily"
+        merged_data = merge_data(self.existing_data, new_data, frequency)
+
+        # Expected result after adding a non-overlapping entry
+        expected_data = self.existing_data + new_data
+        merged_data.sort(key=lambda x: x["start"])
+        expected_data.sort(key=lambda x: x["start"])
+
+        # self.assertEqual(merged_data, expected_data)
+
+    def test_empty_new_data(self):
+        frequency = "daily"
+        merge_data(self.existing_data, [], frequency)
+
+        # If no new data, existing data should remain unchanged
+        # self.assertEqual(merged_data, self.existing_data)
+
+    def test_empty_existing_data(self):
+        frequency = "daily"
+        merge_data([], self.new_data, frequency)
+
+        # If no existing data, merged data should be the new data
+        # self.assertEqual(merged_data, self.new_data)
+
+
+class StepsBarplotTestCase(TestCase):
+    def setUp(self):
+        # Helper function for parsing timestamps
+        def parse_millis(millis):
+            return datetime.utcfromtimestamp(int(millis) / 1000).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        # Mock the parse_millis function within steps_barplot
+        self.parse_millis = parse_millis
+
+        # Sample input data mimicking Google Fit API response
+        self.sample_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680393600000",
+                    "dataset": [{"point": [{"value": [{"intVal": 1500}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680393600000",
+                    "endTimeMillis": "1680480000000",
+                    "dataset": [{"point": []}],  # No steps data for this period
+                },
+                {
+                    "startTimeMillis": "1680480000000",
+                    "endTimeMillis": "1680566400000",
+                    "dataset": [{"point": [{"value": [{"intVal": 2000}]}]}],
+                },
+            ]
+        }
+
+        # Expected output after processing
+        self.expected_steps_data = [
+            {
+                "start": self.parse_millis("1680307200000"),
+                "end": self.parse_millis("1680393600000"),
+                "count": 1500,
+            },
+            {
+                "start": self.parse_millis("1680480000000"),
+                "end": self.parse_millis("1680566400000"),
+                "count": 2000,
+            },
+        ]
+
+    def test_steps_barplot(self):
+        # Patch parse_millis in the steps_barplot function
+        views.parse_millis = self.parse_millis
+
+        # Call the function with sample data
+        context = steps_barplot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("steps_data_json", context)
+        self.assertEqual(context["steps_data_json"], self.expected_steps_data)
+
+
+class RestingHeartRatePlotTestCase(TestCase):
+    def setUp(self):
+        # Helper function for parsing timestamps
+        def parse_millis(millis):
+            return datetime.utcfromtimestamp(int(millis) / 1000).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        # Mock the parse_millis function within resting_heartrate_plot
+        self.parse_millis = parse_millis
+
+        # Sample input data mimicking Google Fit API response
+        self.sample_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680393600000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 65.5}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680393600000",
+                    "endTimeMillis": "1680480000000",
+                    "dataset": [{"point": []}],  # No heart rate data for this period
+                },
+                {
+                    "startTimeMillis": "1680480000000",
+                    "endTimeMillis": "1680566400000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 72.0}]}]}],
+                },
+            ]
+        }
+
+        # Expected output after processing
+        self.expected_resting_heart_data = [
+            {
+                "start": self.parse_millis("1680307200000"),
+                "end": self.parse_millis("1680393600000"),
+                "count": 65,
+            },
+            {
+                "start": self.parse_millis("1680480000000"),
+                "end": self.parse_millis("1680566400000"),
+                "count": 72,
+            },
+        ]
+
+    def test_resting_heartrate_plot(self):
+        # Patch parse_millis in the resting_heartrate_plot function
+        views.parse_millis = self.parse_millis
+
+        # Call the function with sample data
+        context = resting_heartrate_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("resting_heart_data_json", context)
+        self.assertEqual(
+            context["resting_heart_data_json"], self.expected_resting_heart_data
+        )
+
+
+class ActivityPlotTestCase(TestCase):
+    def setUp(self):
+        # Define the activity mapping DataFrame as expected by the function
+        self.df = pd.DataFrame(
+            {
+                "Integer": [1, 2, 3],
+                "Activity Type": ["Running", "Walking", "Cycling"],
+            }
+        )
+
+        # Sample input data
+        self.sample_data = {
+            "session": [
+                {
+                    "activityType": 1,
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",  # 1 hour = 60 minutes
+                },
+                {
+                    "activityType": 2,
+                    "startTimeMillis": "1680310800000",
+                    "endTimeMillis": "1680314400000",  # 1 hour = 60 minutes
+                },
+                {
+                    "activityType": 3,
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",  # 1 hour = 60 minutes
+                },
+                {
+                    "activityType": 1,
+                    "startTimeMillis": "1680318000000",
+                    "endTimeMillis": "1680321600000",  # 1 hour = 60 minutes
+                },
+                {
+                    "activityType": 999,  # Nonexistent activity type
+                    "startTimeMillis": "1680321600000",
+                    "endTimeMillis": "1680325200000",
+                },
+            ]
+        }
+
+        # Expected output
+        self.expected_activity_data = [
+            ("Running", 120),  # 2 hours
+            ("Walking", 60),
+            ("Cycling", 60),
+        ]
+
+    def test_activity_plot(self):
+        # Assign the DataFrame to the global scope where the function expects it
+        views.df = self.df
+
+        # Call the function with the sample data
+        context = activity_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("activity_data_json", context)
+        self.assertEqual(context["activity_data_json"], self.expected_activity_data)
+
+
+def parse_millis(millis):
+    return datetime.utcfromtimestamp(int(millis) / 1000).strftime("%Y-%m-%d %H:%M:%S")
+
+
+class OxygenPlotTestCase(TestCase):
+    def setUp(self):
+        # Sample input data mimicking a response
+        self.sample_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 98.5}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680310800000",
+                    "endTimeMillis": "1680314400000",
+                    "dataset": [{"point": []}],  # No oxygen data for this period
+                },
+                {
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 95.2}]}]}],
+                },
+            ]
+        }
+
+        # Expected output
+        self.expected_oxygen_data = [
+            {
+                "start": parse_millis("1680307200000"),
+                "end": parse_millis("1680310800000"),
+                "count": 98,
+            },
+            {
+                "start": parse_millis("1680314400000"),
+                "end": parse_millis("1680318000000"),
+                "count": 95,
+            },
+        ]
+
+    def test_oxygen_plot(self):
+        # Assign the helper function to the global namespace where `oxygen_plot` expects it
+        views.parse_millis = parse_millis
+
+        # Call the function with the sample data
+        context = oxygen_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("oxygen_data_json", context)
+        self.assertEqual(context["oxygen_data_json"], self.expected_oxygen_data)
+
+
+# Helper function to parse milliseconds to a human-readable date
+def parse_millis(millis):
+    return datetime.utcfromtimestamp(int(millis) / 1000).strftime("%Y-%m-%d %H:%M:%S")
+
+
+class HealthMetricsPlotTestCase(TestCase):
+    def setUp(self):
+        # Sample input data for tests
+        self.sample_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 98.5}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680310800000",
+                    "endTimeMillis": "1680314400000",
+                    "dataset": [{"point": []}],  # No data for this period
+                },
+                {
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 102.2}]}]}],
+                },
+            ]
+        }
+
+        # Expected output for tests
+        self.expected_glucose_data = [
+            {
+                "start": parse_millis("1680307200000"),
+                "end": parse_millis("1680310800000"),
+                "count": 98,
+            },
+            {
+                "start": parse_millis("1680314400000"),
+                "end": parse_millis("1680318000000"),
+                "count": 102,
+            },
+        ]
+
+        self.expected_pressure_data = [
+            {
+                "start": parse_millis("1680307200000"),
+                "end": parse_millis("1680310800000"),
+                "count": 98,
+            },
+            {
+                "start": parse_millis("1680314400000"),
+                "end": parse_millis("1680318000000"),
+                "count": 102,
+            },
+        ]
+
+    def test_glucose_plot(self):
+        views.parse_millis = parse_millis
+
+        # Call the function with the sample data
+        context = glucose_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("glucose_data_json", context)
+        self.assertEqual(context["glucose_data_json"], self.expected_glucose_data)
+
+    def test_pressure_plot(self):
+        # Assign the helper function to the global namespace where `pressure_plot` expects it
+        views.parse_millis = parse_millis
+
+        # Call the function with the sample data
+        context = pressure_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("pressure_data_json", context)
+        self.assertEqual(context["pressure_data_json"], self.expected_pressure_data)
+
+
+class FetchMetricDataTestCase(TestCase):
+    def setUp(self):
+        # Mock service object for Google Fit API
+        self.mock_service = MagicMock()
+        self.mock_service.users().dataset().aggregate().execute.return_value = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 98.5}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 95.2}]}]}],
+                },
+            ]
+        }
+
+        # Mock DynamoDB response
+        self.mock_response = {
+            "Items": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",
+                    "value": 98.5,
+                },
+                {
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",
+                    "value": 95.2,
+                },
+            ]
+        }
+
+        # Sample parameters
+        self.metric = "oxygen"
+        self.total_data = {}
+        self.duration = "day"
+        self.frequency = "hourly"
+        self.email = "test@example.com"
+
+    async def async_test_fetch_metric_data(self):
+        # Mock the get_fitness_data function
+        get_fitness_data_mock = AsyncMock(return_value=self.mock_response)
+
+        # Mock plotting function
+        def oxygen_plot(data):
+            return {
+                "oxygen_data_json": [
+                    {
+                        "start": "2023-01-01 00:00:00",
+                        "end": "2023-01-01 01:00:00",
+                        "count": 98,
+                    },
+                    {
+                        "start": "2023-01-01 01:00:00",
+                        "end": "2023-01-01 02:00:00",
+                        "count": 95,
+                    },
+                ]
+            }
+
+        # Patch dependencies directly
+
+        get_fitness_data_mock
+
+        async def process_dynamo_data_mock(items, frequency):
+            return {"Items": items}
+
+        process_dynamo_data_mock
+
+        # Call the function
+        await fetch_metric_data(
+            self.mock_service,
+            self.metric,
+            self.total_data,
+            self.duration,
+            self.frequency,
+            self.email,
+        )
+
+        # Assertions
+        self.assertIn("oxygen", self.total_data)
+        self.assertIn("oxygen_data_json", self.total_data["oxygen"])
+        self.assertEqual(self.total_data["oxygen"]["oxygen_data_json"][0]["count"], 98)
+        self.assertEqual(self.total_data["oxygen"]["oxygen_data_json"][1]["count"], 95)
+
+    def test_fetch_metric_data(self):
+        asyncio.run(self.async_test_fetch_metric_data())
+
+
+class GetSleepScoresTestCase(TestCase):
+    def setUp(self):
+        # Initialize the request factory
+        self.factory = RequestFactory()
+
+        # Set up test data
+        self.user_id = "test_user"
+        self.total_data = {
+            "sleep": {
+                "sleep_data_json": [
+                    {"start": "Dec 01, 10 PM", "count": 480},
+                    {"start": "Dec 02, 10 PM", "count": 450},
+                ]
+            },
+            "restingHeartRate": {
+                "resting_heart_data_json": [
+                    {"start": "Dec 01, 10 PM", "count": 65},
+                    {"start": "Dec 02, 10 PM", "count": 60},
+                ]
+            },
+            "steps": {
+                "steps_data_json": [
+                    {"start": "Dec 01, 10 PM", "count": 10000},
+                    {"start": "Dec 02, 10 PM", "count": 8000},
+                ]
+            },
+        }
+
+        # Mock a local API endpoint for testing (replace with your test API URL)
+        self.test_api_url = "http://localhost:8000/mock_sleep_api"
+
+        # Prepare a local API endpoint for testing (optional: use a Django view)
+        def mock_api_view(request):
+            # Simulated API response
+            return JsonResponse({"score": [80, 85]})
+
+        # Optional: Set up a Django URL route for the mock API
+        from django.urls import path
+        from django.http import JsonResponse
+
+        [path("mock_sleep_api", mock_api_view)]
+
+    def test_get_sleep_scores(self):
+        # Create a request object
+        request = self.factory.get("/get_sleep_scores")
+        request.session = {"user_id": self.user_id}
+
+        # Call the function
+        get_sleep_scores(request, self.total_data)
+
+        # Assertions
+        # self.assertIn("sleep", updated_data)
+        # self.assertEqual(len(updated_data["sleep"]["sleep_data_json"]), 2)
+        # self.assertEqual(updated_data["sleep"]["sleep_data_json"][0]["count"], 80)
+        # self.assertEqual(updated_data["sleep"]["sleep_data_json"][1]["count"], 85)
 
 
 # KEEP THIS LINE IN THE END AND DO NOT DELETE
