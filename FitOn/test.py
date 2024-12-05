@@ -60,7 +60,8 @@ from django.contrib.auth.hashers import make_password
 from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.core import mail
-from django.conf import settings
+
+# from django.conf import settings
 from importlib import reload, import_module
 from pathlib import Path
 
@@ -1641,7 +1642,7 @@ class PasswordResetTests(TestCase):
         )
 
 
-class EmailBackendTests(unittest.TestCase):
+class EmailBackendTests(TestCase):
     def test_testing_flag_true_uses_locmem_backend(self):
         # Mock sys.argv to simulate a testing environment
         with patch("sys.argv", new=["manage.py", "test"]):
@@ -2212,6 +2213,7 @@ class ForumViewTests(TestCase):
         self.users_table.delete_item(Key={"user_id": self.user_data["user_id"]})
         for thread in self.test_threads:
             self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
+
 
 ###################################################
 # Test Case For rds.py
@@ -4279,6 +4281,7 @@ class TestHeartRatePlot(TestCase):
         # Call the function
         heartrate_plot(mock_data)
 
+
 class StaticFilesSettingsTests(TestCase):
     def setUp(self):
         # Define BASE_DIR dynamically to avoid issues
@@ -4323,6 +4326,7 @@ class StaticFilesSettingsTests(TestCase):
             "storages.backends.s3boto3.S3Boto3Storage",
             "STATICFILES_STORAGE is incorrect for production.",
         )
+
 
 # KEEP THIS LINE IN THE END AND DO NOT DELETE
 asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
