@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.core.serializers import serialize
+
+# from django.core.serializers import serialize
 from .models import Exercise, MuscleGroup, User
 from django.http import JsonResponse
 
@@ -18,7 +19,7 @@ from .dynamodb import (
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
-    get_user_by_uid,
+    # get_user_by_uid,
     get_user_by_username,
     update_reset_request_time,
     update_user,

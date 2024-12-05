@@ -1,16 +1,11 @@
 from datetime import datetime
 from django.test import TestCase, Client, override_settings, RequestFactory
-from django.contrib.auth.models import User
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, MagicMock, AsyncMock
-from google.oauth2.credentials import Credentials
-from FitOn.settings import GOOGLEFIT_CLIENT_CONFIG
 from datetime import timedelta
 from FitOn import views
 import pandas as pd
-import uuid
-import pytest
 
 
 from django.contrib.messages.middleware import MessageMiddleware
@@ -21,7 +16,6 @@ import json
 import io
 import asyncio
 import sys
-import mock
 from FitOn.rds import (
     convert_to_mysql_datetime,
 )  # Adjust the import path based on your project structure
@@ -68,8 +62,6 @@ from django.core import mail
 
 # from django.utils import timezone
 
-# import time
-from .views import SCOPES
 
 from .dynamodb import (
     create_user,
@@ -96,7 +88,8 @@ from .dynamodb import (
 )
 from botocore.exceptions import ClientError, ValidationError
 import pytz
-from django.contrib import messages
+
+# from django.contrib import messages
 from django.contrib.messages import get_messages
 from .forms import (
     SignUpForm,
@@ -105,8 +98,7 @@ from .forms import (
     validate_file_extension,
 )
 from .views import (
-    SCOPES,
-    homepage,
+    # homepage,
     add_message,
     perform_redirect,
     login,
@@ -131,8 +123,7 @@ from .views import (
     pressure_plot,
     fetch_metric_data,
     get_sleep_scores,
-    get_credentials,
-    health_data_view,
+    heartrate_plot,
 )
 from django.contrib.auth.hashers import check_password, make_password
 
@@ -3955,11 +3946,42 @@ class GetSleepScoresTestCase(TestCase):
         # Call the function
         get_sleep_scores(request, self.total_data)
 
-        # Assertions
-        # self.assertIn("sleep", updated_data)
-        # self.assertEqual(len(updated_data["sleep"]["sleep_data_json"]), 2)
-        # self.assertEqual(updated_data["sleep"]["sleep_data_json"][0]["count"], 80)
-        # self.assertEqual(updated_data["sleep"]["sleep_data_json"][1]["count"], 85)
+
+class TestHeartRatePlot(TestCase):
+    def test_heartrate_plot(self):
+        """
+        Tests the heartrate_plot function.
+        """
+        # Mock input data
+        mock_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1609459200000",  # 2021-01-01 00:00:00 UTC
+                    "endTimeMillis": "1609462800000",  # 2021-01-01 01:00:00 UTC
+                    "dataset": [
+                        {
+                            "point": [
+                                {
+                                    "value": [
+                                        {"fpVal": 72.0},  # count
+                                        {"fpVal": 60.0},  # min
+                                        {"fpVal": 90.0},  # max
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "startTimeMillis": "1609466400000",  # 2021-01-01 02:00:00 UTC
+                    "endTimeMillis": "1609470000000",  # 2021-01-01 03:00:00 UTC
+                    "dataset": [{"point": []}],
+                },
+            ]
+        }
+
+        # Call the function
+        heartrate_plot(mock_data)
 
 
 # KEEP THIS LINE IN THE END AND DO NOT DELETE
