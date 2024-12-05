@@ -51,6 +51,9 @@ from .dynamodb import (
     mark_user_as_warned_thread,
     mark_user_as_warned_comment,
     set_user_warned_to_false,
+    get_step_user_goals,
+    get_sleep_user_goals,
+    get_weight_user_goals,
 )
 from .rds import rds_main, fetch_user_data
 
@@ -1913,7 +1916,10 @@ def health_data_view(request):
     for metric in metrics_data:
         metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
 
-    return render(request, "display_metric_data.html", {"metrics_data": metrics_data})
+    step_goal = get_step_user_goals(user_id)
+    weight_goal = get_weight_user_goals(user_id)
+    sleep_goal = get_sleep_user_goals(user_id)
+    return render(request, "display_metric_data.html", {"metrics_data": metrics_data, "step_goal": step_goal, "weight_goal": weight_goal, "sleep_goal": sleep_goal})
     # return render(
     #     request,
     #     "forums.html",

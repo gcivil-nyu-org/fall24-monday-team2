@@ -212,31 +212,27 @@ class UserCreationAndDeletionTests(TestCase):
 
     def test_calculate_age_group(self):
         test_cases = [
-            ("2015-06-15", "Child"),  # Age: 9
-            ("2007-01-01", "Teenager"),  # Age: 17
-            ("1995-11-20", "Young Adult"),  # Age: 29
-            ("1980-05-10", "Middle-aged"),  # Age: 44
-            ("1950-12-25", "Senior"),  # Age: 74
-            ("1940-01-01", "Elderly"),  # Age: 84
+            ("2015-06-15", "Child"),          # Age: 9
+            ("2007-01-01", "Teenager"),       # Age: 17
+            ("1995-11-20", "Young Adult"),    # Age: 29
+            ("1980-05-10", "Middle-aged"),    # Age: 44
+            ("1950-12-25", "Senior"),         # Age: 74
+            ("1940-01-01", "Elderly"),        # Age: 84
         ]
 
         for date_of_birth, expected_group in test_cases:
             result = calculate_age_group(date_of_birth)
-            assert (
-                result == expected_group
-            ), f"Expected {expected_group}, got {result} for DOB {date_of_birth}"
+            assert result == expected_group, f"Expected {expected_group}, got {result} for DOB {date_of_birth}"
 
         invalid_cases = [
             ("invalid-date", "Unknown"),  # Invalid date format
-            ("", "Unknown"),  # Empty string
-            (None, "Unknown"),  # None as input
+            ("", "Unknown"),              # Empty string
+            (None, "Unknown"),            # None as input
         ]
 
         for date_of_birth, expected_group in invalid_cases:
             result = calculate_age_group(date_of_birth)
-            assert (
-                result == expected_group
-            ), f"Expected {expected_group}, got {result} for DOB {date_of_birth}"
+            assert result == expected_group, f"Expected {expected_group}, got {result} for DOB {date_of_birth}"
 
     def test_update_user(self):
         # Step 1: Define the updates
