@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.core.serializers import serialize
+
+# from django.core.serializers import serialize
 from .models import Exercise, MuscleGroup, User
 from django.http import JsonResponse
 
@@ -18,7 +19,7 @@ from .dynamodb import (
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
-    get_user_by_uid,
+    # get_user_by_uid,
     get_user_by_username,
     update_reset_request_time,
     update_user,
@@ -598,10 +599,10 @@ def delink_google_fit(request):
 
         if revoke_response.status_code == 200:
             # print("Google account successfully revoked.")
-            print()
+            ...
         else:
             # print("Failed to revoke Google account.")
-            print()
+            ...
 
         # Remove credentials from the session
         del request.session["credentials"]
@@ -1914,17 +1915,7 @@ def health_data_view(request):
     for metric in metrics_data:
         metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
 
-    return render(request, "display_metric_data.html", {"metrics_data": metrics_data})
-    # return render(
-    #     request,
-    #     "forums.html",
-    #     {
-    #         "user": user,
-    #         "threads": threads,
-    #         "users": users,
-    #         "is_banned": is_banned,
-    #     },
-    # )
+    return render(request, "display_metrics_data.html", {"metrics_data": metrics_data})
 
 
 def add_reply(request):
