@@ -1,10 +1,9 @@
+import json
 import os
 import sys
-from pathlib import Path
 from datetime import timedelta
+from pathlib import Path
 import boto3
-import json
-
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -17,6 +16,15 @@ def get_secrets():
     GOOGLEFIT_CLIENT_ID = response.get("GOOGLEFIT_CLIENT_ID")
     GOOGLEFIT_CLIENT_SECRET = response.get("GOOGLEFIT_CLIENT_SECRET")
     return (GOOGLEFIT_CLIENT_ID, GOOGLEFIT_CLIENT_SECRET)
+
+
+# def get_aws_secrets():
+#     client = boto3.client("secretsmanager", region_name="us-west-2")
+#     response = client.get_secret_value(SecretId="aws_secrets")
+#     response = json.loads(response["SecretString"])
+#     AWS_ACCESS_KEY_ID = response.get("AWS_ACCESS_KEY_ID")
+#     AWS_SECRET_ACCESS_KEY = response.get("AWS_SECRET_ACCESS_KEY")
+#     return (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
 
 
 def get_aws_secrets():
@@ -86,6 +94,7 @@ ALLOWED_HOSTS = ["*"]
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     "FitOn",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -94,13 +103,14 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "storages",  # Add this line for S3 storage
+    "channels",
 ]
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
+    # "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -126,6 +136,25 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "FitOn.wsgi.application"
+
+ASGI_APPLICATION = "FitOn.asgi.application"
+
+# Websocket protocol
+if DEBUG:
+    WEBSOCKET_PROTOCOL = "ws://"
+else:
+    WEBSOCKET_PROTOCOL = "wss://"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
+
+# Session settings
+SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_NAME = "fiton_session"
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases

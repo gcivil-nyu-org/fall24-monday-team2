@@ -4,7 +4,7 @@ awscli
 black
 boto
 boto3
-botocore
+botocore==1.35.72
 coverage
 coveralls
 cachetools
@@ -23,6 +23,7 @@ google-auth-oauthlib
 googleapis-common-protos
 httplib2
 idna
+ipykernel
 jmespath
 moto
 mypy-extensions
@@ -41,12 +42,19 @@ pyYAML
 pyparsing
 python-dateutil
 pytz
+pytest
 requests
 requests-oauthlib
 rsa
 s3transfer
+sagemaker
+scikit-learn
 six
 sqlparse
 tzdata
 uritemplate
 urllib3
+daphne
+channels
+channels-redis
+Pillow

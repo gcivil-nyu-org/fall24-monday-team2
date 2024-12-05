@@ -4,18 +4,102 @@
 
 {% block content %}
 
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Homepage</title>
-    </head>
-    <body>
-        <div class="container">
-            <h2>Hello, {{ username }}!</h2>
-            <p>Welcome to the homepage!</p>
-        </div>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homepage</title>
+    <style>
+        /* Overlay styling */
+        #warningOverlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
 
-    </body>
+        /* Popup styling */
+        #warningPopup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            z-index: 1001;
+            text-align: center;
+        }
 
+        #dismissWarningBtn {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        #dismissWarningBtn:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div id="warningOverlay"></div>
+    <div id="warningPopup">
+        <p><strong>Warning:</strong> You have received a warning. Please adhere to community guidelines.</p>
+        <button id="dismissWarningBtn">I Understand</button>
+    </div>
+
+    <div class="container">
+        <h2>Hello, {{ username }}!</h2>
+        <p>Welcome to the homepage!</p>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const isWarned = "{{ is_warned|yesno:'true,false' }}" === "true"; // Convert to boolean
+    
+            if (isWarned) {
+                // Show the warning popup
+                document.getElementById("warningOverlay").style.display = "block";
+                document.getElementById("warningPopup").style.display = "block";
+            }
+    
+            // Handle dismissal of the warning
+            const dismissWarningBtn = document.getElementById("dismissWarningBtn");
+            if (dismissWarningBtn) {
+                dismissWarningBtn.addEventListener("click", function () {
+                    fetch("/dismiss_warning/", {
+                        method: "POST",
+                        headers: {
+                            "X-CSRFToken": "{{ csrf_token }}",
+                            "Content-Type": "application/json",
+                            "x-requested-with": "XMLHttpRequest",
+                        },
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (data.status === "success") {
+                                // Hide the popup
+                                document.getElementById("warningOverlay").style.display = "none";
+                                document.getElementById("warningPopup").style.display = "none";
+                            } else {
+                                alert("Error: " + data.message);
+                            }
+                        })
+                        .catch((error) => console.error("Error dismissing warning:", error));
+                });
+            }
+        });
+    </script>    
+</body>
 
 {% endblock %}

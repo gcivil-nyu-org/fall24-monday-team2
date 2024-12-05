@@ -72,6 +72,22 @@
                     {% endif %}
                 </div>
 
+                <div class="form-group">
+                    <label for="height">Height (cm) </label>
+                    {{ form.height }}
+                    {% if form.height.errors %}
+                        <span class="error">{{ form.height.errors }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="weight">Weight (kg)</label>
+                    {{ form.weight }}
+                    {% if form.weight.errors %}
+                        <span class="error">{{ form.weight.errors }}</span>
+                    {% endif %}
+                </div>
+
                 <!-- Phone Number with Country Code -->
                 <div class="form-group">
                     <label for="phone_number">Phone Number</label>
@@ -207,19 +223,41 @@
             const fileInput = document.getElementById('file-input');
 
             profilePictureContainer.addEventListener('click', function () {
-                fileInput.click();  // Trigger file input dialog on click
+                fileInput.click(); // Trigger file input dialog on click
             });
 
             fileInput.addEventListener('change', function () {
+                const file = fileInput.files[0]; // Get the selected file
+
+                // Validate the file type
+                if (!file) {
+                    alert('No file selected.');
+                    return;
+                }
+                
+                if (file.type !== 'image/jpeg') {
+                    alert('Please upload a .jpg file.');
+                    fileInput.value = ''; // Reset the file input
+                    return;
+                }
+
+                // Validate file size (optional, e.g., max 5MB)
+                const maxSizeMB = 5;
+                if (file.size > maxSizeMB * 1024 * 1024) {
+                    alert(`File size exceeds ${maxSizeMB}MB. Please upload a smaller file.`);
+                    fileInput.value = ''; // Reset the file input
+                    return;
+                }
+
                 const formData = new FormData();
-                formData.append('profile_picture', fileInput.files[0]);
+                formData.append('profile_picture', file);
 
                 // Make an AJAX request to upload the profile picture
                 fetch('/upload_profile_picture/', {
                     method: 'POST',
                     body: formData,
                     headers: {
-                        'X-CSRFToken': getCSRFToken()  // Pass CSRF token for security
+                        'X-CSRFToken': getCSRFToken() // Pass CSRF token for security
                     }
                 }).then(response => {
                     return response.json();

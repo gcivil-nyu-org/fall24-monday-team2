@@ -1,12 +1,21 @@
 from boto3.dynamodb.conditions import Attr
 import boto3
-import uuid
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import make_password, check_password
 from datetime import datetime, timezone
-from django.conf import settings
+
+# from asgiref.sync import sync_to_async
+
+from boto3.dynamodb.conditions import Key
+from asgiref.sync import sync_to_async
+
+
+# from django.core.files.storage import default_storage
 from django.utils import timezone
+from django.http import JsonResponse
 from pytz import timezone
+from django.conf import settings
+import uuid
 
 # Connect to DynamoDB
 dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
@@ -22,7 +31,19 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
+chat_table = dynamodb.Table("chat_table")
+
 tz = timezone("EST")
+
+GENDER_OPTIONS = {"M": "Male", "F": "Female", "O": "Other", "PNTS": "Prefer not to say"}
+AGE_GROUPS = [
+    (0, 12, "Child"),
+    (13, 19, "Teenager"),
+    (20, 35, "Young Adult"),
+    (36, 55, "Middle-aged"),
+    (56, 74, "Senior"),
+    (75, float("inf"), "Elderly"),
+]
 
 
 class MockUser:
@@ -36,15 +57,15 @@ class MockUser:
             self.is_active = user_data.get("is_active", True)
             self.last_login = user_data.get("last_login", None)
             self.pk = self.user_id
-        else:
-            self.user_id = None
-            self.email = ""
-            self.username = ""
-            self.password = ""
-            self.date_of_birth = ""
-            self.is_active = True
-            self.last_login = None
-            self.pk = None
+        # else:
+        #     self.user_id = None
+        #     self.email = ""
+        #     self.username = ""
+        #     self.password = ""
+        #     self.date_of_birth = ""
+        #     self.is_active = True
+        #     self.last_login = None
+        #     self.pk = None
 
     def get_email_field_name(self):
         return "email"
@@ -72,7 +93,26 @@ def get_user_by_username(username):
     #     return None
 
 
-def create_user(user_id, username, email, name, date_of_birth, gender, password):
+def get_users_by_username_query(query):
+    try:
+        # Scan the Users table to get all users
+        response = users_table.scan()
+        users = response.get("Items", [])
+
+        # Filter users based on case-insensitive match
+        filtered_users = [
+            user for user in users if query.lower() in user["username"].lower()
+        ]
+
+        return filtered_users
+    except Exception as e:
+        print(f"Error querying DynamoDB for usernames: {e}")
+        return []
+
+
+def create_user(
+    user_id, username, email, name, date_of_birth, gender, height, weight, password
+):
     # try:
     users_table.put_item(
         Item={
@@ -82,6 +122,8 @@ def create_user(user_id, username, email, name, date_of_birth, gender, password)
             "name": name,
             "date_of_birth": str(date_of_birth),
             "gender": gender,
+            "height": height,
+            "weight": weight,
             "password": password,  # Hashed password
             "is_admin": False,
             "is_fitness_trainer": False,
@@ -158,6 +200,19 @@ def get_user_by_uid(uid):
     #     return e
 
 
+def get_mock_user_by_uid(uid):
+    # try:
+    # Fetch from DynamoDB table
+    response = users_table.get_item(Key={"user_id": uid})
+    user_data = response.get("Item", None)
+
+    if user_data:
+        return MockUser(user_data)
+    return None
+    # except Exception:
+    # return None
+
+
 def update_user_password(user_id, new_password):
     # try:
     hashed_password = make_password(new_password)
@@ -174,38 +229,45 @@ def update_user_password(user_id, new_password):
 
 
 def get_last_reset_request_time(user_id):
-    try:
-        response = password_reset_table.get_item(Key={"user_id": user_id})
-        if "Item" in response:
-            return response["Item"].get("last_request_time", None)
-        return None
-    except Exception as e:
-        print(f"Error fetching reset request for user_id '{user_id}': {e}")
-        return None
+    # try:
+    response = password_reset_table.get_item(Key={"user_id": user_id})
+    if "Item" in response:
+        return response["Item"].get("last_request_time", None)
+    return None
+    # except Exception as e:
+    #     print(f"Error fetching reset request for user_id '{user_id}': {e}")
+    #     return None
 
 
 def update_reset_request_time(user_id):
-    try:
-        if not user_id:
-            print("User ID is None. Cannot update reset request time.")
-            return None
+    # try:
+    #     if not user_id:
+    #         print("User ID is None. Cannot update reset request time.")
+    #         return None
 
-        # Insert a new entry or update the existing reset request time
-        password_reset_table.put_item(
-            Item={"user_id": user_id, "last_request_time": timezone.now().isoformat()}
-        )
-        print(f"Reset request time updated for user_id '{user_id}'.")
-    except Exception as e:
-        print(f"Error updating reset request time for user_id '{user_id}': {e}")
+    # Insert a new entry or update the existing reset request time
+    password_reset_table.put_item(
+        Item={"user_id": user_id, "last_request_time": datetime.now(tz).isoformat()}
+    )
+    #     print(f"Reset request time updated for user_id '{user_id}'.")
+    # except Exception as e:
+    #     print(f"Error updating reset request time for user_id '{user_id}': {e}")
 
 
 def get_user(user_id):
     try:
         response = users_table.get_item(Key={"user_id": user_id})
-        return response.get("Item")
+        return response.get("Item") or {}
     except ClientError as e:
         print(e.response["Error"]["Message"])
         return None
+
+
+def verify_user_credentials(username, password):
+    user = get_user_by_username(username)
+    if user and check_password(password, user["password"]):
+        return user
+    return None
 
 
 def upload_profile_picture(user_id, profile_picture):
@@ -258,10 +320,9 @@ def update_user(user_id, update_data):
     )
     return response
 
-
-# except ClientError as e:
-#     print(e.response["Error"]["Message"])
-#     return None
+    # except ClientError as e:
+    #     print(e.response["Error"]["Message"])
+    #     return None
 
 
 def add_fitness_trainer_application(
@@ -405,6 +466,8 @@ def get_fitness_trainers():
 
             user = get_user(trainer["user_id"])
             trainer["username"] = user["username"] if user else "Unknown"
+            trainer["name"] = user["name"] if user else "Unknown"
+            trainer["gender"] = GENDER_OPTIONS[user["gender"]] if user else "Unknown"
 
         return trainers
 
@@ -448,14 +511,179 @@ def remove_fitness_trainer(user_id):
         return []
 
 
+def calculate_age_group(date_of_birth):
+    try:
+        dob = datetime.strptime(
+            date_of_birth, "%Y-%m-%d"
+        )  # Assuming the date format is YYYY-MM-DD
+        today = datetime.today()
+        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
+        # Find the age group based on the age
+        for min_age, max_age, group_name in AGE_GROUPS:
+            if min_age <= age <= max_age:
+                return group_name
+    except (ValueError, TypeError):
+        return "Unknown"  # Return "Unknown" if date_of_birth is invalid or missing
+    except ClientError as e:
+        print(f"Error fetching standard users: {e.response['Error']['Message']}")
+        return ""
+
+
+def get_standard_users():
+    try:
+        # Scan the DynamoDB table to fetch all standard users
+        response = users_table.scan(
+            FilterExpression="is_fitness_trainer = :is_fitness_trainer AND is_admin = :is_admin",
+            ExpressionAttributeValues={
+                ":is_fitness_trainer": False,
+                ":is_admin": False,
+            },
+        )
+
+        # Extract users
+        standard_users = response.get("Items", [])
+
+        # Update the gender field for each user
+        for user in standard_users:
+            gender_code = user.get(
+                "gender", "PNTS"
+            )  # Default to "PNTS" if no gender is set
+            user["gender"] = GENDER_OPTIONS.get(
+                gender_code, "Unknown"
+            )  # Map gender code to description
+
+            # Update age based on date_of_birth
+            date_of_birth = user.get(
+                "date_of_birth"
+            )  # Assuming this field exists in the DynamoDB table
+            user["age"] = (
+                calculate_age_group(date_of_birth) if date_of_birth else "Unknown"
+            )
+
+        return standard_users
+
+    except ClientError as e:
+        print(f"Error fetching standard users: {e.response['Error']['Message']}")
+        return []
+
+
+def send_data_request_to_user(fitness_trainer_id, standard_user_id):
+    try:
+        standard_user = get_user(standard_user_id)
+        fitness_trainer = get_user(fitness_trainer_id)
+
+        if not standard_user or not fitness_trainer:
+            print("User(s) not found")
+            return False
+
+        if "waiting_list_of_trainers" not in standard_user:
+            standard_user["waiting_list_of_trainers"] = []
+
+        if fitness_trainer_id not in standard_user["waiting_list_of_trainers"]:
+            standard_user["waiting_list_of_trainers"].append(fitness_trainer_id)
+
+        users_table.update_item(
+            Key={"user_id": standard_user_id},
+            UpdateExpression="SET waiting_list_of_trainers = :waiting_list_of_trainers",
+            ExpressionAttributeValues={
+                ":waiting_list_of_trainers": standard_user["waiting_list_of_trainers"]
+            },
+        )
+
+        if "waiting_list_of_users" not in fitness_trainer:
+            fitness_trainer["waiting_list_of_users"] = []
+
+        if standard_user_id not in fitness_trainer["waiting_list_of_users"]:
+            fitness_trainer["waiting_list_of_users"].append(standard_user_id)
+
+        users_table.update_item(
+            Key={"user_id": fitness_trainer_id},
+            UpdateExpression="SET waiting_list_of_users = :waiting_list_of_users",
+            ExpressionAttributeValues={
+                ":waiting_list_of_users": fitness_trainer["waiting_list_of_users"]
+            },
+        )
+
+        return True
+
+    except ClientError as e:
+        print(f"Error sending data request: {e}")
+        return False
+
+
+def cancel_data_request_to_user(fitness_trainer_id, standard_user_id):
+    try:
+        standard_user = get_user(standard_user_id)
+        fitness_trainer = get_user(fitness_trainer_id)
+
+        if not standard_user or not fitness_trainer:
+            print("User(s) not found")
+            return False
+
+        if "waiting_list_of_trainers" in standard_user:
+            waiting_list_of_trainers = standard_user["waiting_list_of_trainers"]
+            if fitness_trainer_id in waiting_list_of_trainers:
+                waiting_list_of_trainers.remove(fitness_trainer_id)
+                users_table.update_item(
+                    Key={"user_id": standard_user_id},
+                    UpdateExpression="SET waiting_list_of_trainers = :new_list",
+                    ExpressionAttributeValues={":new_list": waiting_list_of_trainers},
+                )
+
+        if "waiting_list_of_users" in fitness_trainer:
+            waiting_list_of_users = fitness_trainer["waiting_list_of_users"]
+            if standard_user_id in waiting_list_of_users:
+                waiting_list_of_users.remove(standard_user_id)
+                users_table.update_item(
+                    Key={"user_id": fitness_trainer_id},
+                    UpdateExpression="SET waiting_list_of_users = :new_list",
+                    ExpressionAttributeValues={":new_list": waiting_list_of_users},
+                )
+
+        return True
+
+    except Exception as e:
+        print(f"Error in cancelling data request: {e}")
+        return False
+
+
+def add_to_list(user_id, field, value):
+    users_table.update_item(
+        Key={"user_id": user_id},
+        UpdateExpression=f"SET {field} = list_append(if_not_exists({field}, :empty_list), :val)",
+        ExpressionAttributeValues={":val": [value], ":empty_list": []},
+    )
+
+
+def remove_from_list(user_id, field, value):
+    # Fetch the current user data to get the list
+    user = get_user(user_id)
+    if not user or field not in user:
+        raise ValueError(f"Field {field} does not exist in user {user_id}")
+
+    # Find the index of the value in the list
+    try:
+        index = user[field].index(value)
+    except ValueError:
+        raise ValueError(f"Value {value} not found in field {field} for user {user_id}")
+
+    # Remove the value using its index
+    users_table.update_item(
+        Key={"user_id": user_id},
+        UpdateExpression=f"REMOVE {field}[{index}]",
+        ConditionExpression=f"contains({field}, :val)",
+        ExpressionAttributeValues={":val": value},
+    )
+
+
 # -------------------------------
 # Forums Functions
 # -------------------------------
 
 
-def create_thread(title, user_id, content):
+def create_thread(title, user_id, content, section="General"):
     thread_id = str(uuid.uuid4())
-
     created_at = datetime.now(tz).isoformat()
 
     thread = {
@@ -463,6 +691,7 @@ def create_thread(title, user_id, content):
         "Title": title,
         "UserID": user_id,
         "Content": content,
+        "Section": section,
         "CreatedAt": created_at,
         "Likes": 0,
         "LikedBy": [],
@@ -511,7 +740,6 @@ def fetch_thread(thread_id):
 
 def create_post(thread_id, user_id, content):
     post_id = str(uuid.uuid4())
-
     created_at = datetime.now(tz).isoformat()
 
     post = {
@@ -597,7 +825,12 @@ def delete_post(post_id, thread_id):
 
 
 def fetch_filtered_threads(
-    username="", thread_type="all", start_date="", end_date="", search_text=""
+    section=None,
+    username="",
+    thread_type="all",
+    start_date="",
+    end_date="",
+    search_text="",
 ):
     # Start building the filter expression
     filter_expression = Attr(
@@ -616,6 +849,9 @@ def fetch_filtered_threads(
     if end_date:
         end_date_dt = datetime.strptime(end_date, "%Y-%m-%d").isoformat()
         filter_expression &= Attr("CreatedAt").lte(end_date_dt)
+
+    if section:
+        filter_expression &= Attr("Section").eq(section)
 
     # Apply search text filter if provided (checks both thread titles and content)
     if search_text:
@@ -684,9 +920,9 @@ def fetch_all_users():
 
 def get_fitness_data(metric, email, start_time, end_time):
     try:
-        print("Inside Fitness Data Function\n")
-        print("Start Time: \n", start_time)
-        print("End Time: \n", end_time)
+        # print("Inside Fitness Data Function\n")
+        # print("Start Time: \n", start_time)
+        # print("End Time: \n", end_time)
         response = fitness_table.scan(
             FilterExpression="metric = :m AND #t BETWEEN :start AND :end AND email = :email",
             ExpressionAttributeNames={"#t": "time"},
@@ -697,9 +933,9 @@ def get_fitness_data(metric, email, start_time, end_time):
                 ":end": end_time.strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
         )
-        print(
-            f"Metric : {metric}\nResponse: {response}\n",
-        )
+        # print(
+        #     f"Metric : {metric}\nResponse: {response}\n",
+        # )
         return response
     except Exception as e:
         print(f"Error querying DynamoDB for fitness data. {e}")
@@ -790,7 +1026,7 @@ def get_thread(title, user_id, content, created_at):
 
 def create_reply(thread_id, user_id, content):
     reply_id = str(uuid.uuid4())
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(tz).isoformat()
 
     reply = {
         "ReplyID": reply_id,
@@ -950,10 +1186,10 @@ def mark_thread_as_reported(thread_id):
 
 def mark_comment_as_reported(thread_id, post_id, reporting_user):
     try:
-        print(f"Fetching comment {post_id} in thread {thread_id}")
+        # print(f"Fetching comment {post_id} in thread {thread_id}")
         response = posts_table.get_item(Key={"ThreadID": thread_id, "PostID": post_id})
         comment = response.get("Item", {})
-        print(f"Comment fetched: {comment}")
+        # print(f"Comment fetched: {comment}")
 
         if not comment:
             print(f"Comment {post_id} not found in thread {thread_id}")
@@ -961,7 +1197,7 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
 
         # Initialize ReportedBy if it doesn't exist
         reported_by = comment.get("ReportedBy", [])
-        print(f"Current ReportedBy list: {reported_by}")
+        # print(f"Current ReportedBy list: {reported_by}")
 
         # Avoid duplicate reporting
         if reporting_user not in reported_by:
@@ -973,6 +1209,255 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
             UpdateExpression="SET ReportedBy = :reported_by",
             ExpressionAttributeValues={":reported_by": reported_by},
         )
-        print(f"Successfully reported comment {post_id} in thread {thread_id}")
+        # print(f"Successfully reported comment {post_id} in thread {thread_id}")
     except Exception as e:
         print(f"Error reporting comment: {e}")
+
+
+def mark_user_as_warned_thread(thread_id, user_id):
+    try:
+        print(f"Fetching user with ID: {user_id}")
+        response = users_table.get_item(Key={"user_id": user_id})
+        user = response.get("Item", {})
+
+        if not user:
+            print(f"User with ID {user_id} not found in users_table.")
+            raise ValueError(f"User with ID {user_id} not found.")
+
+        print(f"User fetched successfully: {user}")
+
+        warning_reason = f"Warned for behavior in thread {thread_id}"
+
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_warned = :warned, warning_reason = :reason",
+            ExpressionAttributeValues={
+                ":warned": True,
+                ":reason": warning_reason,
+            },
+        )
+        print(f"User {user_id} has been warned for comment {thread_id}.")
+    except Exception as e:
+        print(f"Error warning user {user_id} for comment {thread_id}: {e}")
+        raise
+
+
+def mark_user_as_warned_comment(post_id, user_id):
+    try:
+        print(f"Fetching user with ID: {user_id}")
+        response = users_table.get_item(Key={"user_id": user_id})
+        user = response.get("Item", {})
+
+        if not user:
+            print(f"User with ID {user_id} not found in users_table.")
+            raise ValueError(f"User with ID {user_id} not found.")
+
+        print(f"User fetched successfully: {user}")
+
+        warning_reason = f"Warned for behavior in comment {post_id}"
+
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression="SET is_warned = :warned, warning_reason = :reason",
+            ExpressionAttributeValues={
+                ":warned": True,
+                ":reason": warning_reason,
+            },
+        )
+        print(f"User {user_id} has been warned for comment {post_id}.")
+    except Exception as e:
+        print(f"Error warning user {user_id} for comment {post_id}: {e}")
+        raise
+
+
+def set_user_warned_to_false(user_id):
+    """
+    Sets the is_warned attribute to False for a user in the Users table.
+
+    :param user_id: The ID of the user to update.
+    """
+    # Initialize DynamoDB resource
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    users_table = dynamodb.Table("Users")
+
+    try:
+        # Update the is_warned attribute to False
+        response = users_table.update_item(
+            Key={
+                "user_id": user_id
+            },  # Replace this key with your partition key field name if different
+            UpdateExpression="SET is_warned = :warned",
+            ExpressionAttributeValues={":warned": False},
+            ReturnValues="UPDATED_NEW",
+        )
+        print(f"User {user_id} successfully updated: {response}")
+        return {"status": "success", "message": f"User {user_id} warning dismissed."}
+    except ClientError as e:
+        print(f"Error updating user {user_id}: {e.response['Error']['Message']}")
+        return {"status": "error", "message": e.response["Error"]["Message"]}
+
+
+def get_section_stats(section_name):
+    # Fetch threads for the section
+    threads_response = threads_table.scan(
+        FilterExpression=Attr("Section").eq(section_name)
+    )
+    threads = threads_response.get("Items", [])
+
+    # Count threads
+    thread_count = len(threads)
+
+    # Count posts (assuming each thread has a "PostCount" attribute)
+    post_count = sum(thread.get("PostCount", 0) for thread in threads)
+
+    # Find the latest thread
+    latest_thread = max(threads, key=lambda x: x.get("CreatedAt"), default=None)
+
+    if latest_thread:
+        latest_thread_title = latest_thread.get("Title", "No threads")
+        latest_thread_author = latest_thread.get("UserID", "Unknown")
+        latest_thread_id = latest_thread.get("ThreadID", None)
+        created_at_raw = latest_thread.get("CreatedAt")
+        latest_thread_created_at = (
+            datetime.fromisoformat(created_at_raw) if created_at_raw else None
+        )
+    else:
+        latest_thread_title = "No threads"
+        latest_thread_author = "N/A"
+        latest_thread_id = None
+        latest_thread_created_at = "N/A"
+
+    return {
+        "thread_count": thread_count,
+        "post_count": post_count,
+        "latest_thread": {
+            "title": latest_thread_title,
+            "author": latest_thread_author,
+            "thread_id": latest_thread_id,
+            "created_at": latest_thread_created_at,
+        },
+    }
+
+
+@sync_to_async
+def save_chat_message(sender, message, room_name, sender_name):
+    if len(message) > 500:
+        return JsonResponse({"error": "Message exceeds character limit"}, status=400)
+
+    timestamp = int(datetime.now(tz).timestamp())
+
+    chat_table.put_item(
+        Item={
+            "room_name": room_name,
+            "sender": sender,
+            "sender_name": sender_name,
+            "message": message,
+            "timestamp": timestamp,
+            "is_read": False,
+        }
+    )
+    return JsonResponse({"success": True})
+
+
+def get_users_without_specific_username(exclude_username):
+    try:
+        response = users_table.scan(
+            FilterExpression=Attr("username").ne(exclude_username),
+            ProjectionExpression="user_id, username",  # Fetch only required fields
+        )
+        users = response.get("Items", [])
+        print(f"Users fetched for search: {users}")
+        return users
+    except Exception as e:
+        print(
+            f"Error querying DynamoDB for users excluding username '{exclude_username}': {e}"
+        )
+        return []
+
+
+def get_chat_history_from_db(room_id):
+    response = chat_table.query(
+        KeyConditionExpression=Key("room_name").eq(room_id),
+        ScanIndexForward=True,
+    )
+    return response
+
+
+def get_unread_messages_count(receiver_id):
+    """
+    Fetch unread messages for a specific user using the GSI.
+    """
+    try:
+        response = chat_table.query(
+            IndexName="receiver-is_read-index",  # GSI name
+            KeyConditionExpression=Key("receiver").eq(receiver_id)
+            & Key("is_read").eq(0),
+        )
+        # Count unread messages grouped by sender
+        unread_counts = {}
+        for item in response.get("Items", []):
+            sender = item["sender"]
+            unread_counts[sender] = unread_counts.get(sender, 0) + 1
+
+        return unread_counts
+    except Exception as e:
+        print(f"Error querying unread messages: {e}")
+        return {}
+
+
+def get_users_with_chat_history(user_id):
+    try:
+        # Scan the table to find chat history involving the given user
+        response = chat_table.scan(
+            FilterExpression=Attr("user_id").eq(user_id)
+            | Attr("other_user_id").eq(user_id)
+        )
+
+        chat_history = response.get("Items", [])
+
+        # Debug: Check the raw chat history
+        print(f"Chat history raw response: {chat_history}")
+
+        # Extract unique user IDs and their chat information
+        users_with_activity = {}
+        for chat in chat_history:
+            # Identify the other participant in the chat
+            other_user_id = (
+                chat["other_user_id"] if chat["user_id"] == user_id else chat["user_id"]
+            )
+            room_name = chat.get("room_name", "")
+            last_activity = chat.get(
+                "timestamp", 0
+            )  # Assuming `timestamp` indicates last activity
+
+            # Store the latest activity for each user
+            if other_user_id not in users_with_activity:
+                users_with_activity[other_user_id] = {
+                    "user_id": other_user_id,
+                    "room_name": room_name,
+                    "last_activity": last_activity,
+                }
+            else:
+                # Update the last activity if this message is more recent
+                users_with_activity[other_user_id]["last_activity"] = max(
+                    users_with_activity[other_user_id]["last_activity"], last_activity
+                )
+
+        # Convert dictionary to a list and sort by last activity
+        sorted_users = sorted(
+            users_with_activity.values(), key=lambda x: x["last_activity"], reverse=True
+        )
+
+        # Fetch usernames for the users
+        for user in sorted_users:
+            user_details = get_user_by_uid(user["user_id"])
+            user["username"] = user_details.username if user_details else "Unknown"
+
+        # Debug: Check sorted users with usernames
+        print(f"Sorted users with chat activity: {sorted_users}")
+
+        return sorted_users
+
+    except Exception as e:
+        print(f"Error fetching users with chat history: {e}")
+        return []

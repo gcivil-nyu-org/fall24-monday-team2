@@ -2,6 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 import datetime
 from .dynamodb import get_user_by_username
+import re
 
 
 GENDER_OPTIONS = [
@@ -24,13 +25,18 @@ COUNTRY_CODES = [
 
 class LoginForm(forms.Form):
     username = forms.CharField(max_length=100, label="Username")
-    password = forms.CharField(widget=forms.PasswordInput(), label="Password")
+    password = forms.CharField(
+        widget=forms.PasswordInput(),
+        label="Password",
+        required=True,
+        error_messages={"required": "Please enter a valid password."},
+    )
 
 
 class SignUpForm(forms.Form):
-    username = forms.CharField(max_length=100, label="Username")
+    username = forms.CharField(max_length=20, label="Username")
     email = forms.EmailField(label="Email")
-    name = forms.CharField(max_length=100, label="Full Name")
+    name = forms.CharField(max_length=50, label="Full Name")
     date_of_birth = forms.DateField(
         widget=forms.SelectDateWidget(
             years=range(1900, datetime.date.today().year + 1)
@@ -44,6 +50,11 @@ class SignUpForm(forms.Form):
         choices=GENDER_CHOICES, widget=forms.Select, label="Gender"
     )
 
+    height = forms.IntegerField(
+        label="Height", min_value=50, max_value=300, initial=170
+    )
+    weight = forms.IntegerField(label="Weight", min_value=20, max_value=500, initial=70)
+
     password = forms.CharField(widget=forms.PasswordInput(), label="Password")
     confirm_password = forms.CharField(
         widget=forms.PasswordInput(), label="Confirm Password"
@@ -51,6 +62,16 @@ class SignUpForm(forms.Form):
 
     def clean_username(self):
         username = self.cleaned_data.get("username")
+
+        # Check if username exceeds 20 characters
+        if len(username) > 20:
+            raise ValidationError("Username cannot exceed 20 characters.")
+
+        # Ensure username contains only alphanumeric characters (letters, numbers, and no special characters)
+        if not re.match(r"^[a-zA-Z0-9_]+$", username):
+            raise ValidationError(
+                "Username can only contain letters, numbers, and underscores."
+            )
 
         # Query DynamoDB to check if the username already exists
         if get_user_by_username(username):
@@ -111,6 +132,21 @@ class ProfileForm(forms.Form):
 
     address = forms.CharField(widget=forms.Textarea, required=False)
     bio = forms.CharField(widget=forms.Textarea, required=False)
+
+    height = forms.IntegerField(
+        label="Height (in cm)",
+        min_value=50,
+        max_value=300,
+        required=False,
+        widget=forms.NumberInput(),
+    )
+    weight = forms.IntegerField(
+        label="Weight (in kg)",
+        min_value=20,
+        max_value=500,
+        required=False,
+        widget=forms.NumberInput(),
+    )
 
     def clean_phone_number(self):
         phone_number = self.cleaned_data.get("phone_number")
