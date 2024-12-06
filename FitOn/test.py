@@ -408,7 +408,8 @@ class WarnActionTest(TestCase):
         # Assert response and user's warning status
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            json.loads(response.content)["message"], "User warned for thread successfully."
+            json.loads(response.content)["message"],
+            "User warned for thread successfully.",
         )
         warned_user = get_user(self.user_data["user_id"])
         self.assertTrue(warned_user.get("is_warned"))
@@ -430,7 +431,8 @@ class WarnActionTest(TestCase):
         # Assert response and user's warning status
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            json.loads(response.content)["message"], "User warned for comment successfully."
+            json.loads(response.content)["message"],
+            "User warned for comment successfully.",
         )
         warned_user = get_user(self.user_data["user_id"])
         self.assertTrue(warned_user.get("is_warned"))
@@ -506,9 +508,7 @@ class DismissWarningTest(TestCase):
 
         # Assert response for missing user ID
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(
-            json.loads(response.content)["message"], "User ID is missing."
-        )
+        self.assertEqual(json.loads(response.content)["message"], "User ID is missing.")
 
     def tearDown(self):
         # Clean up the test user
