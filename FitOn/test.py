@@ -72,6 +72,7 @@ from .views import (
     custom_logout,
     signup,
     forum_view,
+    warn_action,
 )
 from django.contrib.auth.hashers import check_password, make_password
 
@@ -367,6 +368,94 @@ class UserCreationAndDeletionTests(TestCase):
             self.users_table.delete_item(Key={"user_id": self.user_data["user_id"]})
         except ClientError:
             pass  # Ignore if the item was already deleted
+
+
+class WarnActionTest(TestCase):
+    def setUp(self):
+        # Mock user data
+        self.user_data = {
+            "user_id": "test_user_123",
+            "username": "test_user123",
+            "email": "test_user@example.com",
+            "name": "Test User",
+            "date_of_birth": "1990-01-01",
+            "gender": "O",
+            "height": "183",
+            "weight": "83",
+            "password": "hashed_password",
+            "is_warned": False,
+        }
+        # Create the user in the database
+        create_user(**self.user_data)
+
+        self.factory = RequestFactory()
+
+    def test_warn_user_for_thread(self):
+        # Simulate POST request to warn a user for a thread
+        data = {
+            "action": "warn_thread",
+            "thread_id": "thread_123",
+            "user_id": self.user_data["username"],
+        }
+        request = self.factory.post(
+            "/warn_action/",
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        response = warn_action(request)
+
+        # Assert response and user's warning status
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            json.loads(response.content)["message"], "User warned for thread successfully."
+        )
+        warned_user = get_user(self.user_data["user_id"])
+        self.assertTrue(warned_user.get("is_warned"))
+
+    def test_warn_user_for_comment(self):
+        # Simulate POST request to warn a user for a comment
+        data = {
+            "action": "warn_comment",
+            "post_id": "post_123",
+            "user_id": self.user_data["username"],
+        }
+        request = self.factory.post(
+            "/warn_action/",
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        response = warn_action(request)
+
+        # Assert response and user's warning status
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            json.loads(response.content)["message"], "User warned for comment successfully."
+        )
+        warned_user = get_user(self.user_data["user_id"])
+        self.assertTrue(warned_user.get("is_warned"))
+
+    def test_warn_user_invalid_action(self):
+        # Simulate POST request with invalid action
+        data = {
+            "action": "invalid_action",
+            "user_id": self.user_data["username"],
+        }
+        request = self.factory.post(
+            "/warn_action/",
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        response = warn_action(request)
+
+        # Assert response for invalid action
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            json.loads(response.content)["message"], "Invalid action or ID."
+        )
+
+    def tearDown(self):
+        # Clean up the test user
+        delete_user_by_username(self.user_data["username"])
 
 
 class ForumTests(TestCase):

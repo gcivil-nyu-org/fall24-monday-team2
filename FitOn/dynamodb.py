@@ -111,7 +111,7 @@ def get_users_by_username_query(query):
 
 
 def create_user(
-    user_id, username, email, name, date_of_birth, gender, height, weight, password
+    user_id, username, email, name, date_of_birth, gender, height, weight, password, is_warned=False
 ):
     # try:
     users_table.put_item(
@@ -130,6 +130,7 @@ def create_user(
             "is_muted": False,
             "is_banned": False,
             "punishment_date": "",
+            "is_warned": is_warned
         }
     )
 
