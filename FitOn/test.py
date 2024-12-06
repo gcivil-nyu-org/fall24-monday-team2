@@ -73,6 +73,7 @@ from .views import (
     signup,
     forum_view,
     warn_action,
+    dismiss_warning,
 )
 from django.contrib.auth.hashers import check_password, make_password
 
@@ -451,6 +452,62 @@ class WarnActionTest(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(
             json.loads(response.content)["message"], "Invalid action or ID."
+        )
+
+    def tearDown(self):
+        # Clean up the test user
+        delete_user_by_username(self.user_data["username"])
+
+
+class DismissWarningTest(TestCase):
+    def setUp(self):
+        # Mock user data
+        self.user_data = {
+            "user_id": "test_user_123",
+            "username": "test_user123",
+            "email": "test_user@example.com",
+            "name": "Test User",
+            "date_of_birth": "1990-01-01",
+            "gender": "O",
+            "height": "183",
+            "weight": "83",
+            "password": "hashed_password",
+            "is_warned": True,
+        }
+        # Create the user in the database
+        create_user(**self.user_data)
+
+        self.factory = RequestFactory()
+
+    def test_dismiss_warning(self):
+        # Simulate user session
+        request = self.factory.post("/dismiss_warning/")
+        request.session = {"user_id": self.user_data["user_id"]}
+
+        # Call the dismiss_warning view
+        response = dismiss_warning(request)
+        response_data = json.loads(response.content)
+        # Assert response and user's warning status
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response_data["message"],
+            f"User {self.user_data['user_id']} warning dismissed.",
+        )
+        updated_user = get_user(self.user_data["user_id"])
+        self.assertFalse(updated_user.get("is_warned"))
+
+    def test_dismiss_warning_no_user_id(self):
+        # Simulate request without a user ID in the session
+        request = self.factory.post("/dismiss_warning/")
+        request.session = {}
+
+        # Call the dismiss_warning view
+        response = dismiss_warning(request)
+
+        # Assert response for missing user ID
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            json.loads(response.content)["message"], "User ID is missing."
         )
 
     def tearDown(self):
