@@ -111,7 +111,16 @@ def get_users_by_username_query(query):
 
 
 def create_user(
-    user_id, username, email, name, date_of_birth, gender, height, weight, password
+    user_id,
+    username,
+    email,
+    name,
+    date_of_birth,
+    gender,
+    height,
+    weight,
+    password,
+    is_warned=False,
 ):
     # try:
     users_table.put_item(
@@ -130,6 +139,7 @@ def create_user(
             "is_muted": False,
             "is_banned": False,
             "punishment_date": "",
+            "is_warned": is_warned,
         }
     )
 
@@ -1438,9 +1448,6 @@ def get_users_with_chat_history(user_id):
         for user in sorted_users:
             user_details = get_user_by_uid(user["user_id"])
             user["username"] = user_details.username if user_details else "Unknown"
-
-        # Debug: Check sorted users with usernames
-        print(f"Sorted users with chat activity: {sorted_users}")
 
         return sorted_users
 

@@ -107,7 +107,7 @@ class GroupChatMember(models.Model):
         CANCELED = "CANCELED"
 
     name = models.CharField("group name", max_length=200, default="")
-    uid = models.CharField("userid", max_length=80)
+    uid = models.CharField("userid", max_length=36)
 
     status = models.CharField(
         "status",
