@@ -1453,8 +1453,6 @@ def get_users_with_chat_history(user_id):
             user_details = get_user_by_uid(user["user_id"])
             user["username"] = user_details.username if user_details else "Unknown"
 
-        # Debug: Check sorted users with usernames
-        print(f"Sorted users with chat activity: {sorted_users}")
 
         return sorted_users
 

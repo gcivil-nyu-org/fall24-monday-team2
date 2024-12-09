@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.core.serializers import serialize
 from .models import Exercise, MuscleGroup, User
@@ -51,6 +51,7 @@ from .dynamodb import (
     mark_user_as_warned_thread,
     mark_user_as_warned_comment,
     set_user_warned_to_false,
+    get_users_by_username_query,
 )
 from .rds import rds_main, fetch_user_data
 
@@ -113,6 +114,8 @@ from googleapiclient.discovery import build
 import asyncio
 from collections import defaultdict
 from boto3.dynamodb.conditions import Key, Attr
+from django.db.models import Q
+from django.views.decorators.csrf import csrf_exempt
 
 # Define metric data types
 dataTypes = {
@@ -2755,6 +2758,27 @@ def create_group_chat(request):
     dic = {"code": "200", "message": "ok"}
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
+# def create_group_chat(request):
+#     if request.method == "POST":
+#         payload = json.loads(request.body.decode())
+#         room_name = payload.get("roomName")
+#         selected_users = payload.get("selectedUsers")
+        
+#         if GroupChatMember.objects.filter(name=room_name).exists():
+#             return JsonResponse({"code": "400", "message": "Group already exists!"})
+
+#         # Create group chat members
+#         for username in selected_users:
+#             user = get_user_by_username(username)
+#             if user:
+#                 GroupChatMember.objects.create(
+#                     name=room_name, 
+#                     uid=user["user_id"],
+#                     status=GroupChatMember.AgreementStatus.COMPLETED
+#                 )
+
+#         return JsonResponse({"code": "200", "message": "ok"})
+#     return JsonResponse({"code": "400", "message": "Invalid request"})
 
 def invite_to_group(request):
     payload = json.loads(request.body.decode())
@@ -2828,32 +2852,19 @@ def get_pending_invitations(request):
 
 
 def search_users(request):
-    query = request.GET.get(
-        "query", ""
-    ).lower()  # Convert to lowercase for case-insensitive search
-    username = request.session.get("username")
-
+    query = request.GET.get("query", "").lower()
+    print(f"Search query: {query}")  # Debug log for the query
     try:
-        all_users = get_users_without_specific_username(
-            username
-        )  # Exclude current user
-        matching_users = [
-            {
-                "username": user["username"],
-                "user_id": user["user_id"],
-            }
-            for user in all_users
-            if query in user["username"].lower()
+        matching_users = get_users_by_username_query(query)
+        print(f"Matching users: {matching_users}")  # Debug log for results
+        result = [
+            {"username": user["username"], "user_id": user["user_id"]}
+            for user in matching_users
         ]
-        # print(f"Search query: {query}")
-        # print(f"Matching users: {matching_users}")
-        # print(f"Matching users after filtering: {matching_users}")
-        return JsonResponse(matching_users, safe=False)
+        return JsonResponse(result, safe=False)
     except Exception as e:
         print(f"Error in search_users function: {e}")
-        return JsonResponse(
-            {"error": "Error occurred while searching users."}, status=500
-        )
+        return JsonResponse({"error": "Error occurred while searching users."}, status=500)
 
 
 def mark_messages_as_read(request, room_id):
@@ -2875,3 +2886,48 @@ def mark_messages_as_read(request, room_id):
             UpdateExpression="SET is_read = :true",
             ExpressionAttributeValues={":true": True},
         )
+
+def get_group_members(request, group_name):
+    group_members = GroupChatMember.objects.filter(name=group_name)
+    member_data = []
+
+    for member in group_members:
+        try:
+            # Fetch the User instance from DynamoDB using get_user_by_uid
+            user = get_user_by_uid(member.uid)  # Call the DynamoDB helper function
+            if user:
+                member_data.append({
+                    "username": user["username"],  # Replace with the correct key from DynamoDB response
+                    "id": user["user_id"],  # Replace with the correct key for the unique identifier
+                })
+            else:
+                print(f"User with UID {member.uid} not found in DynamoDB.")
+        except Exception as e:
+            print(f"Error fetching user with UID {member.uid}: {e}")
+            continue
+
+    return JsonResponse({"members": member_data}, status=200)
+
+@csrf_exempt
+def add_users_to_group(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            room_name = data.get("roomName")
+            user_ids = data.get("allUser", [])
+
+            if not room_name or not user_ids:
+                return JsonResponse({"code": "400", "message": "Room name and users are required."})
+
+            # Add users to the group chat
+            for user_id in user_ids:
+                GroupChatMember.objects.get_or_create(
+                    name=room_name,
+                    uid=user_id,
+                    defaults={"status": GroupChatMember.AgreementStatus.COMPLETED}
+                )
+
+            return JsonResponse({"code": "200", "message": "Users added successfully."})
+        except Exception as e:
+            return JsonResponse({"code": "500", "message": f"Error adding users: {str(e)}"})
+    return JsonResponse({"code": "405", "message": "Method not allowed."})

@@ -64,9 +64,6 @@
             <button class="button-large" id="group">
                 Group Chat
             </button>
-            <button class="button-large" id="pendingInvitations">
-                Pending Invitations
-            </button>
 
             <div class="search_chat">
                 <div style="position: relative;"> <!-- Ensure relative positioning for proper alignment -->
@@ -160,11 +157,6 @@
             const group = document.getElementById("group");
             group.addEventListener("click", function () {
                 window.location.href = "/chatg";
-            });
-
-            const pendingInvitationsButton = document.getElementById("pendingInvitations");
-            pendingInvitationsButton.addEventListener("click", function () {
-                window.location.href = "/pending_invitations"; // Replace with your actual URL
             });
 
             const submitButton = document.getElementById("submit");
@@ -484,6 +476,7 @@
 
         let debounceTimer;
 
+    
         function searchUser() {
             const query = document.getElementById("search_user").value.trim();
             const searchResultsDiv = document.getElementById("search_results");
@@ -493,7 +486,7 @@
                 return;
             }
 
-            fetch(`/search_users?query=${query}`)
+            fetch(`/chat/search_users?query=${query}`)
                 .then((response) => response.json())
                 .then((data) => {
                     searchResultsDiv.innerHTML = ""; // Clear old results
@@ -527,6 +520,7 @@
                     searchResultsDiv.style.display = "none"; // Hide the popup on error
                 });
         }
+
 
 // Hide the popup if clicking outside
 document.addEventListener("click", (event) => {
