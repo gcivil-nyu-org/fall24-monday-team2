@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.core.serializers import serialize
+
+# from django.core.serializers import serialize
 from .models import Exercise, MuscleGroup, User
 from django.http import JsonResponse
 
@@ -18,7 +19,7 @@ from .dynamodb import (
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
-    get_user_by_uid,
+    # get_user_by_uid,
     get_user_by_username,
     update_reset_request_time,
     update_user,
@@ -51,6 +52,9 @@ from .dynamodb import (
     mark_user_as_warned_thread,
     mark_user_as_warned_comment,
     set_user_warned_to_false,
+    get_step_user_goals,
+    get_sleep_user_goals,
+    get_weight_user_goals,
 )
 from .rds import rds_main, fetch_user_data
 
@@ -598,10 +602,10 @@ def delink_google_fit(request):
 
         if revoke_response.status_code == 200:
             # print("Google account successfully revoked.")
-            print()
+            ...
         else:
             # print("Failed to revoke Google account.")
-            print()
+            ...
 
         # Remove credentials from the session
         del request.session["credentials"]
@@ -1178,7 +1182,7 @@ def new_thread_view(request):
             )
 
     # If the request method is GET, simply show the form
-    return render(request, "new_thread.html")
+    return render(request, "new_thread.html", {"user": user})
 
 
 def delete_post_view(request):
@@ -1863,7 +1867,17 @@ async def get_metric_data(request):
         total_data = await fetch_all_metric_data(request, duration, frequency)
         rds_response = await rds_main(user_email, total_data)
         print("RDS Response: \n", rds_response)
-        context = {"data": total_data}
+
+        steps = get_step_user_goals(user_id)
+        weight = get_weight_user_goals(user_id)
+        sleep = get_sleep_user_goals(user_id)
+
+        context = {
+            "data": total_data,
+            "step_goal": steps,
+            "weight_goal": weight,
+            "sleep_goal": sleep,
+        }
         # print("Inside get metric:", context)
         return await sync_to_async(render)(
             request, "display_metrics_data.html", context
@@ -1914,7 +1928,19 @@ def health_data_view(request):
     for metric in metrics_data:
         metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
 
-    return render(request, "display_metric_data.html", {"metrics_data": metrics_data})
+    step_goal = get_step_user_goals(user_id)
+    weight_goal = get_weight_user_goals(user_id)
+    sleep_goal = get_sleep_user_goals(user_id)
+    return render(
+        request,
+        "display_metric_data.html",
+        {
+            "metrics_data": metrics_data,
+            "step_goal": step_goal,
+            "weight_goal": weight_goal,
+            "sleep_goal": sleep_goal,
+        },
+    )
     # return render(
     #     request,
     #     "forums.html",
@@ -2845,9 +2871,9 @@ def search_users(request):
             for user in all_users
             if query in user["username"].lower()
         ]
-        print(f"Search query: {query}")
-        print(f"Matching users: {matching_users}")
-        print(f"Matching users after filtering: {matching_users}")
+        # print(f"Search query: {query}")
+        # print(f"Matching users: {matching_users}")
+        # print(f"Matching users after filtering: {matching_users}")
         return JsonResponse(matching_users, safe=False)
     except Exception as e:
         print(f"Error in search_users function: {e}")
@@ -2875,3 +2901,128 @@ def mark_messages_as_read(request, room_id):
             UpdateExpression="SET is_read = :true",
             ExpressionAttributeValues={":true": True},
         )
+
+
+# Fitness Goals View
+def fitness_goals_view(request):
+    user_id = request.session.get("user_id")
+
+    user = get_user(user_id)
+
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
+
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+
+    if request.method == "POST":
+        # Retrieve form data
+        goal_type = request.POST.get("goal_type")  # e.g., "weight", "steps", etc.
+        custom_name = request.POST.get("goal_name", "")  # Only for custom goals
+        goal_value = request.POST.get(
+            "goal_value"
+        )  # Goal value, e.g., 150 lbs, 10,000 steps
+
+        restricted_types = ["weight", "steps", "sleep"]
+        if goal_type in restricted_types:
+            try:
+                response = user_goals_table.query(
+                    KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                        user_id
+                    )
+                )
+                existing_goals = response.get("Items", [])
+                if any(goal["Type"] == goal_type for goal in existing_goals):
+                    messages.error(
+                        request,
+                        f"You already have a {goal_type} goal. Please edit it instead.",
+                    )
+                    return redirect(
+                        "fitness_goals"
+                    )  # Redirect back to the fitness goals page
+            except Exception as e:
+                messages.error(request, f"Failed to check existing goals: {e}")
+                return redirect("fitness_goals")
+
+        # Create a new GoalID and get the user_id
+        goal_id = str(uuid.uuid4())
+
+        # Prepare the item for DynamoDB
+        item = {
+            "GoalID": goal_id,
+            "user_id": user_id,
+            "Type": goal_type,
+            "Name": custom_name if goal_type in ["custom", "activity"] else None,
+            "Value": goal_value,
+        }
+
+        # Add the goal to DynamoDB
+        try:
+            user_goals_table.put_item(Item=item)
+        except Exception as e:
+            messages.error(request, f"Failed to add goal: {e}")
+
+        return redirect("fitness_goals")  # Redirect back to the fitness goals page
+
+    try:
+        response = user_goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(user_id)
+        )
+        goals = response.get("Items", [])
+    except Exception as e:
+        goals = []
+        messages.error(request, f"Failed to fetch goals: {e}")
+
+    return render(request, "fitness_goals.html", {"user": user, "goals": goals})
+
+
+def edit_goal(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            goal_id = data.get("goal_id")
+            goal_value = data.get("goal_value")
+            goal_name = data.get("goal_name", None)
+
+            dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+            user_goals_table = dynamodb.Table("UserGoals")
+
+            user_id = request.session.get("user_id")
+
+            # Update the goal in DynamoDB
+            user_goals_table.update_item(
+                Key={
+                    "GoalID": goal_id,
+                    "user_id": user_id,
+                },
+                UpdateExpression="SET #val = :val, #name = :name",
+                ExpressionAttributeNames={"#val": "Value", "#name": "Name"},
+                ExpressionAttributeValues={":val": goal_value, ":name": goal_name},
+            )
+            return JsonResponse({"message": "Goal updated successfully!"}, status=200)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+def delete_goal(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            goal_id = data.get("goal_id")
+            user_id = request.session.get("user_id")
+
+            if not goal_id or not user_id:
+                return JsonResponse({"error": "Invalid request."}, status=400)
+
+            dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+            user_goals_table = dynamodb.Table("UserGoals")
+            # Delete the goal from DynamoDB
+            user_goals_table.delete_item(Key={"GoalID": goal_id, "user_id": user_id})
+            return JsonResponse({"message": "Goal deleted successfully."}, status=200)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"error": "Invalid request method."}, status=400)

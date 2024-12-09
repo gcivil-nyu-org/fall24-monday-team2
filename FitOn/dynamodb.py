@@ -143,23 +143,11 @@ def create_user(
         }
     )
 
-    # Test to check if inserted user was inserted
-    # response = users_table.get_item(Key={"user_id": user_id})
-    # if "Item" in response:
-    #     print("User found in DynamoDB:", response["Item"])
-    # else:
-    #     print("User not found in DynamoDB after insertion.")
-
-    # print("User created successfully.")
     return True
-    # except Exception as e:
-    #     print(f"Error creating user in DynamoDB: {e}")
-    #     return False
 
 
 def delete_user_by_username(username):
-    # try:
-    # First, get the user by username
+
     response = users_table.scan(
         FilterExpression="#n = :username",
         ExpressionAttributeNames={"#n": "username"},
@@ -168,7 +156,6 @@ def delete_user_by_username(username):
 
     users = response.get("Items", [])
     if not users:
-        # print(f"No user found with username: {username}")
         return False  # No user to delete
 
     # Assuming the 'user_id' is the partition key
@@ -239,29 +226,29 @@ def update_user_password(user_id, new_password):
 
 
 def get_last_reset_request_time(user_id):
-    try:
-        response = password_reset_table.get_item(Key={"user_id": user_id})
-        if "Item" in response:
-            return response["Item"].get("last_request_time", None)
-        return None
-    except Exception as e:
-        print(f"Error fetching reset request for user_id '{user_id}': {e}")
-        return None
+    # try:
+    response = password_reset_table.get_item(Key={"user_id": user_id})
+    if "Item" in response:
+        return response["Item"].get("last_request_time", None)
+    return None
+    # except Exception as e:
+    #     print(f"Error fetching reset request for user_id '{user_id}': {e}")
+    #     return None
 
 
 def update_reset_request_time(user_id):
-    try:
-        if not user_id:
-            print("User ID is None. Cannot update reset request time.")
-            return None
+    # try:
+    #     if not user_id:
+    #         print("User ID is None. Cannot update reset request time.")
+    #         return None
 
-        # Insert a new entry or update the existing reset request time
-        password_reset_table.put_item(
-            Item={"user_id": user_id, "last_request_time": datetime.now(tz).isoformat()}
-        )
-        print(f"Reset request time updated for user_id '{user_id}'.")
-    except Exception as e:
-        print(f"Error updating reset request time for user_id '{user_id}': {e}")
+    # Insert a new entry or update the existing reset request time
+    password_reset_table.put_item(
+        Item={"user_id": user_id, "last_request_time": datetime.now(tz).isoformat()}
+    )
+    #     print(f"Reset request time updated for user_id '{user_id}'.")
+    # except Exception as e:
+    #     print(f"Error updating reset request time for user_id '{user_id}': {e}")
 
 
 def get_user(user_id):
@@ -1471,3 +1458,39 @@ def get_users_with_chat_history(user_id):
     except Exception as e:
         print(f"Error fetching users with chat history: {e}")
         return []
+
+
+def get_step_user_goals(user_id):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+    response = user_goals_table.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("steps"),
+    )
+    existing_goals = response.get("Items", [])
+    value = existing_goals[0]["Value"] if existing_goals else None
+    return value
+
+
+def get_weight_user_goals(user_id):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+    response = user_goals_table.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("weight"),
+    )
+    existing_goals = response.get("Items", [])
+    value = existing_goals[0]["Value"] if existing_goals else None
+    return value
+
+
+def get_sleep_user_goals(user_id):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+    response = user_goals_table.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("sleep"),
+    )
+    existing_goals = response.get("Items", [])
+    value = existing_goals[0]["Value"] if existing_goals else None
+    return value
