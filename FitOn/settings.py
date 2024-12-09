@@ -44,7 +44,7 @@ def get_aws_secrets():
 SECRET_KEY = "django-insecure-iqw@@a4osoerv=_))5ipw&kthcyr@v55xwz#=sse!13()+s#l_"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 # For static files
 IS_PRODUCTION = not DEBUG
@@ -149,7 +149,7 @@ else:
 # Force HTTPS in production
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CHANNEL_LAYERS = {
     "default": {

@@ -2758,12 +2758,13 @@ def create_group_chat(request):
     dic = {"code": "200", "message": "ok"}
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
+
 # def create_group_chat(request):
 #     if request.method == "POST":
 #         payload = json.loads(request.body.decode())
 #         room_name = payload.get("roomName")
 #         selected_users = payload.get("selectedUsers")
-        
+
 #         if GroupChatMember.objects.filter(name=room_name).exists():
 #             return JsonResponse({"code": "400", "message": "Group already exists!"})
 
@@ -2772,13 +2773,14 @@ def create_group_chat(request):
 #             user = get_user_by_username(username)
 #             if user:
 #                 GroupChatMember.objects.create(
-#                     name=room_name, 
+#                     name=room_name,
 #                     uid=user["user_id"],
 #                     status=GroupChatMember.AgreementStatus.COMPLETED
 #                 )
 
 #         return JsonResponse({"code": "200", "message": "ok"})
 #     return JsonResponse({"code": "400", "message": "Invalid request"})
+
 
 def invite_to_group(request):
     payload = json.loads(request.body.decode())
@@ -2864,7 +2866,9 @@ def search_users(request):
         return JsonResponse(result, safe=False)
     except Exception as e:
         print(f"Error in search_users function: {e}")
-        return JsonResponse({"error": "Error occurred while searching users."}, status=500)
+        return JsonResponse(
+            {"error": "Error occurred while searching users."}, status=500
+        )
 
 
 def mark_messages_as_read(request, room_id):
@@ -2887,6 +2891,7 @@ def mark_messages_as_read(request, room_id):
             ExpressionAttributeValues={":true": True},
         )
 
+
 def get_group_members(request, group_name):
     group_members = GroupChatMember.objects.filter(name=group_name)
     member_data = []
@@ -2896,10 +2901,16 @@ def get_group_members(request, group_name):
             # Fetch the User instance from DynamoDB using get_user_by_uid
             user = get_user_by_uid(member.uid)  # Call the DynamoDB helper function
             if user:
-                member_data.append({
-                    "username": user["username"],  # Replace with the correct key from DynamoDB response
-                    "id": user["user_id"],  # Replace with the correct key for the unique identifier
-                })
+                member_data.append(
+                    {
+                        "username": user[
+                            "username"
+                        ],  # Replace with the correct key from DynamoDB response
+                        "id": user[
+                            "user_id"
+                        ],  # Replace with the correct key for the unique identifier
+                    }
+                )
             else:
                 print(f"User with UID {member.uid} not found in DynamoDB.")
         except Exception as e:
@@ -2907,6 +2918,7 @@ def get_group_members(request, group_name):
             continue
 
     return JsonResponse({"members": member_data}, status=200)
+
 
 @csrf_exempt
 def add_users_to_group(request):
@@ -2917,17 +2929,21 @@ def add_users_to_group(request):
             user_ids = data.get("allUser", [])
 
             if not room_name or not user_ids:
-                return JsonResponse({"code": "400", "message": "Room name and users are required."})
+                return JsonResponse(
+                    {"code": "400", "message": "Room name and users are required."}
+                )
 
             # Add users to the group chat
             for user_id in user_ids:
                 GroupChatMember.objects.get_or_create(
                     name=room_name,
                     uid=user_id,
-                    defaults={"status": GroupChatMember.AgreementStatus.COMPLETED}
+                    defaults={"status": GroupChatMember.AgreementStatus.COMPLETED},
                 )
 
             return JsonResponse({"code": "200", "message": "Users added successfully."})
         except Exception as e:
-            return JsonResponse({"code": "500", "message": f"Error adding users: {str(e)}"})
+            return JsonResponse(
+                {"code": "500", "message": f"Error adding users: {str(e)}"}
+            )
     return JsonResponse({"code": "405", "message": "Method not allowed."})
