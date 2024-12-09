@@ -910,8 +910,7 @@ def cancel_data_request(request):
         return JsonResponse({"error": "Invalid method"}, status=405)
 
 
-def view_user_data(request):
-    print("view_user_data is being called")
+def view_user_data(request, user_id):
     try:
         # Retrieve the data from the session
         user_data = request.session.get("user_data")
@@ -967,13 +966,14 @@ def serialize_data(data):
 async def async_view_user_data(request, user_id):
     try:
         # Fetch the user data asynchronously
-        user = await sync_to_async(get_user)(user_id)
+        user = get_user(user_id)
         user_email = user.get("email")
         user_data = await fetch_user_data(user_email)
         # Serialize user data
         serialized_data = serialize_data(user_data)
         # Store the data in the session
-        await sync_to_async(store_session_data)(request, serialized_data)
+        # await sync_to_async(store_session_data)(request, serialized_data)
+        store_session_data(request, serialized_data)
         # Send serialized user_data in JSON response
         return JsonResponse({"success": True, "user_data": serialized_data})
     except Exception as e:
@@ -1007,7 +1007,6 @@ def thread_detail_view(request, thread_id):
 
     if request.method == "POST":
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
-
             # Parse the AJAX request data
             data = json.loads(request.body.decode("utf-8"))
             action = data.get("action")
@@ -1185,13 +1184,11 @@ def new_thread_view(request):
 
 
 def delete_post_view(request):
-
     if (
         request.method == "POST"
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
     ):
         try:
-
             data = json.loads(request.body.decode("utf-8"))
             post_id = data.get("post_id")
             thread_id = data.get("thread_id")  # Make sure you're getting thread_id too
@@ -1216,7 +1213,6 @@ def delete_post_view(request):
 
 
 def forum_view(request):
-
     user_id = request.session.get("username")
     user = get_user_by_username(user_id)
     if not user:
@@ -1619,7 +1615,6 @@ def pressure_plot(data):
 
 
 async def fetch_metric_data(service, metric, total_data, duration, frequency, email):
-
     end_time = dt.datetime.now() - dt.timedelta(minutes=1)
 
     if duration == "day":

@@ -137,7 +137,6 @@ def create_user(
 
 
 def delete_user_by_username(username):
-
     response = users_table.scan(
         FilterExpression="#n = :username",
         ExpressionAttributeNames={"#n": "username"},
