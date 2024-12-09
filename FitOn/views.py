@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
-from django.core.serializers import serialize
+
+# from django.core.serializers import serialize
 from .models import Exercise, MuscleGroup, User
 from django.http import JsonResponse
 
@@ -18,7 +19,7 @@ from .dynamodb import (
     get_last_reset_request_time,
     get_user,
     get_user_by_email,
-    get_user_by_uid,
+    # get_user_by_uid,
     get_user_by_username,
     update_reset_request_time,
     update_user,
@@ -600,10 +601,10 @@ def delink_google_fit(request):
 
         if revoke_response.status_code == 200:
             # print("Google account successfully revoked.")
-            print()
+            ...
         else:
             # print("Failed to revoke Google account.")
-            print()
+            ...
 
         # Remove credentials from the session
         del request.session["credentials"]
@@ -2869,9 +2870,9 @@ def search_users(request):
             for user in all_users
             if query in user["username"].lower()
         ]
-        print(f"Search query: {query}")
-        print(f"Matching users: {matching_users}")
-        print(f"Matching users after filtering: {matching_users}")
+        # print(f"Search query: {query}")
+        # print(f"Matching users: {matching_users}")
+        # print(f"Matching users after filtering: {matching_users}")
         return JsonResponse(matching_users, safe=False)
     except Exception as e:
         print(f"Error in search_users function: {e}")

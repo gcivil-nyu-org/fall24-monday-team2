@@ -216,29 +216,29 @@ def update_user_password(user_id, new_password):
 
 
 def get_last_reset_request_time(user_id):
-    try:
-        response = password_reset_table.get_item(Key={"user_id": user_id})
-        if "Item" in response:
-            return response["Item"].get("last_request_time", None)
-        return None
-    except Exception as e:
-        print(f"Error fetching reset request for user_id '{user_id}': {e}")
-        return None
+    # try:
+    response = password_reset_table.get_item(Key={"user_id": user_id})
+    if "Item" in response:
+        return response["Item"].get("last_request_time", None)
+    return None
+    # except Exception as e:
+    #     print(f"Error fetching reset request for user_id '{user_id}': {e}")
+    #     return None
 
 
 def update_reset_request_time(user_id):
-    try:
-        if not user_id:
-            print("User ID is None. Cannot update reset request time.")
-            return None
+    # try:
+    #     if not user_id:
+    #         print("User ID is None. Cannot update reset request time.")
+    #         return None
 
-        # Insert a new entry or update the existing reset request time
-        password_reset_table.put_item(
-            Item={"user_id": user_id, "last_request_time": datetime.now(tz).isoformat()}
-        )
-        print(f"Reset request time updated for user_id '{user_id}'.")
-    except Exception as e:
-        print(f"Error updating reset request time for user_id '{user_id}': {e}")
+    # Insert a new entry or update the existing reset request time
+    password_reset_table.put_item(
+        Item={"user_id": user_id, "last_request_time": datetime.now(tz).isoformat()}
+    )
+    #     print(f"Reset request time updated for user_id '{user_id}'.")
+    # except Exception as e:
+    #     print(f"Error updating reset request time for user_id '{user_id}': {e}")
 
 
 def get_user(user_id):

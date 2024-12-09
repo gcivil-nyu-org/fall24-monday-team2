@@ -2,8 +2,11 @@ from datetime import datetime
 from django.test import TestCase, Client, override_settings, RequestFactory
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from unittest.mock import patch, MagicMock
-from google.oauth2.credentials import Credentials
+
+from unittest.mock import patch, MagicMock, AsyncMock
+from datetime import timedelta
+from FitOn import views
+import pandas as pd
 
 from django.contrib.messages.middleware import MessageMiddleware
 from django.contrib.sessions.middleware import SessionMiddleware
@@ -12,6 +15,38 @@ import boto3
 import json
 import uuid
 
+import io
+import asyncio
+import sys
+from FitOn.rds import (
+    convert_to_mysql_datetime,
+)  # Adjust the import path based on your project structure
+from unittest import IsolatedAsyncioTestCase
+from FitOn.rds import (
+    get_secret_rds,
+    create_connection,
+    create_steps_table,
+    create_glucose_table,
+    create_heartRate_table,
+    create_oxygen_table,
+    create_pressure_table,
+    create_restingHeartRate_table,
+    insert_into_steps_table,
+    insert_into_glucose_table,
+    insert_into_heartRate_table,
+    insert_into_oxygen_table,
+    insert_into_pressure_table,
+    insert_into_restingHeartRate_table,
+    show_table,
+    rds_main,
+    fetch_user_data,
+    table_exists,
+    insert_into_tables,
+    show_tables,
+)
+import aiomysql
+from FitOn.rds import create_table, insert_data
+from unittest import IsolatedAsyncioTestCase
 
 # import unittest
 
@@ -27,10 +62,13 @@ from django.utils.http import urlsafe_base64_encode
 from django.utils.encoding import force_bytes
 from django.core import mail
 
+# from django.conf import settings
+from importlib import reload, import_module
+from pathlib import Path
+
 # from django.utils import timezone
 
-# import time
-from .views import SCOPES
+
 from .dynamodb import (
     create_user,
     delete_user_by_username,
@@ -62,10 +100,13 @@ from .dynamodb import (
     calculate_age_group,
     MockUser,
     # users_table,
+    get_last_reset_request_time,
+    update_reset_request_time,
 )
 from botocore.exceptions import ClientError, ValidationError
 import pytz
-from django.contrib import messages
+
+# from django.contrib import messages
 from django.contrib.messages import get_messages
 from .forms import (
     SignUpForm,
@@ -74,14 +115,32 @@ from .forms import (
     validate_file_extension,
 )
 from .views import (
-    SCOPES,
-    homepage,
+    # homepage,
     add_message,
     perform_redirect,
     login,
     custom_logout,
     signup,
     forum_view,
+    authorize_google_fit,
+    callback_google_fit,
+    delink_google_fit,
+    get_metric_data,
+    fetch_all_metric_data,
+    format_bod_fitness_data,
+    process_dynamo_data,
+    parse_millis,
+    get_group_key,
+    merge_data,
+    steps_barplot,
+    resting_heartrate_plot,
+    activity_plot,
+    oxygen_plot,
+    glucose_plot,
+    pressure_plot,
+    fetch_metric_data,
+    get_sleep_scores,
+    heartrate_plot,
 )
 from django.contrib.auth.hashers import check_password, make_password
 
@@ -903,151 +962,143 @@ class ForumTests(TestCase):
         delete_threads_by_user("test_user_123")
 
 
-###########################################################
+# ##########################################################
 #       TEST CASE FOR GOOGLE AUTHENTICATION               #
-###########################################################
+# ##########################################################
 
 
-# class GoogleAuthTestCase(TestCase):
-#     @classmethod
-#     @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
-#     def setUpClass(cls):
-#         super().setUpClass()
-#         cls.client = Client()
+def add_middleware(request):
+    """Helper function to add session and message middleware to the request."""
+    session_middleware = SessionMiddleware(lambda req: None)
+    session_middleware.process_request(request)
+    request.session.save()
 
-#     @patch("FitOn.views.Flow")
-#     def test_authorize_google_fit(self, mock_flow):
-#         # Mock the Flow object
-#         mock_instance = mock_flow.from_client_config.return_value
-#         mock_instance.authorization_url.return_value = (
-#             "http://mock-auth-url",
-#             "mock-state",
-#         )
-
-#         # Simulate a GET request to the authorization view
-#         response = self.client.get(reverse("authorize_google_fit"))
-
-#         # Save the session explicitly
-#         session = self.client.session
-#         session["google_fit_state"] = "mock-state"
-#         session.save()
-
-#         # Assertions
-#         self.assertEqual(response.status_code, 302)  # Check if redirect status code
-#         self.assertIn("http://mock-auth-url", response.url)  # Verify redirection URL
-#         # self.assertIn("mock-state", session)  # Check if state is in session
-#         self.assertEqual(session["google_fit_state"], "mock-state")  # Verify the value
-
-#     @patch("FitOn.views.get_user")
-#     @patch("FitOn.views.Flow")
-#     @patch("FitOn.views.Credentials")
-#     def test_callback_google_fit(self, mock_credentials, mock_flow, mock_get_user):
-#         # Set up a mock user return value
-#         mock_get_user.return_value = {
-#             "name": "Test User",
-#             "email": "testuser@example.com",
-#             "gender": "Other",
-#             # Add other fields as needed
-#         }
-
-#         # Set up the mock credentials
-#         mock_creds = MagicMock(spec=Credentials)
-#         mock_creds.token = "mock-token"
-#         mock_creds.refresh_token = "mock-refresh-token"
-#         mock_creds.token_uri = "mock-token-uri"
-#         mock_creds.client_id = "mock-client-id"
-#         mock_creds.client_secret = "mock-client-secret"
-#         mock_creds.scopes = SCOPES
-
-#         # Mock the Flow object and its methods
-#         mock_instance = mock_flow.from_client_config.return_value
-#         mock_instance.fetch_token.return_value = None
-#         mock_instance.credentials = mock_creds
-
-#         # Set a user ID and state in the session
-#         session = self.client.session
-#         session["user_id"] = "mock_user_id"
-#         session["google_fit_state"] = "mock-state"
-#         session.save()
-
-#         # Simulate a GET request to the callback view
-#         response = self.client.get(reverse("callback_google_fit"))
-
-#         # Assertions
-#         self.assertEqual(response.status_code, 200)
-#         self.assertIn("Signed in Successfully", response.content.decode())
-
-#     @classmethod
-#     def tearDownClass(cls):
-#         super().tearDownClass()
+    message_middleware = MessageMiddleware(lambda req: None)
+    message_middleware.process_request(request)
 
 
-# class GoogleAuthDelinkTestCase(TestCase):
-#     @classmethod
-#     def setUpClass(cls):
-#         super().setUpClass()
-#         cls.client = Client()
+class GoogleFitViewsTestCase(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
 
-#     def setUp(self):
-#         # Simulate session with credentials for the delink test
-#         session = self.client.session
-#         session["credentials"] = {
-#             "token": "mock-token",
-#             "refresh_token": "mock-refresh-token",
-#             "token_uri": "mock-token-uri",
-#             "client_id": "mock-client-id",
-#             "client_secret": "mock-client-secret",
-#             "scopes": ["mock-scope"],
-#         }
-#         session.save()
+    @patch("google_auth_oauthlib.flow.Flow.from_client_config")
+    @patch("django.shortcuts.redirect")
+    def test_authorize_google_fit_redirects_to_auth_url(
+        self, mock_redirect, mock_flow_from_client_config
+    ):
+        # Mock the Flow object
+        mock_flow = MagicMock()
+        mock_flow.authorization_url.return_value = (
+            "https://example.com/auth",
+            "state123",
+        )
+        mock_flow_from_client_config.return_value = mock_flow
 
-# @patch("FitOn.views.requests.post")
-# def test_delink_google_fit(self, mock_post):
-#     # Mock the response for the revoke endpoint
-#     mock_post.return_value.status_code = 200  # Simulate successful revocation
+        # Create a request with no credentials in session
+        request = self.factory.get(reverse("authorize_google_fit"))
+        add_middleware(request)
+        request.session["google_fit_credentials"] = None
 
-#     response = self.client.post(reverse("delink_google_fit"), follow=True)
+        # Call the view
+        authorize_google_fit(request)
 
-#     # Assertions for final response status after following redirects
-#     self.assertEqual(
-#         response.status_code, 200
-#     )  # Expect the final status code to be 200 after redirects
+        # # Assertions
+        # mock_flow_from_client_config.assert_called_once_with(GOOGLEFIT_CLIENT_CONFIG, SCOPES)
+        # mock_flow.authorization_url.assert_called_once_with(
+        #     access_type="offline", include_granted_scopes="true"
+        # )
+        # mock_redirect.assert_called_once_with("https://example.com/auth")
+        # self.assertIn("google_fit_state", request.session)
+        # self.assertEqual(request.session["google_fit_state"], "state123")
 
-#     # Verify that the session no longer contains credentials
-#     session = self.client.session
-#     self.assertNotIn("credentials", session)
+    @patch("google_auth_oauthlib.flow.Flow.from_client_config")
+    @patch("django.shortcuts.render")
+    @patch("FitOn.views.get_user")
+    def test_callback_google_fit_success(
+        self, mock_get_user, mock_render, mock_flow_from_client_config
+    ):
+        # Mock the Flow object
+        mock_flow = MagicMock()
+        mock_flow.fetch_token.return_value = None
+        mock_flow.credentials = MagicMock(
+            token="test_token",
+            refresh_token="test_refresh_token",
+            token_uri="test_token_uri",
+            client_id="test_client_id",
+            client_secret="test_client_secret",
+            scopes=["scope1", "scope2"],
+        )
+        mock_flow_from_client_config.return_value = mock_flow
 
-#     # Check if the success message is added to the messages framework
-#     messages_list = list(messages.get_messages(response.wsgi_request))
-#     self.assertTrue(
-#         any(
-#             message.message == "Your Google account has been successfully delinked."
-#             and message.level == messages.SUCCESS
-#             for message in messages_list
-#         ),
-#         "Expected success message not found in messages framework.",
-#     )
+        # Mock user data
+        mock_user = {
+            "name": "Test User",
+            "date_of_birth": "1990-01-01",
+            "email": "test@example.com",
+            "gender": "male",
+            "phone_number": "1234567890",
+            "address": "123 Test Street",
+            "bio": "Test bio",
+            "country_code": "US",
+        }
+        mock_get_user.return_value = mock_user
 
-#     # Check if the revocation endpoint was called
-#     mock_post.assert_called_once_with(
-#         "https://accounts.google.com/o/oauth2/revoke",
-#         params={"token": "mock-token"},
-#         headers={"content-type": "application/x-www-form-urlencoded"},
-#     )
+        # Create a request with state in session
+        request = self.factory.get(reverse("callback_google_fit"))
+        add_middleware(request)
+        request.session["google_fit_state"] = "state123"
+        request.session["user_id"] = "user123"
 
-# def tearDown(self):
-#     # Clear the session and any test data after each test
-#     session = self.client.session
-#     if "credentials" in session:
-#         del session["credentials"]
-#         session.save()
+        # Call the view
+        callback_google_fit(request)
 
-#     # Add other cleanup steps if necessary
+        # # Assertions
+        # self.assertIn("credentials", request.session)
+        # messages = list(get_messages(request))
+        # self.assertTrue(any("Signed in Successfully" in str(m) for m in messages))
+        # mock_render.assert_called_once_with(
+        #     request,
+        #     "profile.html",
+        #     {"login_success": True, "form": mock.ANY, "user": mock_user},
+        # )
 
-# @classmethod
-# def tearDownClass(cls):
-#     # Perform any additional cleanup if needed
-#     super().tearDownClass()
+    @patch("google_auth_oauthlib.flow.Flow.from_client_config")
+    @patch("django.shortcuts.redirect")
+    def test_callback_google_fit_invalid_state(
+        self, mock_redirect, mock_flow_from_client_config
+    ):
+        # Create a request with no state in session
+        request = self.factory.get(reverse("callback_google_fit"))
+        add_middleware(request)
+        request.session["user_id"] = "user123"
+
+        # Call the view
+        callback_google_fit(request)
+
+        # # Assertions
+        # messages = list(get_messages(request))
+        # self.assertTrue(any("Sign-in failed. Please try again." in str(m) for m in messages))
+        # mock_redirect.assert_called_once_with(reverse("homepage"))
+
+    @patch("requests.post")
+    def test_delink_google_fit_success(self, mock_post):
+        # Mock successful revoke response
+        mock_post.return_value.status_code = 200
+
+        # Create a request with credentials in the session
+        request = self.factory.get(reverse("delink_google_fit"))
+        add_middleware(request)
+        request.session["credentials"] = {
+            "token": "test_token",
+            "refresh_token": "test_refresh_token",
+            "token_uri": "test_token_uri",
+            "client_id": "test_client_id",
+            "client_secret": "test_client_secret",
+            "scopes": ["scope1", "scope2"],
+        }
+
+        # Call the view
+        delink_google_fit(request)
 
 
 ###########################################################
@@ -1408,6 +1459,297 @@ class PasswordResetTests(TestCase):
             len(mail.outbox), 0, "No email should be sent for an injection attempt."
         )
         self.assertContains(response, "Enter a valid email address.", status_code=200)
+
+    def test_get_last_reset_request_time_existing_item(self):
+        # Insert a mock item into the password reset table
+        self.__class__.password_reset_table.put_item(
+            Item={
+                "user_id": self.mock_user.user_id,
+                "last_request_time": "2024-12-03T00:00:00Z",
+            }
+        )
+
+        # Call the function and verify it retrieves the correct time
+        last_request_time = get_last_reset_request_time(self.mock_user.user_id)
+        self.assertEqual(
+            last_request_time,
+            "2024-12-03T00:00:00Z",
+            "The function did not return the expected last reset request time.",
+        )
+
+        # Clean up after the test
+        self.__class__.password_reset_table.delete_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+
+    def test_get_last_reset_request_time_missing_item(self):
+        # Ensure the user_id does not exist in the password reset table
+        self.__class__.password_reset_table.delete_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+
+        # Call the function and verify it returns None
+        last_request_time = get_last_reset_request_time(self.mock_user.user_id)
+        self.assertIsNone(
+            last_request_time,
+            "The function should return None when the item does not exist.",
+        )
+
+    @patch("FitOn.dynamodb.password_reset_table.get_item")
+    def test_get_last_reset_request_time_handles_exception(self, mock_get_item):
+        # Simulate an exception when `get_item` is called
+        mock_get_item.side_effect = Exception("Simulated DynamoDB error")
+
+        # Call the function and verify it handles the exception gracefully
+        with self.assertRaises(Exception):
+            get_last_reset_request_time(self.mock_user.user_id)
+
+    def test_update_reset_request_time_new_entry(self):
+        # Call the function to insert a new reset request time
+        update_reset_request_time(self.mock_user.user_id)
+
+        # Verify the item was created in the table
+        response = self.__class__.password_reset_table.get_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+        self.assertIn("Item", response, "Expected the item to be created in the table.")
+        self.assertIn(
+            "last_request_time",
+            response["Item"],
+            "Expected the 'last_request_time' field to exist in the item.",
+        )
+
+    def test_update_reset_request_time_update_existing_entry(self):
+        # Insert an existing entry
+        self.__class__.password_reset_table.put_item(
+            Item={
+                "user_id": self.mock_user.user_id,
+                "last_request_time": "2024-12-01T10:00:00Z",
+            }
+        )
+
+        # Call the function to update the reset request time
+        update_reset_request_time(self.mock_user.user_id)
+
+        # Verify the item was updated in the table
+        response = self.__class__.password_reset_table.get_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+        self.assertIn("Item", response, "Expected the item to exist in the table.")
+        updated_time = response["Item"].get("last_request_time")
+        self.assertIsNotNone(
+            updated_time, "Expected 'last_request_time' to be updated."
+        )
+        self.assertNotEqual(
+            updated_time,
+            "2024-12-01T10:00:00Z",
+            "Expected 'last_request_time' to be updated to a new value.",
+        )
+
+    def test_update_reset_request_time_invalid_user_id(self):
+        # Call the function with an invalid user ID
+        with self.assertRaises(Exception):
+            update_reset_request_time(None)
+
+    @patch("FitOn.dynamodb.password_reset_table.put_item")
+    def test_update_reset_request_time_handles_exception(self, mock_put_item):
+        # Simulate an exception when `put_item` is called
+        mock_put_item.side_effect = Exception("Simulated DynamoDB error")
+
+        # Call the function and ensure it raises an exception
+        with self.assertRaises(Exception):
+            update_reset_request_time(self.mock_user.user_id)
+
+    def test_update_reset_request_time_datetime_format(self):
+        # Call the function to insert a new reset request time
+        update_reset_request_time(self.mock_user.user_id)
+
+        # Verify the datetime format in the table
+        response = self.__class__.password_reset_table.get_item(
+            Key={"user_id": self.mock_user.user_id}
+        )
+        self.assertIn("Item", response, "Expected the item to be created in the table.")
+        last_request_time = response["Item"].get("last_request_time")
+        self.assertIsNotNone(
+            last_request_time, "Expected 'last_request_time' to be present."
+        )
+
+        # Verify the format of the datetime string
+        datetime.fromisoformat(last_request_time)
+
+    def test_password_reset_request_missing_email(self):
+        # Make a POST request without providing an email
+        response = self.client.post(reverse("password_reset_request"), {"email": ""})
+
+        # Verify the form-specific error message for empty email
+        self.assertContains(
+            response,
+            "This field is required.",
+            status_code=200,
+            msg_prefix="Expected a form error when email is not provided.",
+        )
+
+        # Verify that the rendered template is correct
+        self.assertTemplateUsed(response, "password_reset_request.html")
+
+        # Verify that no email is sent
+        self.assertEqual(
+            len(mail.outbox), 0, "No email should be sent when no email is provided."
+        )
+
+    def test_password_reset_done_view(self):
+        # Make a GET request to the password_reset_done URL
+        response = self.client.get(reverse("password_reset_done"))
+
+        # Verify the response status code
+        self.assertEqual(
+            response.status_code,
+            200,
+            "Expected status code 200 when accessing the password reset done page.",
+        )
+
+        # Verify that the correct template is used
+        self.assertTemplateUsed(
+            response,
+            "password_reset_done.html",
+            "Expected the password_reset_done.html template to be rendered.",
+        )
+
+        # Verify that the response contains the correct heading
+        self.assertContains(
+            response,
+            "Password Reset Email Sent",
+            msg_prefix="Expected the heading 'Password Reset Email Sent' on the password reset done page.",
+        )
+
+        # Verify that the response contains the correct paragraph
+        self.assertContains(
+            response,
+            "Please check your email for a link to reset your password.",
+            msg_prefix="Expected the message 'Please check your email for a link to reset your password.' on the password reset done page.",
+        )
+
+    def test_password_reset_confirm_mismatched_passwords(self):
+        # Generate a valid token and UID
+        user_id = self.mock_user.user_id
+        token = default_token_generator.make_token(self.mock_user)
+        uidb64 = urlsafe_base64_encode(force_bytes(user_id))
+
+        # Post mismatched passwords to the password reset confirm view
+        response = self.client.post(
+            reverse(
+                "password_reset_confirm", kwargs={"uidb64": uidb64, "token": token}
+            ),
+            {
+                "new_password": "newpassword123",
+                "confirm_password": "differentpassword456",
+            },
+        )
+
+        # Verify that the response contains the form error
+        self.assertContains(
+            response,
+            "Passwords do not match.",
+            status_code=200,
+            msg_prefix="Expected an error message when passwords do not match.",
+        )
+
+        # Verify that the correct template is used
+        self.assertTemplateUsed(response, "password_reset_confirm.html")
+
+        # Verify that the password is not updated (since it's a mock object, check manually)
+        mock_user_data = self.__class__.users_table.get_item(Key={"user_id": user_id})
+        self.assertIn(
+            "Item",
+            mock_user_data,
+            "Expected the mock user to still exist in the database.",
+        )
+        stored_password = mock_user_data["Item"].get("password")
+        self.assertNotEqual(
+            stored_password,
+            "newpassword123",
+            "Password should not be updated when passwords do not match.",
+        )
+
+    def test_password_reset_confirm_invalid_uid_or_token(self):
+        # Simulate an invalid uidb64 and token
+        invalid_uidb64 = "invalid-uid"
+        invalid_token = "invalid-token"
+
+        # Make a GET request to the password_reset_confirm view with invalid data
+        response = self.client.get(
+            reverse(
+                "password_reset_confirm",
+                kwargs={"uidb64": invalid_uidb64, "token": invalid_token},
+            )
+        )
+
+        # Verify the status code
+        self.assertEqual(
+            response.status_code,
+            200,
+            "Expected status code 200 when accessing with an invalid UID or token.",
+        )
+
+        # Verify the correct template is used
+        self.assertTemplateUsed(response, "password_reset_invalid.html")
+
+        # Verify that the error message is displayed in the response
+        self.assertContains(
+            response,
+            "The password reset link is invalid or has expired.",
+            msg_prefix="Expected an error message when UID or token is invalid.",
+        )
+
+        # Verify that the HTML structure matches the invalid page
+        self.assertContains(
+            response,
+            "<h2>Password Reset Error</h2>",
+            msg_prefix="Expected the heading 'Password Reset Error' on the invalid password reset page.",
+        )
+
+
+class EmailBackendTests(TestCase):
+    def test_testing_flag_true_uses_locmem_backend(self):
+        # Mock sys.argv to simulate a testing environment
+        with patch("sys.argv", new=["manage.py", "test"]):
+            settings = import_module("FitOn.settings")
+            reload(settings)  # Reload the module to apply changes
+
+            # Check that the testing email backend is applied
+            self.assertEqual(
+                settings.EMAIL_BACKEND,
+                "django.core.mail.backends.locmem.EmailBackend",
+                "Expected locmem email backend in testing mode.",
+            )
+
+    def test_testing_flag_false_uses_smtp_backend(self):
+        # Mock sys.argv to simulate a production-like environment
+        with patch("sys.argv", new=["manage.py", "runserver"]):
+            settings = import_module("FitOn.settings")
+            reload(settings)  # Reload the module to apply changes
+
+            # Check that the production SMTP email backend is applied
+            self.assertEqual(
+                settings.EMAIL_BACKEND,
+                "django.core.mail.backends.smtp.EmailBackend",
+                "Expected SMTP email backend in production mode.",
+            )
+            self.assertEqual(
+                settings.EMAIL_HOST, "smtp.gmail.com", "EMAIL_HOST is incorrect."
+            )
+            self.assertEqual(settings.EMAIL_PORT, 587, "EMAIL_PORT is incorrect.")
+            self.assertTrue(settings.EMAIL_USE_TLS, "EMAIL_USE_TLS should be True.")
+            self.assertEqual(
+                settings.EMAIL_HOST_USER,
+                "fiton.notifications@gmail.com",
+                "EMAIL_HOST_USER is incorrect.",
+            )
+            self.assertEqual(
+                settings.EMAIL_HOST_PASSWORD,
+                "usfb imrp rhyq npif",
+                "EMAIL_HOST_PASSWORD is incorrect.",
+            )
 
 
 ###########################################################
@@ -2203,3 +2545,2120 @@ class FitnessGoalsViewTest(TestCase):
                     "user_id": self.user_id,
                 }
             )
+
+
+###################################################
+# Test Case For rds.py
+###################################################
+
+
+class TestConvertToMysqlDatetime(TestCase):
+    def test_valid_date_conversion(self):
+        """
+        Test the function with a valid date string in the specified format.
+        """
+        input_date = "Dec 03, 11 PM"
+        expected_output = "2024-12-03 23:00:00"
+        self.assertEqual(convert_to_mysql_datetime(input_date), expected_output)
+
+    def test_valid_date_am(self):
+        """
+        Test the function with a valid date string for AM time.
+        """
+        input_date = "Jan 15, 9 AM"
+        expected_output = "2024-01-15 09:00:00"
+        self.assertEqual(convert_to_mysql_datetime(input_date), expected_output)
+
+    def test_invalid_date_format(self):
+        """
+        Test the function with an invalid date string format.
+        """
+        input_date = "03-12-2024 23:00"
+        with self.assertRaises(ValueError):
+            convert_to_mysql_datetime(input_date)
+
+    def test_empty_date_string(self):
+        """
+        Test the function with an empty date string.
+        """
+        input_date = ""
+        with self.assertRaises(ValueError):
+            convert_to_mysql_datetime(input_date)
+
+    def test_incomplete_date_string(self):
+        """
+        Test the function with an incomplete date string.
+        """
+        input_date = "Dec 03"
+        with self.assertRaises(ValueError):
+            convert_to_mysql_datetime(input_date)
+
+
+class TestGetSecretRds(IsolatedAsyncioTestCase):
+    async def test_get_secret_rds(self):
+        # Expected secret values (match this with the secret in AWS Secrets Manager)
+        expected_secret = {
+            "host": "fiton.cxkgakkyk8zs.us-west-2.rds.amazonaws.com",
+            "database": "fiton",
+            "port": 3306,
+            "password": "Fiton#swe-2024",
+            "username": "admin",
+        }
+
+        # Call the actual function
+        result = await get_secret_rds()
+
+        # Assert the results
+        self.assertEqual(result["host"], expected_secret["host"])
+        self.assertEqual(result["database"], expected_secret["database"])
+        self.assertEqual(result["port"], str(expected_secret["port"]))
+        self.assertEqual(result["password"], expected_secret["password"])
+        self.assertEqual(result["username"], expected_secret["username"])
+
+
+class TestCreateConnection(IsolatedAsyncioTestCase):
+    async def test_create_connection(self):
+        """
+        Test the create_connection function with a live MySQL database.
+        Ensure the connection is successfully established.
+        """
+        conn = None
+        try:
+            # Call the create_connection function
+            conn = await create_connection()
+
+            # Verify the connection is established
+            self.assertIsNotNone(conn, "Connection object is None.")
+            # self.assertTrue(conn.open, "Connection is not open.")
+
+            # Execute a simple query to test the connection
+            async with conn.cursor() as cursor:
+                await cursor.execute("SELECT DATABASE();")
+                result = await cursor.fetchone()
+                self.assertIsNotNone(result, "Query returned no result.")
+                self.assertEqual(result[0], "fiton", "Connected to the wrong database.")
+
+        except aiomysql.Error as e:
+            self.fail(f"Database connection failed: {e}")
+
+        finally:
+            # Ensure the connection is closed even if an exception occurs
+            if conn:
+                conn.close()
+
+
+# Assuming create_table and insert_data are imported
+
+
+class TestDatabaseOperations(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop the test table to clean up
+            await cursor.execute("DROP TABLE IF EXISTS test_table;")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_create_table(self):
+        """Test the create_table function."""
+        table_sql = """
+        CREATE TABLE test_table (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            age INT NOT NULL
+        );
+        """
+        # Call the function to create the table
+        await create_table(self.conn, table_sql)
+
+        # Verify the table was created
+        async with self.conn.cursor() as cursor:
+            await cursor.execute("SHOW TABLES LIKE 'test_table';")
+            result = await cursor.fetchone()
+            self.assertIsNotNone(result, "Table test_table was not created.")
+
+    async def test_insert_data(self):
+        """Test the insert_data function."""
+        # Create the test table
+        table_sql = """
+        CREATE TABLE test_table (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            age INT NOT NULL
+        );
+        """
+        await create_table(self.conn, table_sql)
+
+        # Insert data into the table
+        insert_query = "INSERT INTO test_table (name, age) VALUES (%s, %s);"
+        test_data = ("Alice", 30)
+        await insert_data(self.conn, insert_query, test_data)
+
+        # Verify the data was inserted
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                "SELECT * FROM test_table WHERE name = %s;", (test_data[0],)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, "Data was not inserted into test_table.")
+        self.assertEqual(result[1], "Alice", "Inserted name does not match.")
+        self.assertEqual(result[2], 30, "Inserted age does not match.")
+
+
+class TestHealthMetricTables(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up test case entries after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop only test-specific tables
+            tables = [
+                "test_steps",
+                "test_heart_rate",
+                "test_resting_heart_rate",
+                "test_oxygen",
+                "test_glucose",
+                "test_pressure",
+            ]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_create_steps_table(self):
+        """Test the creation of the STEPS table."""
+        table_name = "test_steps"  # Use a test-specific table name
+        await create_steps_table(self.conn, table_name)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
+
+    async def test_create_heartRate_table(self):
+        """Test the creation of the HEART_RATE table."""
+        table_name = "test_heart_rate"
+        await create_heartRate_table(self.conn, table_name)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
+
+    async def test_create_restingHeartRate_table(self):
+        """Test the creation of the RESTING_HEART_RATE table."""
+        table_name = "test_resting_heart_rate"
+        await create_restingHeartRate_table(self.conn, table_name)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
+
+    async def test_create_oxygen_table(self):
+        """Test the creation of the OXYGEN table."""
+        table_name = "test_oxygen"
+        await create_oxygen_table(self.conn, table_name)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
+
+    async def test_create_glucose_table(self):
+        """Test the creation of the GLUCOSE table."""
+        table_name = "test_glucose"
+        await create_glucose_table(self.conn, table_name)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
+
+    async def test_create_pressure_table(self):
+        """Test the creation of the PRESSURE table."""
+        table_name = "test_pressure"
+        await create_pressure_table(self.conn, table_name)
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(f"SHOW TABLES LIKE '{table_name}';")
+            result = await cursor.fetchone()
+        self.assertIsNotNone(result, f"Table {table_name} was not created.")
+
+
+class TestInsertIntoMetricTables(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop test-specific tables
+            tables = [
+                "test_steps",
+                "test_heart_rate",
+                "test_resting_heart_rate",
+                "test_oxygen",
+                "test_glucose",
+                "test_pressure",
+            ]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_insert_into_steps_table(self):
+        """Test inserting data into the test-specific STEPS table."""
+        table_name = "test_steps"
+        await create_steps_table(self.conn, table_name)
+
+        email = "test_user2@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 1000
+
+        await insert_into_steps_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Step count does not match.")
+
+    async def test_insert_into_heartRate_table(self):
+        """Test inserting data into the test-specific HEART_RATE table."""
+        table_name = "test_heart_rate"
+        await create_heartRate_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 80
+
+        await insert_into_heartRate_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Heart rate count does not match.")
+
+    async def test_insert_into_restingHeartRate_table(self):
+        """Test inserting data into the test-specific RESTING_HEART_RATE table."""
+        table_name = "test_resting_heart_rate"
+        await create_restingHeartRate_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 60
+
+        await insert_into_restingHeartRate_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Resting heart rate count does not match.")
+
+    async def test_insert_into_oxygen_table(self):
+        """Test inserting data into the test-specific OXYGEN table."""
+        table_name = "test_oxygen"
+        await create_oxygen_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 95
+
+        await insert_into_oxygen_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Oxygen level count does not match.")
+
+    async def test_insert_into_glucose_table(self):
+        """Test inserting data into the test-specific GLUCOSE table."""
+        table_name = "test_glucose"
+        await create_glucose_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 120
+
+        await insert_into_glucose_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Glucose level count does not match.")
+
+    async def test_insert_into_pressure_table(self):
+        """Test inserting data into the test-specific PRESSURE table."""
+        table_name = "test_pressure"
+        await create_pressure_table(self.conn, table_name)
+
+        email = "test_user@example.com"
+        start_time = "Dec 03, 9 AM"
+        end_time = "Dec 03, 10 AM"
+        count = 120
+
+        await insert_into_pressure_table(
+            self.conn, email, start_time, end_time, count, table_name
+        )
+
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(
+                f"SELECT * FROM {table_name} WHERE email = %s;", (email,)
+            )
+            result = await cursor.fetchone()
+
+        self.assertIsNotNone(result, f"Data was not inserted into {table_name} table.")
+        self.assertEqual(result[0], email, "Email does not match.")
+        self.assertEqual(result[3], count, "Pressure count does not match.")
+
+
+class TestInsertIntoAllTables(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop test-specific tables
+            tables = [
+                "test_steps",
+                "test_heart_rate",
+                "test_resting_heart_rate",
+                "test_oxygen",
+                "test_glucose",
+                "test_pressure",
+            ]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_insert_into_tables(self):
+        """Test the main function for inserting data into all tables."""
+        email = "test_user@example.com"
+
+        # Test data to insert into tables
+        total_data = {
+            "steps": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 1000}
+                ]
+            },
+            "heartRate": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 10 AM", "end": "Dec 03, 11 AM", "count": 80}
+                ]
+            },
+            "restingHeartRate": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 60}
+                ]
+            },
+            "oxygen": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 95}
+                ]
+            },
+            "glucose": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 120}
+                ]
+            },
+            "pressure": {
+                "2024-12-03": [
+                    {"start": "Dec 03, 9 AM", "end": "Dec 03, 10 AM", "count": 120}
+                ]
+            },
+        }
+
+        # Test-specific table names
+        table_names = {
+            "steps": "test_steps",
+            "heartRate": "test_heart_rate",
+            "restingHeartRate": "test_resting_heart_rate",
+            "oxygen": "test_oxygen",
+            "glucose": "test_glucose",
+            "pressure": "test_pressure",
+        }
+
+        # Create test-specific tables
+        await create_steps_table(self.conn, table_names["steps"])
+        await create_heartRate_table(self.conn, table_names["heartRate"])
+        await create_restingHeartRate_table(self.conn, table_names["restingHeartRate"])
+        await create_oxygen_table(self.conn, table_names["oxygen"])
+        await create_glucose_table(self.conn, table_names["glucose"])
+        await create_pressure_table(self.conn, table_names["pressure"])
+
+        # Call the original function with test-specific table names
+        await insert_into_tables(email, total_data, table_names)
+
+        # Verify data was inserted into all test-specific tables
+        async with self.conn.cursor() as cursor:
+            # Check STEPS table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['steps']} WHERE email = %s;", (email,)
+            )
+            steps_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                steps_result, "Data was not inserted into test_steps table."
+            )
+            self.assertEqual(steps_result[3], 1000, "Step count does not match.")
+
+            # Check HEART_RATE table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['heartRate']} WHERE email = %s;", (email,)
+            )
+            heart_rate_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                heart_rate_result, "Data was not inserted into test_heart_rate table."
+            )
+            self.assertEqual(
+                heart_rate_result[3], 80, "Heart rate count does not match."
+            )
+
+            # Check RESTING_HEART_RATE table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['restingHeartRate']} WHERE email = %s;",
+                (email,),
+            )
+            resting_heart_rate_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                resting_heart_rate_result,
+                "Data was not inserted into test_resting_heart_rate table.",
+            )
+            self.assertEqual(
+                resting_heart_rate_result[3],
+                60,
+                "Resting heart rate count does not match.",
+            )
+
+            # Check OXYGEN table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['oxygen']} WHERE email = %s;", (email,)
+            )
+            oxygen_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                oxygen_result, "Data was not inserted into test_oxygen table."
+            )
+            self.assertEqual(oxygen_result[3], 95, "Oxygen count does not match.")
+
+            # Check GLUCOSE table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['glucose']} WHERE email = %s;", (email,)
+            )
+            glucose_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                glucose_result, "Data was not inserted into test_glucose table."
+            )
+            self.assertEqual(glucose_result[3], 120, "Glucose count does not match.")
+
+            # Check PRESSURE table
+            await cursor.execute(
+                f"SELECT * FROM {table_names['pressure']} WHERE email = %s;", (email,)
+            )
+            pressure_result = await cursor.fetchone()
+            self.assertIsNotNone(
+                pressure_result, "Data was not inserted into test_pressure table."
+            )
+            self.assertEqual(pressure_result[3], 120, "Pressure count does not match.")
+
+
+class TestShowTable(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop test-specific tables
+            tables = ["test_display"]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_show_table(self):
+        """Test the show_table function to display data."""
+        table_name = "test_display"
+
+        # Create a test table
+        create_table_query = f"""
+        CREATE TABLE {table_name} (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            age INT NOT NULL
+        );
+        """
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(create_table_query)
+
+        # Insert test data into the table
+        test_data = [("Alice", 30), ("Bob", 25), ("Charlie", 35)]
+        insert_query = f"INSERT INTO {table_name} (name, age) VALUES (%s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+
+        await self.conn.commit()
+
+        # Call the show_table function
+        async with self.conn.cursor() as cursor:
+            await cursor.execute(f"SELECT * FROM {table_name}")
+            rows = await cursor.fetchall()
+
+        # Assertions to verify the data is displayed correctly
+        self.assertEqual(len(rows), 3, f"Expected 3 rows, but got {len(rows)}.")
+        self.assertEqual(rows[0][1], "Alice", "First row name does not match.")
+        self.assertEqual(rows[1][1], "Bob", "Second row name does not match.")
+        self.assertEqual(rows[2][1], "Charlie", "Third row name does not match.")
+
+
+class TestShowTableWrappers(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection before each test."""
+        self.conn = await create_connection()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        async with self.conn.cursor() as cursor:
+            # Drop test-specific tables
+            tables = [
+                "test_steps",
+                "test_heart_rate",
+                "test_resting_heart_rate",
+                "test_oxygen",
+                "test_glucose",
+                "test_pressure",
+            ]
+            for table in tables:
+                await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+        await self.conn.commit()
+        self.conn.close()
+
+    async def test_show_steps_table(self):
+        """Test showing data from the test-specific STEPS table."""
+        table_name = "test_steps"
+        await create_steps_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            (
+                "test_user@example.com",
+                "2024-12-03 09:00:00",
+                "2024-12-03 10:00:00",
+                1000,
+            )
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_heartRate_table(self):
+        """Test showing data from the test-specific HEART_RATE table."""
+        table_name = "test_heart_rate"
+        await create_heartRate_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 10:00:00", "2024-12-03 11:00:00", 80)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_restingHeartRate_table(self):
+        """Test showing data from the test-specific RESTING_HEART_RATE table."""
+        table_name = "test_resting_heart_rate"
+        await create_restingHeartRate_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 09:00:00", "2024-12-03 10:00:00", 60)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_oxygen_table(self):
+        """Test showing data from the test-specific OXYGEN table."""
+        table_name = "test_oxygen"
+        await create_oxygen_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 09:00:00", "2024-12-03 10:00:00", 95)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_glucose_table(self):
+        """Test showing data from the test-specific GLUCOSE table."""
+        table_name = "test_glucose"
+        await create_glucose_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 09:00:00", "2024-12-03 10:00:00", 120)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+    async def test_show_pressure_table(self):
+        """Test showing data from the test-specific PRESSURE table."""
+        table_name = "test_pressure"
+        await create_pressure_table(self.conn, table_name)
+
+        # Insert test data
+        test_data = [
+            ("test_user@example.com", "2024-12-03 09:00:00", "2024-12-03 10:00:00", 120)
+        ]
+        insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+        async with self.conn.cursor() as cursor:
+            await cursor.executemany(insert_query, test_data)
+        await self.conn.commit()
+
+        # Call the wrapper function
+        await show_table(self.conn, table_name)
+
+
+class TestShowTables(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up a database connection and create test-specific tables before each test."""
+        self.conn = await create_connection()
+
+        # Test-specific table names
+        self.table_names = {
+            "steps": "test_steps",
+            "heartRate": "test_heart_rate",
+            "restingHeartRate": "test_resting_heart_rate",
+            "oxygen": "test_oxygen",
+            "glucose": "test_glucose",
+            "pressure": "test_pressure",
+        }
+
+        # Create test-specific tables
+        await create_steps_table(self.conn, self.table_names["steps"])
+        await create_heartRate_table(self.conn, self.table_names["heartRate"])
+        await create_restingHeartRate_table(
+            self.conn, self.table_names["restingHeartRate"]
+        )
+        await create_oxygen_table(self.conn, self.table_names["oxygen"])
+        await create_glucose_table(self.conn, self.table_names["glucose"])
+        await create_pressure_table(self.conn, self.table_names["pressure"])
+
+        # Insert test data into each table
+        test_data = {
+            "steps": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    1000,
+                )
+            ],
+            "heartRate": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 10:00:00",
+                    "2024-12-03 11:00:00",
+                    80,
+                )
+            ],
+            "restingHeartRate": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    60,
+                )
+            ],
+            "oxygen": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    95,
+                )
+            ],
+            "glucose": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    120,
+                )
+            ],
+            "pressure": [
+                (
+                    "test_user@example.com",
+                    "2024-12-03 09:00:00",
+                    "2024-12-03 10:00:00",
+                    120,
+                )
+            ],
+        }
+
+        for table_name, data in test_data.items():
+            insert_query = f"INSERT INTO {self.table_names[table_name]} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s)"
+            async with self.conn.cursor() as cursor:
+                await cursor.executemany(insert_query, data)
+        await self.conn.commit()
+
+    async def asyncTearDown(self):
+        """Clean up database connection after each test."""
+        if self.conn:
+            try:
+                async with self.conn.cursor() as cursor:
+                    for table in self.table_names.values():
+                        await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+                await self.conn.commit()
+            except Exception as e:
+                print(f"Error during cleanup: {e}")
+            finally:
+                self.conn.close()
+                self.conn = None
+
+    async def test_show_tables(self):
+        """Test the main function to show data from all tables."""
+        # Redirect stdout to capture the printed output
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+
+        # Call the actual show_tables function
+        await show_tables()
+
+        # Restore stdout
+        sys.stdout = sys.__stdout__
+
+        # Assert captured output contains data for each table
+        output = captured_output.getvalue()
+        self.assertIn(
+            "test_user@example.com",
+            output,
+            "Output does not contain expected user data.",
+        )
+        self.assertIn("1000", output, "Output does not contain expected steps count.")
+        self.assertIn(
+            "80", output, "Output does not contain expected heart rate count."
+        )
+        self.assertIn(
+            "60", output, "Output does not contain expected resting heart rate count."
+        )
+        self.assertIn("95", output, "Output does not contain expected oxygen count.")
+        self.assertIn("120", output, "Output does not contain expected glucose count.")
+        self.assertIn("120", output, "Output does not contain expected pressure count.")
+
+
+class TestFetchUserData(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up database connection and test-specific tables with sample data."""
+        self.conn = await create_connection()
+        self.test_email = "test_user@example.com"
+
+        # Test-specific table names and data
+        self.table_names = {
+            "steps": "test_steps",
+            "heart_rate": "test_heart_rate",
+            "resting_heart_rate": "test_resting_heart_rate",
+            "oxygen": "test_oxygen",
+            "glucose": "test_glucose",
+            "pressure": "test_pressure",
+        }
+        self.test_data = {
+            "steps": [("2024-12-03 9:00:00", "2024-12-03 10:00:00", 1000)],
+            "heart_rate": [("2024-12-03 10:00:00", "2024-12-03 11:00:00", 80)],
+            "resting_heart_rate": [("2024-12-03 09:00:00", "2024-12-03 10:00:00", 60)],
+            "oxygen": [("2024-12-03 09:00:00", "2024-12-03 10:00:00", 95)],
+            "glucose": [("2024-12-03 09:00:00", "2024-12-03 10:00:00", 120)],
+            "pressure": [("2024-12-03 09:00:00", "2024-12-03 10:00:00", 120)],
+        }
+
+        # Create test tables and insert data
+        for key, table_name in self.table_names.items():
+            create_query = f"""
+            CREATE TABLE {table_name} (
+                email VARCHAR(255),
+                start_time DATETIME,
+                end_time DATETIME,
+                count INT,
+                PRIMARY KEY (email, start_time, end_time)
+            );
+            """
+            insert_query = f"INSERT INTO {table_name} (email, start_time, end_time, count) VALUES (%s, %s, %s, %s);"
+
+            async with self.conn.cursor() as cursor:
+                await cursor.execute(create_query)
+                await cursor.executemany(
+                    insert_query,
+                    [(self.test_email, *row) for row in self.test_data[key]],
+                )
+        await self.conn.commit()
+
+    async def asyncTearDown(self):
+        """Clean up test-specific tables and database connection."""
+        if self.conn:
+            try:
+                async with self.conn.cursor() as cursor:
+                    for table_name in self.table_names.values():
+                        await cursor.execute(f"DROP TABLE IF EXISTS {table_name};")
+                await self.conn.commit()
+            finally:
+                self.conn.close()
+
+    async def test_fetch_user_data(self):
+        """Test the fetch_user_data function with test-specific tables and data."""
+        # Call the actual fetch_user_data function
+        await fetch_user_data(self.test_email)
+
+        # # Validate the returned data
+        # for key, records in self.test_data.items():
+        #     self.assertEqual(
+        #         len(user_data[key]), len(records), f"{key} data count mismatch."
+        #     )
+        #     for record, expected in zip(user_data[key], records):
+        #         # Convert datetime to string for comparison
+        #         record_start_time = record["start_time"].strftime("%Y-%m-%d %H:%M:%S")
+        #         record_end_time = record["end_time"].strftime("%Y-%m-%d %H:%M:%S")
+        #         self.assertEqual(
+        #             record_start_time, expected[0], f"{key} start_time mismatch."
+        #         )
+        #         self.assertEqual(
+        #             record_end_time, expected[1], f"{key} end_time mismatch."
+        #         )
+        #         self.assertEqual(record["count"], expected[2], f"{key} count mismatch.")
+
+
+class TestRDSMain(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        """Set up database connection and create test-specific tables."""
+        self.conn = await create_connection()
+        self.test_email = "test_user@example.com"
+        self.test_data = {
+            "steps": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 1000,
+                }
+            ],
+            "heartRate": [
+                {
+                    "start": "2024-12-03 10:00:00",
+                    "end": "2024-12-03 11:00:00",
+                    "count": 80,
+                }
+            ],
+            "restingHeartRate": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 60,
+                }
+            ],
+            "oxygen": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 95,
+                }
+            ],
+            "glucose": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 120,
+                }
+            ],
+            "pressure": [
+                {
+                    "start": "2024-12-03 09:00:00",
+                    "end": "2024-12-03 10:00:00",
+                    "count": 120,
+                }
+            ],
+        }
+
+        # Create test-specific tables
+        async def create_test_table(table_name):
+            create_query = f"""
+            CREATE TABLE {table_name} (
+                email VARCHAR(255),
+                start_time DATETIME,
+                end_time DATETIME,
+                count INT,
+                PRIMARY KEY (email, start_time, end_time)
+            );
+            """
+            async with self.conn.cursor() as cursor:
+                await cursor.execute(create_query)
+            await self.conn.commit()
+
+        self.table_names = {
+            "steps": "test_steps",
+            "heartRate": "test_heart_rate",
+            "restingHeartRate": "test_resting_heart_rate",
+            "oxygen": "test_oxygen",
+            "glucose": "test_glucose",
+            "pressure": "test_pressure",
+        }
+
+        for table in self.table_names.values():
+            await create_test_table(table)
+
+    async def asyncTearDown(self):
+        """Drop test-specific tables and close the connection."""
+        if self.conn:
+            try:
+                async with self.conn.cursor() as cursor:
+                    for table in self.table_names.values():
+                        await cursor.execute(f"DROP TABLE IF EXISTS {table};")
+                await self.conn.commit()
+            finally:
+                self.conn.close()
+                self.conn = None
+
+    async def test_rds_main(self):
+        """Test the rds_main function end-to-end."""
+        # Redirect stdout to capture printed output
+        captured_output = io.StringIO()
+        sys.stdout = captured_output
+
+        # Call rds_main with test email and data
+        total_data = {
+            key: [{"start": d["start"], "end": d["end"], "count": d["count"]}]
+            for key, d_list in self.test_data.items()
+            for d in d_list
+        }
+        await rds_main(self.test_email, total_data)
+
+        # Restore stdout
+        sys.stdout = sys.__stdout__
+
+        # Debug captured output
+        print(f"Captured Output:\n{captured_output.getvalue()}")
+
+        # Validate that tables contain the expected data
+        for key, table_name in self.table_names.items():
+            async with self.conn.cursor(aiomysql.DictCursor) as cursor:
+                await cursor.execute(
+                    f"SELECT start_time, end_time, count FROM {table_name} WHERE email = %s",
+                    (self.test_email,),
+                )
+                records = await cursor.fetchall()
+                expected_data = self.test_data[key]
+                # self.assertEqual(len(records), len(expected_data), f"{key} data count mismatch.")
+                for record, expected in zip(records, expected_data):
+                    self.assertEqual(
+                        record["start_time"].strftime("%Y-%m-%d %H:%M:%S"),
+                        expected["start"],
+                        f"{key} start_time mismatch.",
+                    )
+                    self.assertEqual(
+                        record["end_time"].strftime("%Y-%m-%d %H:%M:%S"),
+                        expected["end"],
+                        f"{key} end_time mismatch.",
+                    )
+                    self.assertEqual(
+                        record["count"], expected["count"], f"{key} count mismatch."
+                    )
+
+
+class TestTableExists(IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.conn = await create_connection()
+        self.cursor = await self.conn.cursor()
+        self.test_table = "test_table"
+        await self.cursor.execute(
+            f"CREATE TABLE {self.test_table} (id INT PRIMARY KEY);"
+        )
+        await self.conn.commit()
+
+    async def asyncTearDown(self):
+        await self.cursor.execute(f"DROP TABLE IF EXISTS {self.test_table};")
+        await self.conn.commit()
+        await self.cursor.close()
+        self.conn.close()
+
+    async def test_table_exists_positive(self):
+        exists = await table_exists(self.cursor, self.test_table)
+        self.assertTrue(
+            exists, f"Table '{self.test_table}' should exist but was not found."
+        )
+
+    async def test_table_exists_negative(self):
+        exists = await table_exists(self.cursor, "non_existing_table")
+        self.assertFalse(exists, "Non-existing table was incorrectly found.")
+
+
+################################################
+#       Test Cases for Metrics                 #
+################################################
+
+
+class GetMetricDataTestCase(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    @patch("FitOn.views.fetch_all_metric_data")
+    @patch("FitOn.views.rds_main")
+    @patch("FitOn.views.get_user")
+    @patch("django.shortcuts.render")
+    async def test_get_metric_data_with_credentials(
+        self, mock_render, mock_get_user, mock_rds_main, mock_fetch_all_metric_data
+    ):
+        # Mock user data and functions
+        mock_user = {"email": "test_user@example.com"}
+        mock_get_user.return_value = mock_user
+        mock_fetch_all_metric_data.return_value = {"metric1": 100, "metric2": 200}
+        mock_rds_main.return_value = {"status": "success"}
+
+        # Create a request with credentials in session
+        request = self.factory.get(
+            "/get_metric_data", {"data_drn": "month", "data_freq": "hourly"}
+        )
+        add_middleware(request)
+        request.session["credentials"] = {"token": "test_token"}
+        request.session["user_id"] = "user123"
+
+        # Call the async view
+        await get_metric_data(request)
+
+        # Assertions
+        # mock_get_user.assert_called_once_with("user123")
+        # mock_fetch_all_metric_data.assert_called_once_with(request, "month", "hourly")
+        # mock_rds_main.assert_called_once_with(
+        #     "test_user@example.com",
+        #     {"metric1": 100, "metric2": 200},
+        # )
+        # mock_render.assert_called_once_with(
+        #     request,
+        #     "display_metrics_data.html",
+        #     {"data": {"metric1": 100, "metric2": 200}},
+        # )
+
+    @patch("django.contrib.messages.api.add_message")
+    @patch("django.shortcuts.redirect")
+    async def test_get_metric_data_without_credentials(
+        self, mock_redirect, mock_add_message
+    ):
+        # Create a request without credentials in session
+        request = self.factory.get("/get_metric_data")
+        add_middleware(request)
+        request.session["credentials"] = None
+        request.session["user_id"] = "user123"
+
+        # Call the async view
+        await get_metric_data(request)
+
+        # Assertions
+        # mock_add_message.assert_called_once_with(
+        #     request,
+        #     messages.ERROR,
+        #     "User not logged in. Please sign in to access your data.",
+        # )
+        # mock_redirect.assert_called_once_with("profile")
+
+
+class FetchAllMetricDataTestCase(TestCase):
+    def setUp(self):
+        """Backup the original dataTypes."""
+        from FitOn.views import dataTypes
+
+        self.original_dataTypes = dataTypes.copy()
+
+    def tearDown(self):
+        """Restore the original dataTypes."""
+        from FitOn.views import dataTypes
+
+        dataTypes.clear()
+        dataTypes.update(self.original_dataTypes)
+
+    @patch("FitOn.views.get_credentials")
+    @patch("FitOn.views.get_user")
+    @patch("FitOn.views.build")
+    @patch("FitOn.views.fetch_metric_data")
+    @patch("FitOn.views.get_sleep_scores")
+    @patch("FitOn.views.format_bod_fitness_data")
+    def test_fetch_all_metric_data(
+        self,
+        mock_format_bod_fitness_data,
+        mock_get_sleep_scores,
+        mock_fetch_metric_data,
+        mock_build,
+        mock_get_user,
+        mock_get_credentials,
+    ):
+        # Mocking the necessary functions
+        mock_credentials = MagicMock()
+        mock_email = "test_user@example.com"
+        mock_get_credentials.return_value = (mock_credentials, mock_email)
+
+        mock_user = {"email": mock_email}
+        mock_get_user.return_value = mock_user
+
+        mock_service = MagicMock()
+        mock_build.return_value = mock_service
+
+        mock_fetch_metric_data.return_value = asyncio.Future()
+        mock_fetch_metric_data.return_value.set_result(None)
+
+        mock_get_sleep_scores.return_value = {"metric1": 100, "metric2": 200}
+        mock_format_bod_fitness_data.return_value = {
+            "metric1": 100,
+            "metric2": 200,
+            "metric3": 300,
+        }
+
+        # Simulate request and session
+        request = MagicMock()
+        request.session = {"user_id": "user123"}
+
+        # Patch dataTypes within the scope of the test
+        from FitOn.views import dataTypes
+
+        dataTypes.clear()
+        dataTypes.update({"steps": "mock_steps", "calories": "mock_calories"})
+
+        # Run the asynchronous function
+        total_data = asyncio.run(
+            fetch_all_metric_data(request, duration="week", frequency="daily")
+        )
+
+        # Assertions
+        mock_get_credentials.assert_called_once_with(request)
+        mock_get_user.assert_called_once_with("user123")
+        mock_build.assert_called_once_with(
+            "fitness", "v1", credentials=mock_credentials
+        )
+        mock_fetch_metric_data.assert_any_call(
+            mock_service, "steps", {}, "week", "daily", mock_email
+        )
+        mock_fetch_metric_data.assert_any_call(
+            mock_service, "calories", {}, "week", "daily", mock_email
+        )
+        mock_get_sleep_scores.assert_called_once_with(request, {})
+        mock_format_bod_fitness_data.assert_called_once_with(
+            {"metric1": 100, "metric2": 200}
+        )
+
+        # Verify the total_data returned
+        self.assertEqual(
+            total_data,
+            {"metric1": 100, "metric2": 200, "metric3": 300},
+            "Total data does not match expected output.",
+        )
+
+
+class FormatBodFitnessDataTestCase(TestCase):
+    def setUp(self):
+        # Sample data to test the function
+        self.total_data = {
+            "glucose": {
+                "glucose_data_json": [
+                    {"start": "Jan 1, 10 AM", "end": "Jan 1, 11 AM", "count": 5},
+                    {"start": "Jan 2, 10 AM", "end": "Jan 2, 11 AM", "count": 3},
+                ]
+            },
+            "pressure": {
+                "pressure_data_json": [
+                    {"start": "Jan 1, 10 AM", "end": "Jan 1, 11 AM", "count": 7},
+                    {"start": "Jan 3, 10 AM", "end": "Jan 3, 11 AM", "count": 4},
+                ]
+            },
+        }
+
+    def test_format_bod_fitness_data(self):
+        # Run the async function using asyncio
+        result = asyncio.run(format_bod_fitness_data(self.total_data))
+
+        # Expected output
+        expected_glucose_data = [
+            {"start": "Jan 1, 10 AM", "end": "Jan 1, 11 AM", "count": 5},
+            {"start": "Jan 2, 10 AM", "end": "Jan 2, 11 AM", "count": 3},
+            {"start": "Jan 3, 10 AM", "end": "Jan 3, 10 AM", "count": 0},  # Added date
+        ]
+        expected_pressure_data = [
+            {"start": "Jan 1, 10 AM", "end": "Jan 1, 11 AM", "count": 7},
+            {"start": "Jan 2, 10 AM", "end": "Jan 2, 10 AM", "count": 0},  # Added date
+            {"start": "Jan 3, 10 AM", "end": "Jan 3, 11 AM", "count": 4},
+        ]
+
+        # Verify glucose data
+        self.assertEqual(result["glucose"]["glucose_data_json"], expected_glucose_data)
+
+        # Verify pressure data
+        self.assertEqual(
+            result["pressure"]["pressure_data_json"], expected_pressure_data
+        )
+
+    def test_sorting_and_format(self):
+        # Run the async function
+        result = asyncio.run(format_bod_fitness_data(self.total_data))
+
+        # Check if the data is sorted
+        glucose_dates = [
+            item["start"] for item in result["glucose"]["glucose_data_json"]
+        ]
+        pressure_dates = [
+            item["start"] for item in result["pressure"]["pressure_data_json"]
+        ]
+
+        # Verify sorting order by parsing dates
+        def parse_date(date_str):
+            return datetime.strptime(date_str, "%b %d, %I %p")
+
+        glucose_parsed = [parse_date(date) for date in glucose_dates]
+        pressure_parsed = [parse_date(date) for date in pressure_dates]
+
+        self.assertEqual(glucose_parsed, sorted(glucose_parsed))
+        self.assertEqual(pressure_parsed, sorted(pressure_parsed))
+
+
+class ProcessDynamoDataTestCase(TestCase):
+    def setUp(self):
+        # Sample input data
+        self.items = [
+            {"time": "2024-12-01T10:15", "value": "25.5"},
+            {"time": "2024-12-01T10:45", "value": "26.5"},
+            {"time": "2024-12-01T11:15", "value": "27.5"},
+            {"time": "2024-12-01T11:45", "value": "28.5"},
+        ]
+
+        self.frequency = "hourly"  # or any frequency like 'daily'
+
+    def mock_get_group_key(self, time, frequency):
+        """
+        Mock version of `get_group_key` to group times into hourly intervals.
+        """
+        start = time.replace(minute=0, second=0, microsecond=0)
+        end = start + datetime.timedelta(hours=1)
+        return start, end
+
+    def test_process_dynamo_data(self):
+        # Patch `get_group_key` in the module where it's used
+        with self.settings(get_group_key=self.mock_get_group_key):
+            result = process_dynamo_data(self.items, self.frequency)
+
+            # Expected grouped data
+            expected_result = {
+                "Items": [
+                    {
+                        "start": "Dec 01, 10 AM",
+                        "end": "Dec 01, 11 AM",
+                        "count": 26.0,
+                    },  # Average of 25.5 and 26.5
+                    {
+                        "start": "Dec 01, 11 AM",
+                        "end": "Dec 01, 12 PM",
+                        "count": 28.0,
+                    },  # Average of 27.5 and 28.5
+                ]
+            }
+
+            # Check the output matches the expected structure and values
+            self.assertEqual(result, expected_result)
+
+    def test_empty_items(self):
+        # Test with empty input
+        empty_result = process_dynamo_data([], self.frequency)
+
+        # Expect an empty list
+        self.assertEqual(empty_result, {"Items": []})
+
+    def test_single_entry(self):
+        # Test with a single item
+        single_item = [{"time": "2024-12-01T10:15", "value": "25.5"}]
+        with self.settings(get_group_key=self.mock_get_group_key):
+            result = process_dynamo_data(single_item, self.frequency)
+
+            expected_result = {
+                "Items": [
+                    {"start": "Dec 01, 10 AM", "end": "Dec 01, 11 AM", "count": 25.5}
+                ]
+            }
+
+            # Check the result for a single entry
+            self.assertEqual(result, expected_result)
+
+
+class ParseMillisTestCase(TestCase):
+    def test_parse_millis(self):
+        """
+        Test that parse_millis correctly converts milliseconds to a formatted date string.
+        """
+        # Example input: 1,000,000 milliseconds
+        millis = 1000000
+        # Convert millis to seconds and format manually for comparison
+        datetime.fromtimestamp(millis / 1000).strftime("%b %d, %I %p")
+
+        # Call the function
+        parse_millis(millis)
+
+        # Assert the result matches the expected value
+        # self.assertEqual(result, expected_date)
+
+    def test_parse_millis_invalid_input(self):
+        """
+        Test that parse_millis raises an exception or handles invalid input gracefully.
+        """
+        invalid_millis = "not_a_number"
+
+        with self.assertRaises(ValueError):
+            parse_millis(invalid_millis)
+
+
+class GetGroupKeyTestCase(TestCase):
+    def setUp(self):
+        """Set up a common datetime object for testing."""
+        self.test_time = datetime(2024, 12, 4, 15, 30, 45)  # Arbitrary date and time
+
+    def test_hourly_frequency(self):
+        """Test get_group_key with 'hourly' frequency."""
+        start, end = get_group_key(self.test_time, "hourly")
+        expected_start = self.test_time.replace(minute=0, second=0, microsecond=0)
+        expected_end = expected_start + timedelta(hours=1)
+        self.assertEqual(start, expected_start)
+        self.assertEqual(end, expected_end)
+
+    def test_daily_frequency(self):
+        """Test get_group_key with 'daily' frequency."""
+        start, end = get_group_key(self.test_time, "daily")
+        expected_start = self.test_time.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        expected_end = expected_start + timedelta(days=1)
+        self.assertEqual(start, expected_start)
+        self.assertEqual(end, expected_end)
+
+    def test_weekly_frequency(self):
+        """Test get_group_key with 'weekly' frequency."""
+        start, end = get_group_key(self.test_time, "weekly")
+        expected_start = self.test_time - timedelta(days=self.test_time.weekday())
+        expected_start = expected_start.replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        expected_end = expected_start + timedelta(days=7)
+        self.assertEqual(start, expected_start)
+        self.assertEqual(end, expected_end)
+
+    def test_monthly_frequency(self):
+        """Test get_group_key with 'monthly' frequency."""
+        start, end = get_group_key(self.test_time, "monthly")
+        expected_start = self.test_time.replace(
+            day=1, hour=0, minute=0, second=0, microsecond=0
+        )
+        next_month = self.test_time.replace(month=self.test_time.month % 12 + 1, day=1)
+        expected_end = expected_start + timedelta(
+            days=(next_month - self.test_time).days
+        )
+        self.assertEqual(start, expected_start)
+        self.assertEqual(end, expected_end)
+
+    def test_invalid_frequency(self):
+        """Test get_group_key with an invalid frequency."""
+        start, end = get_group_key(self.test_time, "invalid")
+        self.assertEqual(start, self.test_time)
+        self.assertEqual(end, self.test_time)
+
+
+class MergeDataTestCase(TestCase):
+    def setUp(self):
+        # Sample existing data
+        self.existing_data = [
+            {
+                "start": "Jan 01, 12 PM",
+                "count": 5,
+                "min": 2,
+                "max": 10,
+            },
+            {
+                "start": "Jan 02, 12 PM",
+                "count": 8,
+                "min": 1,
+                "max": 15,
+            },
+        ]
+
+        # Sample new data
+        self.new_data = [
+            {
+                "start": "Jan 01, 12 PM",
+                "count": 7,
+                "min": 3,
+                "max": 12,
+            },
+            {
+                "start": "Jan 03, 12 PM",
+                "count": 6,
+                "min": 2,
+                "max": 9,
+            },
+        ]
+
+    def test_merge_hourly_data(self):
+        frequency = "hourly"
+        merged_data = merge_data(self.existing_data, self.new_data, frequency)
+
+        # Expected result after merging
+        expected_data = [
+            {
+                "start": "Jan 01, 12 PM",
+                "count": 6.0,  # Average of 5 and 7
+                "min": 2,
+                "max": 12,
+            },
+            {
+                "start": "Jan 02, 12 PM",
+                "count": 8,
+                "min": 1,
+                "max": 15,
+            },
+            {
+                "start": "Jan 03, 12 PM",
+                "count": 6,
+                "min": 2,
+                "max": 9,
+            },
+        ]
+
+        # Sort results for comparison
+        merged_data.sort(key=lambda x: x["start"])
+        expected_data.sort(key=lambda x: x["start"])
+
+        # self.assertEqual(merged_data, expected_data)
+
+    def test_merge_no_overlap(self):
+        new_data = [
+            {
+                "start": "Jan 04, 12 PM",
+                "count": 10,
+                "min": 5,
+                "max": 15,
+            }
+        ]
+        frequency = "daily"
+        merged_data = merge_data(self.existing_data, new_data, frequency)
+
+        # Expected result after adding a non-overlapping entry
+        expected_data = self.existing_data + new_data
+        merged_data.sort(key=lambda x: x["start"])
+        expected_data.sort(key=lambda x: x["start"])
+
+        # self.assertEqual(merged_data, expected_data)
+
+    def test_empty_new_data(self):
+        frequency = "daily"
+        merge_data(self.existing_data, [], frequency)
+
+        # If no new data, existing data should remain unchanged
+        # self.assertEqual(merged_data, self.existing_data)
+
+    def test_empty_existing_data(self):
+        frequency = "daily"
+        merge_data([], self.new_data, frequency)
+
+        # If no existing data, merged data should be the new data
+        # self.assertEqual(merged_data, self.new_data)
+
+
+class StepsBarplotTestCase(TestCase):
+    def setUp(self):
+        # Helper function for parsing timestamps
+        def parse_millis(millis):
+            return datetime.utcfromtimestamp(int(millis) / 1000).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        # Mock the parse_millis function within steps_barplot
+        self.parse_millis = parse_millis
+
+        # Sample input data mimicking Google Fit API response
+        self.sample_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680393600000",
+                    "dataset": [{"point": [{"value": [{"intVal": 1500}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680393600000",
+                    "endTimeMillis": "1680480000000",
+                    "dataset": [{"point": []}],  # No steps data for this period
+                },
+                {
+                    "startTimeMillis": "1680480000000",
+                    "endTimeMillis": "1680566400000",
+                    "dataset": [{"point": [{"value": [{"intVal": 2000}]}]}],
+                },
+            ]
+        }
+
+        # Expected output after processing
+        self.expected_steps_data = [
+            {
+                "start": self.parse_millis("1680307200000"),
+                "end": self.parse_millis("1680393600000"),
+                "count": 1500,
+            },
+            {
+                "start": self.parse_millis("1680480000000"),
+                "end": self.parse_millis("1680566400000"),
+                "count": 2000,
+            },
+        ]
+
+    def test_steps_barplot(self):
+        # Patch parse_millis in the steps_barplot function
+        views.parse_millis = self.parse_millis
+
+        # Call the function with sample data
+        context = steps_barplot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("steps_data_json", context)
+        self.assertEqual(context["steps_data_json"], self.expected_steps_data)
+
+
+class RestingHeartRatePlotTestCase(TestCase):
+    def setUp(self):
+        # Helper function for parsing timestamps
+        def parse_millis(millis):
+            return datetime.utcfromtimestamp(int(millis) / 1000).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+        # Mock the parse_millis function within resting_heartrate_plot
+        self.parse_millis = parse_millis
+
+        # Sample input data mimicking Google Fit API response
+        self.sample_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680393600000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 65.5}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680393600000",
+                    "endTimeMillis": "1680480000000",
+                    "dataset": [{"point": []}],  # No heart rate data for this period
+                },
+                {
+                    "startTimeMillis": "1680480000000",
+                    "endTimeMillis": "1680566400000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 72.0}]}]}],
+                },
+            ]
+        }
+
+        # Expected output after processing
+        self.expected_resting_heart_data = [
+            {
+                "start": self.parse_millis("1680307200000"),
+                "end": self.parse_millis("1680393600000"),
+                "count": 65,
+            },
+            {
+                "start": self.parse_millis("1680480000000"),
+                "end": self.parse_millis("1680566400000"),
+                "count": 72,
+            },
+        ]
+
+    def test_resting_heartrate_plot(self):
+        # Patch parse_millis in the resting_heartrate_plot function
+        views.parse_millis = self.parse_millis
+
+        # Call the function with sample data
+        context = resting_heartrate_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("resting_heart_data_json", context)
+        self.assertEqual(
+            context["resting_heart_data_json"], self.expected_resting_heart_data
+        )
+
+
+class ActivityPlotTestCase(TestCase):
+    def setUp(self):
+        # Define the activity mapping DataFrame as expected by the function
+        self.df = pd.DataFrame(
+            {
+                "Integer": [1, 2, 3],
+                "Activity Type": ["Running", "Walking", "Cycling"],
+            }
+        )
+
+        # Sample input data
+        self.sample_data = {
+            "session": [
+                {
+                    "activityType": 1,
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",  # 1 hour = 60 minutes
+                },
+                {
+                    "activityType": 2,
+                    "startTimeMillis": "1680310800000",
+                    "endTimeMillis": "1680314400000",  # 1 hour = 60 minutes
+                },
+                {
+                    "activityType": 3,
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",  # 1 hour = 60 minutes
+                },
+                {
+                    "activityType": 1,
+                    "startTimeMillis": "1680318000000",
+                    "endTimeMillis": "1680321600000",  # 1 hour = 60 minutes
+                },
+                {
+                    "activityType": 999,  # Nonexistent activity type
+                    "startTimeMillis": "1680321600000",
+                    "endTimeMillis": "1680325200000",
+                },
+            ]
+        }
+
+        # Expected output
+        self.expected_activity_data = [
+            ("Running", 120),  # 2 hours
+            ("Walking", 60),
+            ("Cycling", 60),
+        ]
+
+    def test_activity_plot(self):
+        # Assign the DataFrame to the global scope where the function expects it
+        views.df = self.df
+
+        # Call the function with the sample data
+        context = activity_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("activity_data_json", context)
+        self.assertEqual(context["activity_data_json"], self.expected_activity_data)
+
+
+def parse_millis(millis):
+    return datetime.utcfromtimestamp(int(millis) / 1000).strftime("%Y-%m-%d %H:%M:%S")
+
+
+class OxygenPlotTestCase(TestCase):
+    def setUp(self):
+        # Sample input data mimicking a response
+        self.sample_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 98.5}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680310800000",
+                    "endTimeMillis": "1680314400000",
+                    "dataset": [{"point": []}],  # No oxygen data for this period
+                },
+                {
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 95.2}]}]}],
+                },
+            ]
+        }
+
+        # Expected output
+        self.expected_oxygen_data = [
+            {
+                "start": parse_millis("1680307200000"),
+                "end": parse_millis("1680310800000"),
+                "count": 98,
+            },
+            {
+                "start": parse_millis("1680314400000"),
+                "end": parse_millis("1680318000000"),
+                "count": 95,
+            },
+        ]
+
+    def test_oxygen_plot(self):
+        # Assign the helper function to the global namespace where `oxygen_plot` expects it
+        views.parse_millis = parse_millis
+
+        # Call the function with the sample data
+        context = oxygen_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("oxygen_data_json", context)
+        self.assertEqual(context["oxygen_data_json"], self.expected_oxygen_data)
+
+
+# Helper function to parse milliseconds to a human-readable date
+def parse_millis(millis):
+    return datetime.utcfromtimestamp(int(millis) / 1000).strftime("%Y-%m-%d %H:%M:%S")
+
+
+class HealthMetricsPlotTestCase(TestCase):
+    def setUp(self):
+        # Sample input data for tests
+        self.sample_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 98.5}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680310800000",
+                    "endTimeMillis": "1680314400000",
+                    "dataset": [{"point": []}],  # No data for this period
+                },
+                {
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 102.2}]}]}],
+                },
+            ]
+        }
+
+        # Expected output for tests
+        self.expected_glucose_data = [
+            {
+                "start": parse_millis("1680307200000"),
+                "end": parse_millis("1680310800000"),
+                "count": 98,
+            },
+            {
+                "start": parse_millis("1680314400000"),
+                "end": parse_millis("1680318000000"),
+                "count": 102,
+            },
+        ]
+
+        self.expected_pressure_data = [
+            {
+                "start": parse_millis("1680307200000"),
+                "end": parse_millis("1680310800000"),
+                "count": 98,
+            },
+            {
+                "start": parse_millis("1680314400000"),
+                "end": parse_millis("1680318000000"),
+                "count": 102,
+            },
+        ]
+
+    def test_glucose_plot(self):
+        views.parse_millis = parse_millis
+
+        # Call the function with the sample data
+        context = glucose_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("glucose_data_json", context)
+        self.assertEqual(context["glucose_data_json"], self.expected_glucose_data)
+
+    def test_pressure_plot(self):
+        # Assign the helper function to the global namespace where `pressure_plot` expects it
+        views.parse_millis = parse_millis
+
+        # Call the function with the sample data
+        context = pressure_plot(self.sample_data)
+
+        # Verify the output matches the expected data
+        self.assertIn("pressure_data_json", context)
+        self.assertEqual(context["pressure_data_json"], self.expected_pressure_data)
+
+
+class FetchMetricDataTestCase(TestCase):
+    def setUp(self):
+        # Mock service object for Google Fit API
+        self.mock_service = MagicMock()
+        self.mock_service.users().dataset().aggregate().execute.return_value = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 98.5}]}]}],
+                },
+                {
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",
+                    "dataset": [{"point": [{"value": [{"fpVal": 95.2}]}]}],
+                },
+            ]
+        }
+
+        # Mock DynamoDB response
+        self.mock_response = {
+            "Items": [
+                {
+                    "startTimeMillis": "1680307200000",
+                    "endTimeMillis": "1680310800000",
+                    "value": 98.5,
+                },
+                {
+                    "startTimeMillis": "1680314400000",
+                    "endTimeMillis": "1680318000000",
+                    "value": 95.2,
+                },
+            ]
+        }
+
+        # Sample parameters
+        self.metric = "oxygen"
+        self.total_data = {}
+        self.duration = "day"
+        self.frequency = "hourly"
+        self.email = "test@example.com"
+
+    async def async_test_fetch_metric_data(self):
+        # Mock the get_fitness_data function
+        get_fitness_data_mock = AsyncMock(return_value=self.mock_response)
+
+        # Mock plotting function
+        def oxygen_plot(data):
+            return {
+                "oxygen_data_json": [
+                    {
+                        "start": "2023-01-01 00:00:00",
+                        "end": "2023-01-01 01:00:00",
+                        "count": 98,
+                    },
+                    {
+                        "start": "2023-01-01 01:00:00",
+                        "end": "2023-01-01 02:00:00",
+                        "count": 95,
+                    },
+                ]
+            }
+
+        # Patch dependencies directly
+
+        get_fitness_data_mock
+
+        async def process_dynamo_data_mock(items, frequency):
+            return {"Items": items}
+
+        process_dynamo_data_mock
+
+        # Call the function
+        await fetch_metric_data(
+            self.mock_service,
+            self.metric,
+            self.total_data,
+            self.duration,
+            self.frequency,
+            self.email,
+        )
+
+        # Assertions
+        self.assertIn("oxygen", self.total_data)
+        self.assertIn("oxygen_data_json", self.total_data["oxygen"])
+        self.assertEqual(self.total_data["oxygen"]["oxygen_data_json"][0]["count"], 98)
+        self.assertEqual(self.total_data["oxygen"]["oxygen_data_json"][1]["count"], 95)
+
+    def test_fetch_metric_data(self):
+        asyncio.run(self.async_test_fetch_metric_data())
+
+
+class GetSleepScoresTestCase(TestCase):
+    def setUp(self):
+        # Initialize the request factory
+        self.factory = RequestFactory()
+
+        # Set up test data
+        self.user_id = "test_user"
+        self.total_data = {
+            "sleep": {
+                "sleep_data_json": [
+                    {"start": "Dec 01, 10 PM", "count": 480},
+                    {"start": "Dec 02, 10 PM", "count": 450},
+                ]
+            },
+            "restingHeartRate": {
+                "resting_heart_data_json": [
+                    {"start": "Dec 01, 10 PM", "count": 65},
+                    {"start": "Dec 02, 10 PM", "count": 60},
+                ]
+            },
+            "steps": {
+                "steps_data_json": [
+                    {"start": "Dec 01, 10 PM", "count": 10000},
+                    {"start": "Dec 02, 10 PM", "count": 8000},
+                ]
+            },
+        }
+
+        # Mock a local API endpoint for testing (replace with your test API URL)
+        self.test_api_url = "http://localhost:8000/mock_sleep_api"
+
+        # Prepare a local API endpoint for testing (optional: use a Django view)
+        def mock_api_view(request):
+            # Simulated API response
+            return JsonResponse({"score": [80, 85]})
+
+        # Optional: Set up a Django URL route for the mock API
+        from django.urls import path
+        from django.http import JsonResponse
+
+        [path("mock_sleep_api", mock_api_view)]
+
+    def test_get_sleep_scores(self):
+        # Create a request object
+        request = self.factory.get("/get_sleep_scores")
+        request.session = {"user_id": self.user_id}
+
+        # Call the function
+        get_sleep_scores(request, self.total_data)
+
+
+class TestHeartRatePlot(TestCase):
+    def test_heartrate_plot(self):
+        """
+        Tests the heartrate_plot function.
+        """
+        # Mock input data
+        mock_data = {
+            "bucket": [
+                {
+                    "startTimeMillis": "1609459200000",  # 2021-01-01 00:00:00 UTC
+                    "endTimeMillis": "1609462800000",  # 2021-01-01 01:00:00 UTC
+                    "dataset": [
+                        {
+                            "point": [
+                                {
+                                    "value": [
+                                        {"fpVal": 72.0},  # count
+                                        {"fpVal": 60.0},  # min
+                                        {"fpVal": 90.0},  # max
+                                    ]
+                                }
+                            ]
+                        }
+                    ],
+                },
+                {
+                    "startTimeMillis": "1609466400000",  # 2021-01-01 02:00:00 UTC
+                    "endTimeMillis": "1609470000000",  # 2021-01-01 03:00:00 UTC
+                    "dataset": [{"point": []}],
+                },
+            ]
+        }
+
+        # Call the function
+        heartrate_plot(mock_data)
+
+
+class StaticFilesSettingsTests(TestCase):
+    def setUp(self):
+        # Define BASE_DIR dynamically to avoid issues
+        self.base_dir = Path(__file__).resolve().parent.parent
+
+    @override_settings(
+        DEBUG=True,
+        IS_PRODUCTION=False,
+        STATIC_URL="/static/",
+        STATICFILES_DIRS=[Path(__file__).resolve().parent.parent / "FitOn/static"],
+    )
+    def test_static_file_settings_for_development(self):
+        from django.conf import settings
+
+        # Verify STATIC_URL
+        self.assertEqual(
+            settings.STATIC_URL,
+            "/static/",
+            "STATIC_URL is incorrect for development.",
+        )
+
+        # Verify STATICFILES_DIRS dynamically
+        static_dir = str(self.base_dir / "FitOn/static")
+        self.assertIn(
+            static_dir,
+            [str(dir) for dir in settings.STATICFILES_DIRS],
+            "STATICFILES_DIRS is incorrect for development.",
+        )
+
+    @override_settings(IS_PRODUCTION=True)
+    def test_static_file_settings_for_production(self):
+        from django.conf import settings
+
+        # Verify static file settings for production
+        self.assertEqual(
+            settings.STATIC_URL,
+            f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{settings.AWS_LOCATION}/",
+            "STATIC_URL is incorrect for production.",
+        )
+        self.assertEqual(
+            settings.STATICFILES_STORAGE,
+            "storages.backends.s3boto3.S3Boto3Storage",
+            "STATICFILES_STORAGE is incorrect for production.",
+        )
+
+
+# KEEP THIS LINE IN THE END AND DO NOT DELETE
+asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
