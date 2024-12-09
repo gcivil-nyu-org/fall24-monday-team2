@@ -133,23 +133,11 @@ def create_user(
         }
     )
 
-    # Test to check if inserted user was inserted
-    # response = users_table.get_item(Key={"user_id": user_id})
-    # if "Item" in response:
-    #     print("User found in DynamoDB:", response["Item"])
-    # else:
-    #     print("User not found in DynamoDB after insertion.")
-
-    # print("User created successfully.")
     return True
-    # except Exception as e:
-    #     print(f"Error creating user in DynamoDB: {e}")
-    #     return False
 
 
 def delete_user_by_username(username):
-    # try:
-    # First, get the user by username
+
     response = users_table.scan(
         FilterExpression="#n = :username",
         ExpressionAttributeNames={"#n": "username"},
@@ -158,7 +146,6 @@ def delete_user_by_username(username):
 
     users = response.get("Items", [])
     if not users:
-        # print(f"No user found with username: {username}")
         return False  # No user to delete
 
     # Assuming the 'user_id' is the partition key
@@ -1461,3 +1448,39 @@ def get_users_with_chat_history(user_id):
     except Exception as e:
         print(f"Error fetching users with chat history: {e}")
         return []
+
+
+def get_step_user_goals(user_id):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+    response = user_goals_table.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("steps"),
+    )
+    existing_goals = response.get("Items", [])
+    value = existing_goals[0]["Value"] if existing_goals else None
+    return value
+
+
+def get_weight_user_goals(user_id):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+    response = user_goals_table.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("weight"),
+    )
+    existing_goals = response.get("Items", [])
+    value = existing_goals[0]["Value"] if existing_goals else None
+    return value
+
+
+def get_sleep_user_goals(user_id):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+    response = user_goals_table.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("sleep"),
+    )
+    existing_goals = response.get("Items", [])
+    value = existing_goals[0]["Value"] if existing_goals else None
+    return value

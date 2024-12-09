@@ -45,12 +45,15 @@
             <label for="section">Section</label>
             <select id="section" name="section" class="form-input">
                 <option value="General">General</option>
-                <option value="Workout Suggestions">Workout Suggestions</option>
-                <option value="Diet Plans">Diet Plans</option>
+                {% if user.is_fitness_trainer or user.is_admin %}
+                    <option value="Workout Suggestions">Workout Suggestions</option>
+                    <option value="Diet Plans">Diet Plans</option>
+                {% endif %}
                 <option value="Other">Other</option>
             </select>
         </div>
         <button type="submit" class="submit-btn">Create Thread</button>
     </form>
+    
     
 </div>

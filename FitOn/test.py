@@ -13,6 +13,7 @@ from django.contrib.sessions.middleware import SessionMiddleware
 from django.urls import reverse
 import boto3
 import json
+import uuid
 
 import io
 import asyncio
@@ -88,6 +89,15 @@ from .dynamodb import (
     get_thread_details,
     delete_post,
     get_section_stats,
+    verify_user_credentials,
+    get_users_by_username_query,
+    get_sleep_user_goals,
+    get_weight_user_goals,
+    get_step_user_goals,
+    # make_fitness_trainer,
+    # remove_fitness_trainer,
+    # get_user_by_username,
+    calculate_age_group,
     MockUser,
     # users_table,
     get_last_reset_request_time,
@@ -232,6 +242,63 @@ class UserCreationAndDeletionTests(TestCase):
         # Step 3: Verify the password was updated correctly
         is_password_correct = check_password(new_password, updated_user["password"])
         self.assertTrue(is_password_correct, "The password was not updated correctly.")
+
+    def test_verify_false_credentials(self):
+        username = "wasd"
+        password = "wasd"
+        result = verify_user_credentials(username, password)
+        self.assertIsNone(result, "User was found. ")
+
+    def test_verify_true_credentials(self):
+        username = "sg8002"
+        password = "sg8002"
+        result = verify_user_credentials(username, password)
+        self.assertIsNotNone(result, "Invalid credentials. ")
+
+    def test_get_users_by_username_query(self):
+        query = "sg8002"
+        results = get_users_by_username_query(query)
+        assert len(results) > 0, "Query should return 1 user"
+
+    # def test_make_fitness_trainer(self):
+    #     user = get_user_by_username("sg8002")
+    #     uid = user.get("user_id")
+    #     make_fitness_trainer(uid)
+
+    #     is_FT = user.get("is_fitness_trainer")
+    #     self.assertTrue(is_FT, "sg8002 is not a Fitness Trainer")
+
+    #     remove_fitness_trainer(uid)
+    #     is_FT = user.get("is_fitness_trainer")
+    #     self.assertFalse(is_FT, "sg8002 is still a Fitness Trainer")
+
+    def test_calculate_age_group(self):
+        test_cases = [
+            ("2015-06-15", "Child"),  # Age: 9
+            ("2007-01-01", "Teenager"),  # Age: 17
+            ("1995-11-20", "Young Adult"),  # Age: 29
+            ("1980-05-10", "Middle-aged"),  # Age: 44
+            ("1950-12-25", "Senior"),  # Age: 74
+            ("1940-01-01", "Elderly"),  # Age: 84
+        ]
+
+        for date_of_birth, expected_group in test_cases:
+            result = calculate_age_group(date_of_birth)
+            assert (
+                result == expected_group
+            ), f"Expected {expected_group}, got {result} for DOB {date_of_birth}"
+
+        invalid_cases = [
+            ("invalid-date", "Unknown"),  # Invalid date format
+            ("", "Unknown"),  # Empty string
+            (None, "Unknown"),  # None as input
+        ]
+
+        for date_of_birth, expected_group in invalid_cases:
+            result = calculate_age_group(date_of_birth)
+            assert (
+                result == expected_group
+            ), f"Expected {expected_group}, got {result} for DOB {date_of_birth}"
 
     def test_update_user(self):
         # Step 1: Define the updates
@@ -1068,7 +1135,7 @@ class PasswordResetTests(TestCase):
 
         # Insert the mock user into the Users table
         self.__class__.users_table.put_item(Item=self.mock_user.__dict__)
-        print("Mock user inserted into DynamoDB for testing.")
+        # print("Mock user inserted into DynamoDB for testing.")
 
     def tearDown(self):
         # Delete the mock user from the Users and PasswordResetRequests tables
@@ -2213,6 +2280,271 @@ class ForumViewTests(TestCase):
         self.users_table.delete_item(Key={"user_id": self.user_data["user_id"]})
         for thread in self.test_threads:
             self.threads_table.delete_item(Key={"ThreadID": thread["ThreadID"]})
+
+
+class FitnessGoalsViewTest(TestCase):
+    def setUp(self):
+        # Set up DynamoDB resource and table
+        self.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+        self.goals_table = self.dynamodb.Table("UserGoals")
+
+        # Create test user with updated username
+        hashed = make_password("secure_password")
+        create_user(
+            "test_user789",  # user_id
+            "test_user789",  # username
+            "test_user789@example.com",  # email
+            "Test User 789",  # name
+            "1990-01-01",  # date_of_birth
+            "O",  # gender
+            "183",  # height
+            "83",  # weight
+            hashed,  # plaintext password
+        )
+
+        # Set user_id for the test session
+        self.user_id = "test_user789"
+
+        # Simulate a login request to your login view
+        self.client = Client()
+        response = self.client.post(
+            "/login/",
+            {
+                "username": "test_user789",
+                "password": "secure_password",
+            },
+        )
+
+        # Assert that login succeeded
+        assert (
+            response.status_code == 302
+        ), "Login request did not redirect as expected."
+
+        # Confirm session setup
+        session = self.client.session
+        assert "user_id" in session, "User ID not found in session after login."
+        assert (
+            session["user_id"] == self.user_id
+        ), "Session user_id does not match the test user."
+
+    def test_view_renders_goals_page(self):
+        response = self.client.get("/fitness-goals/")
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_goals.html")
+
+    def test_add_new_goal(self):
+        # Ensure the session is properly set up
+        self.assertIn("user_id", self.client.session, "User ID not found in session.")
+        self.assertEqual(
+            self.client.session["user_id"], self.user_id, "Session user_id mismatch."
+        )
+
+        # Test adding a new goal
+        data = {
+            "goal_type": "steps",
+            "goal_name": "",
+            "goal_value": "10000",
+        }
+
+        data2 = {
+            "goal_type": "weight",
+            "goal_name": "",
+            "goal_value": "80",
+        }
+        response = self.client.post("/fitness-goals/", data)
+        response = self.client.post("/fitness-goals/", data2)
+
+        # Assert redirect
+        self.assertEqual(response.status_code, 302, "Expected redirect status code.")
+        self.assertEqual(
+            response.url, reverse("fitness_goals"), "Redirect URL mismatch."
+        )
+
+        steps = get_step_user_goals(self.user_id)
+        self.assertEqual(steps, "10000", f"Expected goal value '10000', got {steps}.")
+
+        weight = get_weight_user_goals(self.user_id)
+        self.assertEqual(weight, "80", f"Expected goal value '80', got {weight}.")
+
+    def test_prevent_duplicate_goal_type(self):
+        # Insert an initial goal
+        initial_goal = {
+            "GoalID": str(uuid.uuid4()),
+            "user_id": self.user_id,
+            "Type": "steps",
+            "Name": None,
+            "Value": "10000",
+        }
+        self.goals_table.put_item(Item=initial_goal)
+
+        # Validate the initial state
+        query_response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            )
+        )
+        initial_goals = query_response.get("Items", [])
+        self.assertGreater(
+            len(initial_goals), 0, "Initial goal was not added to DynamoDB."
+        )
+
+        # Attempt to add a duplicate goal
+        data = {
+            "goal_type": "steps",
+            "goal_name": "",
+            "goal_value": "15000",
+        }
+        response = self.client.post("/fitness-goals/", data)
+
+        # Assert redirect
+        self.assertEqual(response.status_code, 302, "Expected redirect status code.")
+        self.assertEqual(
+            response.url, reverse("fitness_goals"), "Redirected to an incorrect URL."
+        )
+
+        # Check for error message in session messages
+        messages = list(response.wsgi_request._messages)
+        self.assertEqual(len(messages), 1, "Expected one error message in session.")
+        self.assertEqual(
+            str(messages[0]),
+            "You already have a steps goal. Please edit it instead.",
+            "Error message mismatch for duplicate goal prevention.",
+        )
+
+    def test_fetch_goals_on_get(self):
+        # Insert a sample goal
+        sample_goal = {
+            "GoalID": str(uuid.uuid4()),
+            "user_id": self.user_id,
+            "Type": "sleep",
+            "Name": None,
+            "Value": "10",
+        }
+        self.goals_table.put_item(Item=sample_goal)
+
+        # Validate the initial state
+        query_response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            )
+        )
+        goals = query_response.get("Items", [])
+        self.assertGreater(len(goals), 0, "Initial goal was not added to DynamoDB.")
+
+        # Fetch goals via GET request
+        response = self.client.get(reverse("fitness_goals"))
+        self.assertEqual(
+            response.status_code, 200, "GET request to fetch goals failed."
+        )
+
+        # Check if the inserted goal is displayed
+        response_content = str(response.content)
+        self.assertIn(
+            "sleep",
+            response_content,
+            "Goal type 'sleep' not found in response content.",
+        )
+        self.assertIn(
+            "10", response_content, "Goal value '10' not found in response content."
+        )
+
+    def test_edit_goal(self):
+        # Insert an initial goal
+        initial_goal = {
+            "GoalID": str(uuid.uuid4()),
+            "user_id": self.user_id,
+            "Type": "sleep",
+            "Name": None,
+            "Value": "8",
+        }
+        self.goals_table.put_item(Item=initial_goal)
+
+        # Validate the initial state
+        sleep = get_sleep_user_goals(self.user_id)
+        self.assertEqual(sleep, "8", "Initial goal value mismatch.")
+
+        # Data for editing the goal
+        edit_data = {
+            "goal_id": initial_goal["GoalID"],
+            "goal_value": "5",
+        }
+
+        # Make POST request to edit the goal
+        response = self.client.post(
+            reverse("edit_goal"),
+            data=json.dumps(edit_data),
+            content_type="application/json",
+        )
+
+        # Assert the response
+        self.assertEqual(response.status_code, 200, "Goal edit request failed.")
+        self.assertEqual(
+            response.json()["message"],
+            "Goal updated successfully!",
+            "Success message mismatch.",
+        )
+
+        # Validate the updated goal in DynamoDB
+        updated_goal_response = self.goals_table.get_item(
+            Key={
+                "GoalID": initial_goal["GoalID"],
+                "user_id": self.user_id,
+            }
+        )
+        updated_goal = updated_goal_response.get("Item")
+        self.assertIsNotNone(updated_goal, "Updated goal not found in DynamoDB.")
+        self.assertEqual(
+            updated_goal["Value"],
+            "5",
+            f"Expected updated value '5', got {updated_goal['Value']}.",
+        )
+
+        # --- Delete the updated goal ---
+        delete_data = {
+            "goal_id": initial_goal["GoalID"],
+        }
+
+        # Make POST request to delete the goal
+        response = self.client.post(
+            reverse("delete_goal"),
+            data=json.dumps(delete_data),
+            content_type="application/json",
+        )
+
+        # Assert the deletion response
+        self.assertEqual(response.status_code, 200, "Goal delete request failed.")
+        self.assertEqual(
+            response.json()["message"],
+            "Goal deleted successfully.",
+            "Unexpected response message for goal deletion.",
+        )
+
+        # Validate the goal is deleted
+        deleted_goal_response = self.goals_table.get_item(
+            Key={
+                "GoalID": initial_goal["GoalID"],
+                "user_id": self.user_id,
+            }
+        )
+        deleted_goal = deleted_goal_response.get("Item")
+        self.assertIsNone(deleted_goal, "Deleted goal still found in DynamoDB.")
+
+    def tearDown(self):
+        response = self.goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                self.user_id
+            )
+        )
+        goals = response.get("Items", [])
+
+        # Delete each goal
+        for goal in goals:
+            self.goals_table.delete_item(
+                Key={
+                    "GoalID": goal["GoalID"],
+                    "user_id": self.user_id,
+                }
+            )
 
 
 ###################################################
