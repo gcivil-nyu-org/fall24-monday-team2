@@ -9,7 +9,6 @@ from .dynamodb import (
 
 
 class ChatMessageConsumer(AsyncWebsocketConsumer):
-
     async def connect(self):
         self.room_id = self.scope["url_route"]["kwargs"]["room_id"]
 
@@ -38,7 +37,6 @@ class ChatMessageConsumer(AsyncWebsocketConsumer):
         )
 
     async def direct_message(self, event):
-
         await self.send(
             text_data=json.dumps(
                 {

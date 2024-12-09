@@ -991,7 +991,6 @@ class ForumTests(TestCase):
         self.assertNotIn("Item", response, "Thread should be deleted from DynamoDB.")
 
     def test_fetch_all_threads(self):
-
         self.test_threads = [
             {
                 "ThreadID": "1",
@@ -1904,7 +1903,6 @@ class EmailBackendTests(TestCase):
 
 
 class SignUpFormTest(TestCase):
-
     def test_passwords_match(self):
         form_data = {
             "username": "testuser",
@@ -1938,7 +1936,6 @@ class SignUpFormTest(TestCase):
 
 
 class SetNewPasswordFormTest(TestCase):
-
     def test_passwords_match(self):
         form_data = {
             "new_password": "newstrongpassword123",
@@ -1958,7 +1955,6 @@ class SetNewPasswordFormTest(TestCase):
 
 
 class ProfileFormTest(TestCase):
-
     def test_valid_form_with_country_code_and_phone(self):
         form_data = {
             "name": "John Doe",
@@ -2036,7 +2032,6 @@ class ProfileFormTest(TestCase):
 
 
 class ValidateFileExtensionTest(TestCase):
-
     def test_valid_pdf_file(self):
         valid_file = SimpleUploadedFile("document.pdf", b"file_content")
         try:
@@ -2062,7 +2057,6 @@ class ValidateFileExtensionTest(TestCase):
 
 
 class HomepageViewTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
 
@@ -2088,7 +2082,6 @@ class HomepageViewTest(TestCase):
 
 
 class AddMessageTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
 
@@ -2117,7 +2110,6 @@ class AddMessageTest(TestCase):
 
 
 class PerformRedirectTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
 
@@ -2134,7 +2126,6 @@ class PerformRedirectTest(TestCase):
 
 
 class LoginViewTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
         # Create a user in DynamoDB for testing
@@ -2203,7 +2194,6 @@ class LoginViewTest(TestCase):
 
 
 class CustomLogoutViewTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
 
@@ -2244,7 +2234,6 @@ class CustomLogoutViewTest(TestCase):
 
 
 class SignUpViewTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
         # User data for testing
