@@ -56,6 +56,7 @@ let pressureData = total_data.pressure.pressure_data_json;
 // Extract dates and steps count
 let stepsDates = stepsData.map(entry => entry.start);
 let stepsCount = stepsData.map(entry => entry.count);
+let step_goal = stepGoal;
 console.log("Step Count: ", stepsCount)
 
 // Extract dates and heart rate count
@@ -87,24 +88,51 @@ const sleepCtx = document.getElementById('sleepChart').getContext('2d');
 const oxygenCtx = document.getElementById('oxygenChart').getContext('2d');
 const bodyFitnessCtx = document.getElementById('bodyFitnessChart').getContext('2d');
 
-
+console.log("Step chart")
 console.log(document.getElementById('stepsChart'));
 
-// Create bar plot
+// Create step_goal_data to match the length of stepsDates
+const step_goal_data = Array(stepsDates.length).fill(stepGoal);
+
+console.log("Step goal is here")
+
+// Create bar plot for Steps Count with Step Goal line
 const stepsChart = new Chart(stepsCtx, {
     type: 'bar',
     data: {
         labels: stepsDates,
-        datasets: [{
-            label: 'Steps Count',
-            data: stepsCount,
-            backgroundColor: '#772014',
-            borderWidth: 1
-        }]
+        datasets: [
+            {
+                label: 'Steps Count',
+                data: stepsCount,
+                backgroundColor: '#772014',
+                borderWidth: 1,
+                order: 2 // Ensure bars appear behind the line
+            },
+            {
+                label: "Step Goal",
+                data: step_goal_data, // Horizontal line data
+                backgroundColor: 'transparent', // Transparent fill
+                borderColor: '#772019', // Line color
+                type: 'line', // Define as a line
+                tension: 0, // No curve
+                borderWidth: 2, // Line thickness
+                pointRadius: 0, // Remove points
+                order: 1 // Ensure line appears on top
+            }
+        ]
     },
     options: {
-        maintainAspectRatio:true,
+        maintainAspectRatio: true,
         responsive: true,
+        plugins: {
+            legend: {
+                display: true
+            },
+            tooltip: {
+                enabled: true
+            }
+        },
         scales: {
             x: {
                 title: {
@@ -118,7 +146,7 @@ const stepsChart = new Chart(stepsCtx, {
                 title: {
                     display: true,
                     text: 'Steps Count',
-                    color:'black'
+                    color: 'black'
                 },
                 ticks: {
                     color: 'black'
@@ -127,6 +155,7 @@ const stepsChart = new Chart(stepsCtx, {
         }
     }
 });
+
 const heartRateChart = new Chart(heartRateCtx, {
     type: 'line',
     data: {

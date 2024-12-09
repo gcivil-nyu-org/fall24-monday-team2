@@ -160,4 +160,7 @@ urlpatterns = [
         views.get_group_members,
         name="get_group_members",
     ),
+    path("fitness-goals/", views.fitness_goals_view, name="fitness_goals"),
+    path("fitness-goals/edit/", views.edit_goal, name="edit_goal"),
+    path("fitness-goals/delete/", views.delete_goal, name="delete_goal"),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -4,7 +4,7 @@ awscli
 black
 boto
 boto3
-botocore
+botocore==1.35.72
 coverage
 coveralls
 cachetools
