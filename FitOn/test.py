@@ -207,6 +207,10 @@ class UserCreationAndDeletionTests(TestCase):
         username = user_by_uid.get("username")
         self.assertEqual(username, self.user_data["username"])
 
+        uid = "abcdef"
+        user = get_user_by_uid(uid)
+        self.assertIsNone(user, "abcdef user is not none!")
+
     def test_get_user(self):
         # Step 1: Ensure the user exists by calling create_user
         create_result = create_user(**self.user_data)
