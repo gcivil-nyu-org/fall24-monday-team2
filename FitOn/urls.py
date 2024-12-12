@@ -148,13 +148,13 @@ urlpatterns = [
     path("chat/group/invite/", views.invite_to_group, name="invite_to_group"),
     path("chat/group/join/", views.join_group_chat, name="join_group_chat"),
     path("chat/group/leave/", views.leave_group_chat, name="leave_group_chat"),
-    path("chat/group/check/", views.get_pending_invitations),
+    # path("chat/group/check/", views.get_pending_invitations),
     path("chat/search_users/", views.search_users, name="search_users"),
-    path(
-        "pending_invitations/",
-        views.get_pending_invitations,
-        name="pending_invitations",
-    ),
+    # path(
+    #     "pending_invitations/",
+    #     views.get_pending_invitations,
+    #     name="pending_invitations",
+    # ),
     path("warn_action/", views.warn_action, name="warn_action"),
     path("dismiss_warning/", views.dismiss_warning, name="dismiss_warning"),
     path(

@@ -633,7 +633,7 @@
 
         function submitCreateGroup() {
             const roomName = document.getElementById("roomName").value.trim();
-            const selectedUsers = [...document.getElementById("selectedUsers").children].map(
+            const selectedUsers = [...document.getElementById("selectedUsersCreate").children].map(
                 (item) => item.dataset.userId
             );
 

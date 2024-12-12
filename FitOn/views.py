@@ -2758,31 +2758,31 @@ def leave_group_chat(request):
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
 
-def get_pending_invitations(request):
-    username = request.session.get("username")
+# def get_pending_invitations(request):
+#     username = request.session.get("username")
 
-    # Retrieve the user ID using the `get_user_by_username` function
-    user_id = get_user_by_username(username)["user_id"]
+#     # Retrieve the user ID using the `get_user_by_username` function
+#     user_id = get_user_by_username(username)["user_id"]
 
-    # Fetch pending invitations for the user from the database
-    pending_invitations = GroupChatMember.objects.filter(
-        uid=user_id, status=GroupChatMember.AgreementStatus.IN_PROGRESS
-    )
+#     # Fetch pending invitations for the user from the database
+#     pending_invitations = GroupChatMember.objects.filter(
+#         uid=user_id, status=GroupChatMember.AgreementStatus.IN_PROGRESS
+#     )
 
-    # Convert GroupChatMember objects to a list of dictionaries
-    invitation_data = []
-    for invitation in pending_invitations:
-        invitation_data.append(
-            {
-                "name": invitation.name,
-                "uid": invitation.uid,
-                "status": invitation.status,
-            }
-        )
+#     # Convert GroupChatMember objects to a list of dictionaries
+#     invitation_data = []
+#     for invitation in pending_invitations:
+#         invitation_data.append(
+#             {
+#                 "name": invitation.name,
+#                 "uid": invitation.uid,
+#                 "status": invitation.status,
+#             }
+#         )
 
-    # Return the serialized data as JSON response
-    dic = {"code": "200", "message": "ok", "data": invitation_data}
-    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+#     # Return the serialized data as JSON response
+#     dic = {"code": "200", "message": "ok", "data": invitation_data}
+#     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
 
 def search_users(request):
