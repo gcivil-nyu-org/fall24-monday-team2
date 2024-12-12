@@ -1358,19 +1358,19 @@ def save_chat_message(sender, message, room_name, sender_name, test_mode=False):
 
 
 def get_users_without_specific_username(exclude_username):
-    try:
-        response = users_table.scan(
-            FilterExpression=Attr("username").ne(exclude_username),
-            ProjectionExpression="user_id, username",  # Fetch only required fields
-        )
-        users = response.get("Items", [])
-        print(f"Users fetched for search: {users}")
-        return users
-    except Exception as e:
-        print(
-            f"Error querying DynamoDB for users excluding username '{exclude_username}': {e}"
-        )
-        return []
+    # try:
+    response = users_table.scan(
+        FilterExpression=Attr("username").ne(exclude_username),
+        ProjectionExpression="user_id, username",  # Fetch only required fields
+    )
+    users = response.get("Items", [])
+    print(f"Users fetched for search: {users}")
+    return users
+    # except Exception as e:
+    #     print(
+    #         f"Error querying DynamoDB for users excluding username '{exclude_username}': {e}"
+    #     )
+    #     return []
 
 
 def get_chat_history_from_db(room_id):
