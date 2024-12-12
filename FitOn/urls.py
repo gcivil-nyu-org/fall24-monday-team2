@@ -24,7 +24,7 @@ from django.contrib import admin
 from django.urls import path
 
 
-app_name = "chat"
+app_name = "FitOn"
 
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),
