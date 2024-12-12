@@ -2700,16 +2700,16 @@ def create_group_chat(request):
     (roomId.save)()
 
     for i in allUser:
-        try:
-            roomId = (GroupChatMember.objects.create)(
-                name=str(roomName),
-                uid=i,
-                status=GroupChatMember.AgreementStatus.COMPLETED,
-            )
-            (roomId.save)()
-        except Exception as e:
-            print(f"Error creating GroupWebSocket for {i}: {e}")
-            return JsonResponse({"code": "500", "message": "Database error"})
+        # try:
+        roomId = (GroupChatMember.objects.create)(
+            name=str(roomName),
+            uid=i,
+            status=GroupChatMember.AgreementStatus.COMPLETED,
+        )
+        (roomId.save)()
+        # except Exception as e:
+        #     print(f"Error creating GroupWebSocket for {i}: {e}")
+        #     return JsonResponse({"code": "500", "message": "Database error"})
     dic = {"code": "200", "message": "ok"}
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
@@ -2720,17 +2720,17 @@ def invite_to_group(request):
     roomName = payload.get("roomName")
 
     for i in allUser:
-        try:
-            roomId = (GroupChatMember.objects.create)(
-                name=str(roomName),
-                uid=i,
-                status=GroupChatMember.AgreementStatus.IN_PROGRESS,
-            )
-            (roomId.save)()
+        # try:
+        roomId = (GroupChatMember.objects.create)(
+            name=str(roomName),
+            uid=i,
+            status=GroupChatMember.AgreementStatus.IN_PROGRESS,
+        )
+        (roomId.save)()
 
-        except Exception as e:
-            print(f"Error creating GroupWebSocket for {i}: {e}")
-            return JsonResponse({"code": "500", "message": "Database error"})
+        # except Exception as e:
+        #     print(f"Error creating GroupWebSocket for {i}: {e}")
+        #     return JsonResponse({"code": "500", "message": "Database error"})
     dic = {"code": "200", "message": "ok"}
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
@@ -2862,25 +2862,25 @@ def get_group_members(request, group_name):
     member_data = []
 
     for member in group_members:
-        try:
-            # Fetch the User instance from DynamoDB using get_user_by_uid
-            user = get_user_by_uid(member.uid)  # Call the DynamoDB helper function
-            if user:
-                member_data.append(
-                    {
-                        "username": user[
-                            "username"
-                        ],  # Replace with the correct key from DynamoDB response
-                        "id": user[
-                            "user_id"
-                        ],  # Replace with the correct key for the unique identifier
-                    }
-                )
-            else:
-                print(f"User with UID {member.uid} not found in DynamoDB.")
-        except Exception as e:
-            print(f"Error fetching user with UID {member.uid}: {e}")
-            continue
+        # try:
+        # Fetch the User instance from DynamoDB using get_user_by_uid
+        user = get_user_by_uid(member.uid)  # Call the DynamoDB helper function
+        if user:
+            member_data.append(
+                {
+                    "username": user[
+                        "username"
+                    ],  # Replace with the correct key from DynamoDB response
+                    "id": user[
+                        "user_id"
+                    ],  # Replace with the correct key for the unique identifier
+                }
+            )
+        # else:
+        #     print(f"User with UID {member.uid} not found in DynamoDB.")
+        # except Exception as e:
+        #     print(f"Error fetching user with UID {member.uid}: {e}")
+        #     continue
 
     return JsonResponse({"members": member_data}, status=200)
 
@@ -2888,29 +2888,29 @@ def get_group_members(request, group_name):
 @csrf_exempt
 def add_users_to_group(request):
     if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            room_name = data.get("roomName")
-            user_ids = data.get("allUser", [])
+        # try:
+        data = json.loads(request.body)
+        room_name = data.get("roomName")
+        user_ids = data.get("allUser", [])
 
-            if not room_name or not user_ids:
-                return JsonResponse(
-                    {"code": "400", "message": "Room name and users are required."}
-                )
-
-            # Add users to the group chat
-            for user_id in user_ids:
-                GroupChatMember.objects.get_or_create(
-                    name=room_name,
-                    uid=user_id,
-                    defaults={"status": GroupChatMember.AgreementStatus.COMPLETED},
-                )
-
-            return JsonResponse({"code": "200", "message": "Users added successfully."})
-        except Exception as e:
+        if not room_name or not user_ids:
             return JsonResponse(
-                {"code": "500", "message": f"Error adding users: {str(e)}"}
+                {"code": "400", "message": "Room name and users are required."}
             )
+
+        # Add users to the group chat
+        for user_id in user_ids:
+            GroupChatMember.objects.get_or_create(
+                name=room_name,
+                uid=user_id,
+                defaults={"status": GroupChatMember.AgreementStatus.COMPLETED},
+            )
+
+        return JsonResponse({"code": "200", "message": "Users added successfully."})
+        # except Exception as e:
+        #     return JsonResponse(
+        #         {"code": "500", "message": f"Error adding users: {str(e)}"}
+        #     )
     return JsonResponse({"code": "405", "message": "Method not allowed."})
 
 
