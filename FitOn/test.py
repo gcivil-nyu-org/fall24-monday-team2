@@ -102,6 +102,10 @@ from .dynamodb import (
     # users_table,
     get_last_reset_request_time,
     update_reset_request_time,
+    save_chat_message,
+    get_users_without_specific_username,
+    get_chat_history_from_db,
+    get_users_with_chat_history,
 )
 from botocore.exceptions import ClientError, ValidationError
 import pytz
@@ -143,8 +147,16 @@ from .views import (
     fetch_metric_data,
     get_sleep_scores,
     heartrate_plot,
+    create_room_id,
+    create_group_chat,
 )
 from django.contrib.auth.hashers import check_password, make_password
+from channels.testing import WebsocketCommunicator
+from .models import GroupChatMember
+from FitOn.asgi import application
+from boto3.dynamodb.conditions import Key
+from django.contrib.sessions.middleware import SessionMiddleware
+from django.test import RequestFactory
 
 
 class UserCreationAndDeletionTests(TestCase):
@@ -4807,5 +4819,769 @@ class StaticFilesSettingsTests(TestCase):
         # )
 
 
-# KEEP THIS LINE IN THE END AND DO NOT DELETE
-asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+###########################################################
+#       TEST CASES FOR CHAT                  #
+###########################################################
+
+
+class ChatTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.client = Client()
+
+        # Set up connection to actual DynamoDB tables
+        cls.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+        cls.users_table = cls.dynamodb.Table("Users")
+        cls.chat_table = cls.dynamodb.Table("chat_table")
+
+    def setUp(self):
+        self.mock_user = {
+            "user_id": "mock_user_id",
+            "username": "mockuser",
+            "email": "mockuser@example.com",
+        }
+        self.friend_user = {
+            "user_id": "friend_user_id",
+            "username": "frienduser",
+            "email": "frienduser@example.com",
+        }
+
+        # Insert mock users into the Users table
+        self.__class__.users_table.put_item(Item=self.mock_user)
+        self.__class__.users_table.put_item(Item=self.friend_user)
+
+    def tearDown(self):
+        # Delete mock users from the Users table
+        self.__class__.users_table.delete_item(
+            Key={"user_id": self.mock_user["user_id"]}
+        )
+        self.__class__.users_table.delete_item(
+            Key={"user_id": self.friend_user["user_id"]}
+        )
+
+        # Clean up messages from the chat_table for test room
+        response = self.__class__.chat_table.scan()
+        for item in response.get("Items", []):
+            if (
+                item["room_name"].startswith("test_")
+                or item["room_name"] == "testroom123"
+            ):  # Include specific test room
+                self.__class__.chat_table.delete_item(
+                    Key={
+                        "room_name": item["room_name"],
+                        "timestamp": item["timestamp"],
+                    }
+                )
+        super().tearDown()
+
+    async def test_websocket_chat(self):
+        room_id = "testroom123"
+        ws_url = f"/ws/chat/{room_id}/"
+
+        # Create WebSocket communicator
+        communicator = WebsocketCommunicator(application, ws_url)
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        # Send a chat message
+        payload = {
+            "message": "Hello, friend!",
+            "sender": "mock_user_id",
+        }
+        await communicator.send_json_to(payload)
+
+        # Debug: Query chat_table for messages
+        self.__class__.chat_table.scan()
+
+    async def test_save_chat_message_rejects_long_messages(self):
+        sender = "mock_user_id"
+        long_message = "x" * 501
+        room_name = "testroom123"
+        sender_name = "mockuser"
+
+        with self.assertRaises(Exception) as context:  # Change to Exception
+            await save_chat_message(
+                sender, long_message, room_name, sender_name, test_mode=True
+            )
+
+        # Assert that the exception message matches the expected error
+        self.assertEqual(str(context.exception), "Message exceeds character limit")
+
+    async def test_message_length_validation(self):
+        room_id = "testroom123"
+        ws_url = f"/ws/chat/{room_id}/"
+
+        communicator = WebsocketCommunicator(application, ws_url)
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        long_message = "x" * 501  # Message exceeding 500 characters
+        payload = {
+            "message": long_message,
+            "sender": "mock_user_id",
+        }
+        await communicator.send_json_to(payload)
+
+        # Receive the error response
+        response = await communicator.receive_json_from()
+        self.assertIn("error", response)
+        self.assertEqual(response["error"], "Message exceeds character limit")
+
+        # Check that no long messages are saved in chat_table
+        response = self.__class__.chat_table.scan()
+        chat_items = [
+            item for item in response.get("Items", []) if item["room_name"] == room_id
+        ]
+        print(f"Messages in chat_table after test: {chat_items}")
+        self.assertEqual(len(chat_items), 0)  # Ensure no invalid messages are saved
+
+        await communicator.disconnect()
+
+    async def test_successful_connection(self):
+        room_id = "testroom123"
+        ws_url = f"/ws/chat/{room_id}/"
+
+        communicator = WebsocketCommunicator(application, ws_url)
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.disconnect()
+
+    async def test_disconnection(self):
+        room_id = "testroom123"
+        ws_url = f"/ws/chat/{room_id}/"
+
+        communicator = WebsocketCommunicator(application, ws_url)
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.disconnect()
+
+    async def test_send_valid_message(self):
+        room_id = "testroom123"
+        ws_url = f"/ws/chat/{room_id}/"
+
+        communicator = WebsocketCommunicator(application, ws_url)
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        payload = {
+            "message": "Hello, friend!",
+            "sender": "mock_user_id",
+        }
+        await communicator.send_json_to(payload)
+
+        # Verify group broadcast
+        response = await communicator.receive_json_from()
+        self.assertIn("message", response)
+        self.assertEqual(response["message"], "Hello, friend!")
+
+        # Verify message saved to the database
+        messages = self.__class__.chat_table.scan()["Items"]
+        self.assertTrue(any(msg["message"] == "Hello, friend!" for msg in messages))
+
+        await communicator.disconnect()
+
+    async def test_group_message(self):
+        room_id = "testroom123"
+        ws_url = f"/ws/chat/{room_id}/"
+
+        communicator1 = WebsocketCommunicator(application, ws_url)
+        communicator2 = WebsocketCommunicator(application, ws_url)
+
+        connected1, _ = await communicator1.connect()
+        connected2, _ = await communicator2.connect()
+        self.assertTrue(connected1)
+        self.assertTrue(connected2)
+
+        payload = {
+            "message": "Hello, group!",
+            "sender": "mock_user_id",
+        }
+        await communicator1.send_json_to(payload)
+
+        # Verify both communicators receive the message
+        response1 = await communicator1.receive_json_from()
+        response2 = await communicator2.receive_json_from()
+        self.assertEqual(response1["message"], "Hello, group!")
+        self.assertEqual(response2["message"], "Hello, group!")
+
+        await communicator1.disconnect()
+        await communicator2.disconnect()
+
+    async def test_save_chat_message_success(self):
+        sender = "mock_user_id"
+        message = "Hello, DynamoDB!"
+        room_name = "testroom123"
+        sender_name = "mockuser"
+
+        # Call the function to save a chat message
+        await save_chat_message(sender, message, room_name, sender_name, test_mode=True)
+
+        # Verify the message is saved in the database
+        response = self.__class__.chat_table.query(
+            KeyConditionExpression=Key("room_name").eq(f"test_{room_name}")
+        )
+        self.assertEqual(len(response["Items"]), 1)
+        self.assertEqual(response["Items"][0]["message"], message)
+
+    async def test_save_chat_message_long_message(self):
+        sender = "mock_user_id"
+        long_message = "x" * 501
+        room_name = "testroom123"
+        sender_name = "mockuser"
+
+        # Ensure that saving a long message raises an exception
+        with self.assertRaises(Exception) as context:
+            await save_chat_message(
+                sender, long_message, room_name, sender_name, test_mode=True
+            )
+        self.assertEqual(str(context.exception), "Message exceeds character limit")
+
+    def test_get_users_without_specific_username(self):
+        # Add a test user to exclude
+        self.__class__.users_table.put_item(
+            Item={"user_id": "exclude_user_id", "username": "excludeduser"}
+        )
+
+        # Fetch users excluding "excludeduser"
+        result = get_users_without_specific_username("excludeduser")
+        usernames = [user["username"] for user in result]
+
+        # Assert "excludeduser" is not in the result
+        self.assertNotIn("excludeduser", usernames)
+        # Assert "mockuser" is in the result
+        self.assertIn("mockuser", usernames)
+
+    def test_get_chat_history_from_db(self):
+        room_name = "testroom123"
+
+        # Add a test message to the chat table
+        self.__class__.chat_table.put_item(
+            Item={
+                "room_name": room_name,
+                "message": "Test Message",
+                "timestamp": 123456789,
+                "sender": "mock_user_id",
+                "sender_name": "mockuser",
+            }
+        )
+
+        # Fetch chat history
+        result = get_chat_history_from_db(room_name)
+
+        # Validate the response
+        self.assertEqual(len(result["Items"]), 1)
+        self.assertEqual(result["Items"][0]["message"], "Test Message")
+
+    def test_get_users_with_chat_history(self):
+        user_id = "mock_user_id"
+
+        # Add chat history for the user
+        self.__class__.chat_table.put_item(
+            Item={
+                "user_id": user_id,
+                "other_user_id": "friend_user_id",
+                "room_name": "testroom123",
+                "message": "Chat History Message",
+                "timestamp": 123456789,
+            }
+        )
+
+        # Fetch users with chat history
+        result = get_users_with_chat_history(user_id)
+
+        # Validate the response
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["user_id"], "friend_user_id")
+        self.assertEqual(result[0]["room_name"], "testroom123")
+
+    @patch("FitOn.views.get_user_by_username")
+    @patch("FitOn.views.get_users_without_specific_username")
+    @patch("FitOn.views.get_chat_history_from_db")
+    @patch("FitOn.views.create_room_id")
+    def test_private_chat_view(
+        self,
+        mock_create_room_id,
+        mock_get_chat_history_from_db,
+        mock_get_users_without_specific_username,
+        mock_get_user_by_username,
+    ):
+        # Simulate a logged-in user session
+        client = Client()
+        session = client.session
+        session["username"] = "mockuser"
+        session.save()
+
+        # Mock the logged-in user
+        mock_get_user_by_username.return_value = {
+            "user_id": "mock_user_id",
+            "username": "mockuser",
+        }
+
+        # Mock other users
+        mock_get_users_without_specific_username.return_value = [
+            {"user_id": "user_1", "username": "user1"},
+            {"user_id": "user_2", "username": "user2"},
+        ]
+
+        # Mock room IDs
+        mock_create_room_id.side_effect = lambda user1, user2: f"room_{user1}_{user2}"
+
+        # Mock chat history
+        mock_get_chat_history_from_db.side_effect = lambda room_id: {
+            "Items": (
+                [{"sender": "user_1", "timestamp": 123456789, "is_read": False}]
+                if "room_mock_user_id_user_1" in room_id
+                else []
+            )
+        }
+
+        # Call the private_chat view
+        response = client.get(reverse("chat"))
+
+        # Verify response
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "chat.html")
+
+        # Verify context data
+        context_data = response.context["data"]
+        self.assertEqual(len(context_data), 1)  # Only user1 has chat history
+        self.assertEqual(context_data[0]["username"], "user1")
+        self.assertEqual(context_data[0]["unread"], True)
+        self.assertEqual(context_data[0]["last_activity"], 123456789)
+
+        # Verify the logged-in user's data
+        self.assertEqual(
+            response.context["mine"],
+            {
+                "user_id": "mock_user_id",
+                "username": "mockuser",
+            },
+        )
+
+    def test_create_room_id(self):
+        # Define two user IDs
+        uid_a = "mock_user_id"
+        uid_b = "friend_user_id"
+
+        # Expected room ID (alphabetically sorted user IDs)
+        expected_room_id = "friend_user_idandmock_user_id"
+
+        # Call the function
+        room_id = create_room_id(uid_a, uid_b)
+
+        # Assert the room ID is as expected
+        self.assertEqual(room_id, expected_room_id)
+
+        # Swap the input order and ensure the result is consistent
+        room_id_swapped = create_room_id(uid_b, uid_a)
+        self.assertEqual(room_id_swapped, expected_room_id)
+
+    @patch("FitOn.views.get_chat_history_from_db")
+    @patch("FitOn.views.mark_messages_as_read")
+    def test_get_chat_history(
+        self, mock_mark_messages_as_read, mock_get_chat_history_from_db
+    ):
+        # Mock room ID
+        room_id = "testroom123"
+
+        # Mock response from DynamoDB
+        mock_chat_history = {
+            "Items": [
+                {
+                    "room_name": room_id,
+                    "message": "Hello, this is a test message.",
+                    "sender": "mock_user_id",
+                    "timestamp": 123456789,
+                    "is_read": False,
+                },
+                {
+                    "room_name": room_id,
+                    "message": "This is another test message.",
+                    "sender": "friend_user_id",
+                    "timestamp": 123456790,
+                    "is_read": True,
+                },
+            ]
+        }
+
+        # Set return value for mocked get_chat_history_from_db
+        mock_get_chat_history_from_db.return_value = mock_chat_history
+
+        # Simulate a request
+        client = Client()
+        url = reverse("get_chat_history", kwargs={"room_id": room_id})
+        response = client.get(url)
+
+        # Assert the response status is 200 (OK)
+        self.assertEqual(response.status_code, 200)
+
+        # Assert the response contains the mocked chat history
+        response_data = response.json()
+        self.assertEqual(
+            len(response_data["messages"]), len(mock_chat_history["Items"])
+        )
+        self.assertEqual(
+            response_data["messages"][0]["message"], "Hello, this is a test message."
+        )
+
+        # Assert mark_messages_as_read was called with the correct arguments
+        mock_mark_messages_as_read.assert_called_once_with(
+            response.wsgi_request, room_id
+        )
+
+        # Assert get_chat_history_from_db was called with the correct room_id
+        mock_get_chat_history_from_db.assert_called_once_with(room_id)
+
+    @patch("FitOn.views.get_user_by_username")
+    @patch("FitOn.models.GroupChatMember.objects.filter")
+    @patch("FitOn.models.GroupChatMember.objects.create")
+    def test_create_group_chat(
+        self, mock_group_chat_create, mock_group_chat_filter, mock_get_user_by_username
+    ):
+        # Mock session and user
+        session_username = "mockuser"
+        mock_user = {
+            "user_id": "mock_user_id",
+            "username": session_username,
+            "email": "mockuser@example.com",
+        }
+
+        # Mock `get_user_by_username` to return the mock user
+        mock_get_user_by_username.return_value = mock_user
+
+        # Mock `GroupChatMember.objects.filter` to simulate no existing group with the same name
+        mock_group_chat_filter.return_value.exists.return_value = False
+
+        # Simulate payload data for the group chat creation
+        payload = {
+            "roomName": "testroom123",
+            "allUser": ["friend_user_id", "other_user_id"],
+        }
+
+        # Use RequestFactory to simulate the request
+        factory = RequestFactory()
+        request = factory.post(
+            reverse("create_group_chat"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+        # Attach session middleware to the request
+        middleware = SessionMiddleware(lambda req: None)  # No-op middleware callable
+        middleware.process_request(request)
+        request.session["username"] = session_username  # Set the session username
+        request.session.save()
+
+        # Call the `create_group_chat` view
+        response = create_group_chat(request)
+
+        # Assert the response status and content
+        self.assertEqual(response.status_code, 200)
+        response_data = json.loads(response.content)
+        self.assertEqual(response_data["code"], "200")
+        self.assertEqual(response_data["message"], "ok")
+
+        # Verify that `get_user_by_username` was called correctly
+        mock_get_user_by_username.assert_called_once_with(session_username)
+
+        # Verify that `GroupChatMember.objects.filter` was called to check for existing group
+        mock_group_chat_filter.assert_called_once_with(name="testroom123")
+
+        # Verify that `GroupChatMember.objects.create` was called for the group and users
+        mock_group_chat_create.assert_any_call(
+            name="testroom123",
+            uid="mock_user_id",
+            status=GroupChatMember.AgreementStatus.COMPLETED,
+        )
+        mock_group_chat_create.assert_any_call(
+            name="testroom123",
+            uid="friend_user_id",
+            status=GroupChatMember.AgreementStatus.COMPLETED,
+        )
+        mock_group_chat_create.assert_any_call(
+            name="testroom123",
+            uid="other_user_id",
+            status=GroupChatMember.AgreementStatus.COMPLETED,
+        )
+        self.assertEqual(mock_group_chat_create.call_count, 3)
+
+    @patch("FitOn.models.GroupChatMember.objects.create")
+    def test_invite_to_group(self, mock_create_group_chat_member):
+        # Setup test data
+        room_name = "TestRoom"
+        invited_users = ["user_1", "user_2", "user_3"]
+
+        # Mock the creation of GroupChatMember
+        mock_create_group_chat_member.side_effect = lambda **kwargs: GroupChatMember(
+            **kwargs
+        )
+
+        # Prepare the request payload
+        payload = {
+            "allUser": invited_users,
+            "roomName": room_name,
+        }
+
+        # Simulate POST request to invite users to the group
+        client = Client()
+        response = client.post(
+            reverse("invite_to_group"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+        # Verify the response
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content.decode(), {"code": "200", "message": "ok"}
+        )
+
+        # Verify that the correct GroupChatMember objects were created
+        self.assertEqual(mock_create_group_chat_member.call_count, len(invited_users))
+        for call_arg in mock_create_group_chat_member.call_args_list:
+            kwargs = call_arg[1]  # Extract keyword arguments
+            self.assertEqual(kwargs["name"], room_name)
+            self.assertIn(kwargs["uid"], invited_users)
+            self.assertEqual(
+                kwargs["status"], GroupChatMember.AgreementStatus.IN_PROGRESS
+            )
+
+    @patch("FitOn.models.GroupChatMember.objects.get")
+    def test_join_group_chat(self, mock_get_group_chat_member):
+        # Setup test data
+        user_id = "test_user_id"
+        room_name = "TestRoom"
+        mock_group_chat_member = MagicMock(
+            uid=user_id,
+            name=room_name,
+            status=GroupChatMember.AgreementStatus.IN_PROGRESS,
+        )
+
+        # Mock the `get` method to return the group chat member
+        mock_get_group_chat_member.return_value = mock_group_chat_member
+
+        # Prepare the request payload
+        payload = {
+            "userId": user_id,
+            "room": room_name,
+        }
+
+        # Simulate POST request to join group chat
+        client = Client()
+        response = client.post(
+            reverse("join_group_chat"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+        # Verify the response
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content.decode(), {"code": "200", "message": "ok"}
+        )
+
+        # Verify that the group chat member's status was updated
+        self.assertEqual(
+            mock_group_chat_member.status, GroupChatMember.AgreementStatus.COMPLETED
+        )
+
+        # Verify that `save` was called
+        mock_group_chat_member.save.assert_called_once()
+
+    @patch("FitOn.models.GroupChatMember.objects.get")
+    @patch("FitOn.models.GroupChatMember.delete")
+    def test_leave_group_chat(
+        self, mock_group_chat_member_delete, mock_group_chat_member_get
+    ):
+        # Setup test data
+        user_id = "test_user_id"
+        room_name = "TestRoom"
+        mock_group_chat_member = MagicMock(uid=user_id, name=room_name)
+
+        # Mock the `get` method to return the group chat member
+        mock_group_chat_member_get.return_value = mock_group_chat_member
+
+        # Simulate POST request payload
+        payload = {
+            "userId": user_id,
+            "room": room_name,
+        }
+
+        # Simulate POST request to leave group chat
+        client = Client()
+        response = client.post(
+            reverse("leave_group_chat"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+
+        # Verify the response
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content.decode(), {"code": "200", "message": "ok"}
+        )
+
+        # Verify that the `get` method was called with the correct arguments
+        mock_group_chat_member_get.assert_called_once_with(uid=user_id, name=room_name)
+
+        # Verify that the `delete` method was called on the group chat member
+        mock_group_chat_member.delete.assert_called_once()
+
+    @patch("FitOn.views.get_users_by_username_query")
+    def test_search_users(self, mock_get_users_by_username_query):
+        # Mock the data returned by get_users_by_username_query
+        query = "testuser"
+        mock_matching_users = [
+            {"username": "testuser1", "user_id": "user1_id"},
+            {"username": "testuser2", "user_id": "user2_id"},
+        ]
+        mock_get_users_by_username_query.return_value = mock_matching_users
+
+        # Simulate a GET request with the search query
+        client = Client()
+        response = client.get(reverse("search_users"), {"query": query})
+
+        # Verify the response status
+        self.assertEqual(response.status_code, 200)
+
+        # Verify the JSON response content
+        expected_response = [
+            {"username": "testuser1", "user_id": "user1_id"},
+            {"username": "testuser2", "user_id": "user2_id"},
+        ]
+        self.assertJSONEqual(response.content.decode(), expected_response)
+
+        # Verify that the mock was called with the correct argument
+        mock_get_users_by_username_query.assert_called_once_with(query.lower())
+
+    @patch("FitOn.views.get_users_by_username_query")
+    def test_search_users_error(self, mock_get_users_by_username_query):
+        # Simulate an exception being raised by get_users_by_username_query
+        query = "testuser"
+        mock_get_users_by_username_query.side_effect = Exception("Test error")
+
+        # Simulate a GET request with the search query
+        client = Client()
+        response = client.get(reverse("search_users"), {"query": query})
+
+        # Verify the response status
+        self.assertEqual(response.status_code, 500)
+
+        # Verify the JSON response content
+        expected_error_response = {"error": "Error occurred while searching users."}
+        self.assertJSONEqual(response.content.decode(), expected_error_response)
+
+        # Verify that the mock was called with the correct argument
+        mock_get_users_by_username_query.assert_called_once_with(query.lower())
+
+    def test_mark_messages_as_read_unauthenticated(self):
+        client = Client()
+        room_id = "testroom123"
+
+        response = client.post(reverse("mark_messages_as_read", args=[room_id]))
+        self.assertEqual(response.status_code, 401)
+        self.assertJSONEqual(
+            response.content,
+            {"error": "User not authenticated"},
+        )
+
+    @patch("FitOn.views.get_user_by_uid")
+    def test_get_group_members(self, mock_get_user_by_uid):
+        # Setup test data
+        group_name = "test_group"
+        user_1 = "user1_uid"
+        user_2 = "user2_uid"
+
+        # Create group members in the database
+        GroupChatMember.objects.create(name=group_name, uid=user_1)
+        GroupChatMember.objects.create(name=group_name, uid=user_2)
+
+        # Mock DynamoDB responses
+        mock_get_user_by_uid.side_effect = lambda uid: {
+            user_1: {"username": "user1", "user_id": "user1_uid"},
+            user_2: {"username": "user2", "user_id": "user2_uid"},
+        }.get(uid)
+
+        # Simulate GET request
+        client = Client()
+        response = client.get(reverse("get_group_members", args=[group_name]))
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        expected_response = {
+            "members": [
+                {"username": "user1", "id": "user1_uid"},
+                {"username": "user2", "id": "user2_uid"},
+            ]
+        }
+        self.assertJSONEqual(response.content, expected_response)
+
+        # Verify that the helper function was called with the correct UIDs
+        mock_get_user_by_uid.assert_any_call(user_1)
+        mock_get_user_by_uid.assert_any_call(user_2)
+        self.assertEqual(mock_get_user_by_uid.call_count, 2)
+
+    @patch("FitOn.views.GroupChatMember.objects.get_or_create")
+    def test_add_users_to_group(self, mock_get_or_create):
+        # Prepare test data
+        room_name = "test_room"
+        user_ids = ["user1", "user2", "user3"]
+
+        # Mock the `get_or_create` call to return a mock group member and False (not created)
+        mock_get_or_create.return_value = (
+            GroupChatMember(name=room_name, uid="mock_uid"),
+            False,
+        )
+
+        # Simulate POST request
+        client = Client()
+        response = client.post(
+            reverse("add_users_to_group"),
+            data=json.dumps({"roomName": room_name, "allUser": user_ids}),
+            content_type="application/json",
+        )
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content, {"code": "200", "message": "Users added successfully."}
+        )
+
+        # Verify that `get_or_create` was called for each user
+        for user_id in user_ids:
+            mock_get_or_create.assert_any_call(
+                name=room_name,
+                uid=user_id,
+                defaults={"status": GroupChatMember.AgreementStatus.COMPLETED},
+            )
+        self.assertEqual(mock_get_or_create.call_count, len(user_ids))
+
+    def test_add_users_to_group_invalid_data(self):
+        # Simulate POST request with missing data
+        client = Client()
+        response = client.post(
+            reverse("add_users_to_group"),
+            data=json.dumps({"roomName": "", "allUser": []}),
+            content_type="application/json",
+        )
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content,
+            {"code": "400", "message": "Room name and users are required."},
+        )
+
+    def test_add_users_to_group_method_not_allowed(self):
+        # Simulate GET request
+        client = Client()
+        response = client.get(reverse("add_users_to_group"))
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content, {"code": "405", "message": "Method not allowed."}
+        )

@@ -12,7 +12,6 @@ from asgiref.sync import sync_to_async
 
 # from django.core.files.storage import default_storage
 from django.utils import timezone
-from django.http import JsonResponse
 from pytz import timezone
 from django.conf import settings
 import uuid
@@ -1337,9 +1336,12 @@ def get_section_stats(section_name):
 
 
 @sync_to_async
-def save_chat_message(sender, message, room_name, sender_name):
+def save_chat_message(sender, message, room_name, sender_name, test_mode=False):
     if len(message) > 500:
-        return JsonResponse({"error": "Message exceeds character limit"}, status=400)
+        raise Exception("Message exceeds character limit")
+
+    if test_mode:
+        room_name = f"test_{room_name}"
 
     timestamp = int(datetime.now(tz).timestamp())
 
@@ -1353,7 +1355,6 @@ def save_chat_message(sender, message, room_name, sender_name):
             "is_read": False,
         }
     )
-    return JsonResponse({"success": True})
 
 
 def get_users_without_specific_username(exclude_username):
@@ -1380,26 +1381,26 @@ def get_chat_history_from_db(room_id):
     return response
 
 
-def get_unread_messages_count(receiver_id):
-    """
-    Fetch unread messages for a specific user using the GSI.
-    """
-    try:
-        response = chat_table.query(
-            IndexName="receiver-is_read-index",  # GSI name
-            KeyConditionExpression=Key("receiver").eq(receiver_id)
-            & Key("is_read").eq(0),
-        )
-        # Count unread messages grouped by sender
-        unread_counts = {}
-        for item in response.get("Items", []):
-            sender = item["sender"]
-            unread_counts[sender] = unread_counts.get(sender, 0) + 1
+# def get_unread_messages_count(receiver_id):
+#     """
+#     Fetch unread messages for a specific user using the GSI.
+#     """
+#     try:
+#         response = chat_table.query(
+#             IndexName="receiver-is_read-index",  # GSI name
+#             KeyConditionExpression=Key("receiver").eq(receiver_id)
+#             & Key("is_read").eq(0),
+#         )
+#         # Count unread messages grouped by sender
+#         unread_counts = {}
+#         for item in response.get("Items", []):
+#             sender = item["sender"]
+#             unread_counts[sender] = unread_counts.get(sender, 0) + 1
 
-        return unread_counts
-    except Exception as e:
-        print(f"Error querying unread messages: {e}")
-        return {}
+#         return unread_counts
+#     except Exception as e:
+#         print(f"Error querying unread messages: {e}")
+#         return {}
 
 
 def get_users_with_chat_history(user_id):
@@ -1448,7 +1449,9 @@ def get_users_with_chat_history(user_id):
         # Fetch usernames for the users
         for user in sorted_users:
             user_details = get_user_by_uid(user["user_id"])
-            user["username"] = user_details.username if user_details else "Unknown"
+            user["username"] = (
+                user_details.get("username", "Unknown") if user_details else "Unknown"
+            )
 
         return sorted_users
 

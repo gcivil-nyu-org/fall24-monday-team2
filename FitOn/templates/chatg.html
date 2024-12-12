@@ -280,6 +280,7 @@
             overflow-wrap: break-word;
             margin: 2px 0;
             line-height: 1.2;
+            position: relative;
         }
 
         .my_message {
@@ -293,6 +294,12 @@
             background-color: #f5f5dc; /* Light yellow for friend */
             text-align: left;
         }
+        .my_message .timestamp-bubble {
+            left: -130px; /* Position the bubble to the left of the message */
+        }
+        .frnd_message .timestamp-bubble {
+            right: -130px; /* Position the bubble to the right of the message */
+        }
         .username {
             font-size: 12px;
             font-weight: bold;
@@ -301,18 +308,17 @@
         }
         .timestamp-bubble {
             position: absolute;
-            top: -30px; /* Place it higher above the message */
-            left: 50%; /* Center it */
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.8);
-            color: #fff;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.75em;
-            white-space: nowrap;
+            top: 50%; /* Vertically center the timestamp bubble */
+            transform: translateY(-50%); /* Correct centering adjustment */
+            background: rgba(0, 0, 0, 0.8); /* Black background */
+            color: #fff; /* White text */
+            padding: 4px 8px; /* Padding inside the bubble */
+            border-radius: 4px; /* Rounded corners */
+            font-size: 0.75em; /* Smaller font for the timestamp */
+            white-space: nowrap; /* Prevent wrapping of text */
             pointer-events: none; /* Prevent interaction */
-            box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
+            box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.2); /* Subtle shadow for better visibility */
+            z-index: 1000; /* Ensure it appears on top */
         }
         .search-results {
             list-style: none;
@@ -474,18 +480,18 @@
             <label for="roomName">Room Name:</label>
             <input type="text" id="roomName" placeholder="Enter a unique room name" required>
             <div style="margin-top: 20px;"></div>
-            <label for="searchUser">Search Users:</label>
+            <label for="searchUserCreate">Search Users:</label>
             <input
                 type="text"
-                id="searchUser"
+                id="searchUserCreate"
                 placeholder="Search for users..."
-                oninput="searchUsers()"
+                oninput="searchUsers('searchUserCreate', 'searchResultsCreate')"
             />
         
-            <ul id="searchResults" class="search-results"></ul>
+            <ul id="searchResultsCreate" class="search-results"></ul>
 
             <h4>Invite Users:</h4>
-            <ul id="selectedUsers" class="selected-users"></ul>
+            <ul id="selectedUsersCreate" class="selected-users"></ul>
 
             <button class="submit-btn" onclick="submitCreateGroup()">Submit</button>
         </div>
@@ -495,20 +501,20 @@
         <div class="popup">
             <button class="close-btn" onclick="closeInvitePopup()">×</button>
             <h2>Invite New Members</h2>
-            <label for="searchUser">Search Users:</label>
+            <label for="searchUserInvite">Search Users:</label>
             <input
                 type="text"
-                id="searchUser"
+                id="searchUserInvite"
                 placeholder="Search for users..."
-                oninput="searchUsers()"
+                oninput="searchUsers('searchUserInvite', 'searchResultsInvite')"
             />
-            <ul id="searchResults" class="search-results"></ul>
+            <ul id="searchResultsInvite" class="search-results"></ul>
         
             <h4>Current Users:</h4>
             <ul id="currentUsers" class="current-users"></ul>
             
             <h4>Invite New Users:</h4>
-            <ul id="selectedUsers" class="selected-users"></ul>
+            <ul id="selectedUsersInvite" class="selected-users"></ul>
 
             <button class="submit-btn" onclick="submitInviteMembers()">Submit</button>
         </div>
@@ -576,35 +582,53 @@
         }
 
         function showInvitePopup() {
-            const overlay = document.getElementById('overlayA');
-            const currentUsersList = document.getElementById('currentUsers');
-            const selectedUsersList = document.getElementById('selectedUsers');
+            const overlay = document.getElementById("overlayA");
+            const currentUsersList = document.getElementById("currentUsers");
+            const selectedUsersList = document.getElementById("selectedUsersInvite");
 
-            overlay.style.display = 'block';
-            currentUsersList.innerHTML = ''; // Clear the current list
-            selectedUsersList.innerHTML = ''; // Clear any previously selected users
+            console.log("Opening Invite Popup");
+            console.log("Overlay Element:", overlay);
+            console.log("Current Users List Element:", currentUsersList);
+            console.log("Selected Users List Element:", selectedUsersList);
 
-            fetch(`/chat/group/members/${window.current_room_name}/`) // API endpoint to fetch current members
-                .then(response => response.json())
-                .then(data => {
+            if (!overlay || !currentUsersList || !selectedUsersList) {
+                console.error("One or more required elements are missing:");
+                if (!overlay) console.error("Missing element: overlay");
+                if (!currentUsersList) console.error("Missing element: currentUsersList");
+                if (!selectedUsersList) console.error("Missing element: selectedUsersList");
+                return; // Exit function if any required element is not found
+            }
+
+            overlay.style.display = "block";
+            currentUsersList.innerHTML = ""; // Clear current users list
+            selectedUsersList.innerHTML = ""; // Clear selected users list
+
+            // Fetch and populate current users
+            fetch(`/chat/group/members/${window.current_room_name}/`)
+                .then((response) => response.json())
+                .then((data) => {
+                    console.log("Current Group Members Data:", data);
                     if (data.members && data.members.length > 0) {
-                        data.members.forEach(user => {
-                            const listItem = document.createElement('li');
-                            listItem.textContent = user.username; // Display the username
+                        data.members.forEach((user) => {
+                            const listItem = document.createElement("li");
+                            listItem.textContent = user.username;
                             currentUsersList.appendChild(listItem);
                         });
                     } else {
-                        const noUsers = document.createElement('li');
-                        noUsers.textContent = 'No current users in this group.';
+                        console.warn("No current users found in this group.");
+                        const noUsers = document.createElement("li");
+                        noUsers.textContent = "No current users in this group.";
                         currentUsersList.appendChild(noUsers);
                     }
                 })
-                .catch(error => console.error('Error fetching current users:', error));
+                .catch((error) => {
+                    console.error("Error fetching current users:", error);
+                });
         }
 
 
         function closeInvitePopup() {
-            document.getElementById('overlayA').style.display = 'none';
+            document.getElementById("overlayA").style.display = "none";
         }
 
         function submitCreateGroup() {
@@ -669,26 +693,32 @@
         }
 
         function submitInviteMembers() {
-            // Get the selected users from the list
-            const selectedUsers = [...document.querySelectorAll("#selectedUsers li")].map(
+            // Select all users from the invite list
+            const selectedUsers = [...document.querySelectorAll("#selectedUsersInvite li")].map(
                 (item) => item.dataset.userId
             );
 
-            console.log("Selected Users for Adding:", selectedUsers); // Debug log
+            // Debug: Log the selected users to check if they are being populated
+            console.log("Selected Users for Adding:", selectedUsers);
 
+            // Check if no users are selected and show an alert
             if (selectedUsers.length === 0) {
                 alert("No users selected to add.");
+                console.log("No users selected. Ensure that the 'data-user-id' attribute is properly set.");
                 return;
             }
 
-            // Prepare the data for submission
+            // Prepare the data payload
             const data = {
-                roomName: window.current_room_name, // Use the current room name
-                allUser: selectedUsers, // Send selected user IDs
+                roomName: window.current_room_name, // Assuming this global variable is set correctly
+                allUser: selectedUsers,
             };
 
-            // Submit the users to the backend
-            fetch(`/chat/group/add_users/`, { // Replace with the correct endpoint
+            // Debug: Log the payload to confirm it's correct
+            console.log("Payload being sent to the server:", data);
+
+            // Send the fetch request to the server
+            fetch(`/chat/group/add_users/`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -697,20 +727,24 @@
             })
                 .then((response) => response.json())
                 .then((json) => {
-                    console.log("Server Response for Adding Users:", json); // Debug log
+                    // Debug: Log the server response
+                    console.log("Server Response for Adding Users:", json);
+
+                    // Check the server response and act accordingly
                     if (json.code === "200") {
                         alert("Users added successfully!");
-                        closeInvitePopup();
-                        // Optionally, reload current users in the group
-                        showInvitePopup();
+                        closeInvitePopup(); // Close the popup
+                        showInvitePopup(); // Optionally reload the modal to refresh data
                     } else {
                         alert("Error adding users: " + json.message);
+                        console.error("Server Error Message:", json.message);
                     }
                 })
-                .catch((error) => console.error("Error adding users:", error));
+                .catch((error) => {
+                    // Debug: Log any errors that occur during the fetch
+                    console.error("Error adding users:", error);
+                });
         }
-
-
 
 
         function sendInvitePostRequest(data) {
@@ -755,48 +789,24 @@
 
             const chatBox = document.getElementById("chatBox");
 
-            // Add hover listeners to display timestamp
-            chatBox.addEventListener("mouseover", function (e) {
-                const messageDiv = e.target.closest(".message");
+            document.getElementById('chatBox').addEventListener('mouseover', function (e) {
+                const messageDiv = e.target.closest('.message');
                 if (!messageDiv) return;
 
-                const timestamp = messageDiv.getAttribute("data-timestamp");
-                if (!timestamp) return;
+                const timestamp = messageDiv.getAttribute('data-timestamp');
+                if (!timestamp || messageDiv.querySelector('.timestamp-bubble')) return;
 
-                // Avoid duplicate timestamp tooltips
-                if (document.querySelector(".timestamp-bubble")) return;
-
-                let parsedTimestamp;
-
-                // Attempt to parse the timestamp
-                if (!isNaN(timestamp)) {
-                    // Handle UNIX timestamp (in seconds)
-                    parsedTimestamp = new Date(Number(timestamp) * 1000);
-                } else {
-                    // Handle ISO 8601 or other date string formats
-                    parsedTimestamp = new Date(timestamp);
-                }
-
-                if (isNaN(parsedTimestamp)) {
-                    console.error("Invalid timestamp format:", timestamp);
-                    return;
-                }
-
-                // Create and display tooltip
-                const bubble = document.createElement("div");
-                bubble.classList.add("timestamp-bubble");
-                bubble.textContent = parsedTimestamp.toLocaleString(); // Display local time
-
-                // Append bubble to the message
+                const bubble = document.createElement('div');
+                bubble.classList.add('timestamp-bubble');
+                bubble.textContent = new Date(Number(timestamp) * 1000).toLocaleString();
                 messageDiv.appendChild(bubble);
-
             });
 
-            chatBox.addEventListener("mouseout", function (e) {
-                const messageDiv = e.target.closest(".message");
+            document.getElementById('chatBox').addEventListener('mouseout', function (e) {
+                const messageDiv = e.target.closest('.message');
                 if (!messageDiv) return;
 
-                const bubble = messageDiv.querySelector(".timestamp-bubble");
+                const bubble = messageDiv.querySelector('.timestamp-bubble');
                 if (bubble) bubble.remove();
             });
 
@@ -921,12 +931,14 @@
                     data.messages.forEach(message => {
                         const messageDiv = document.createElement('div');
                         const currentUserId = '{{ mine.user_id }}';
+
                         if (message.sender === currentUserId) {
                             messageDiv.classList.add('message', 'my_message');
                         } else {
                             messageDiv.classList.add('message', 'frnd_message');
                         }
 
+                        messageDiv.setAttribute('data-timestamp', message.timestamp);
                         messageDiv.innerHTML = `
                             <span class="username"><strong>${message.sender_name}</strong></span>
                             <p>${message.message}</p>`;
@@ -946,7 +958,6 @@
                 const messageDiv = document.createElement('div');
 
                 const currentUserId = '{{ mine.user_id }}';
-                console.log("Sender:", data.sender, "Current User:", currentUserId);
 
                 if (data.sender === currentUserId) {
                     messageDiv.classList.add('message', 'my_message');
@@ -954,6 +965,7 @@
                     messageDiv.classList.add('message', 'frnd_message');
                 }
 
+                messageDiv.setAttribute('data-timestamp', data.timestamp);
                 messageDiv.innerHTML = `
                     <span class="username"><strong>${data.sender_name}</strong></span>
                     <p>${data.message}</p>`;
@@ -976,6 +988,7 @@
             chatSocket.send(JSON.stringify({
                 'message': inputValue,
                 'sender': '{{ mine.user_id }}'
+                
             }));
 
             document.getElementById('input_message').value = ''; // Clear input field
@@ -1011,71 +1024,71 @@
 
             charCountElement.textContent = `Characters remaining: ${remaining}`;
         }
-        function searchUsers() {
-            const query = document.getElementById("searchUser").value.trim().toLowerCase();
-            const searchResults = document.getElementById("searchResults");
+ 
+        function searchUsers(inputId, resultsId) {
+            const query = document.getElementById(inputId).value.trim().toLowerCase();
+            const searchResults = document.getElementById(resultsId);
+
             searchResults.innerHTML = ""; // Clear previous results
 
-            if (query === "") {
-                return; // Exit if query is empty
-            }
+            if (query === "") return;
 
-            // Fetch matching users from the server
             fetch(`/chat/search_users/?query=${query}`)
-                .then((response) => {
-                    console.log(response); // Log the raw response
-                    return response.json();
-                })
+                .then((response) => response.json())
                 .then((users) => {
-                    console.log(users); // Log the parsed users
+                    console.log("Fetched Users:", users); // Debug log
                     users.forEach((user) => {
                         const listItem = document.createElement("li");
                         listItem.textContent = user.username;
-                        listItem.onclick = () => {
-                            console.log("Clicked on user:", user); // Debug log
-                            addUser(user);
-                        };
+                        listItem.style.cursor = "pointer"; // Indicate it's clickable
+                        listItem.onclick = () => addUser(user, resultsId); // Pass resultsId
                         searchResults.appendChild(listItem);
                     });
                 })
                 .catch((error) => console.error("Error fetching users:", error));
         }
 
-        function addUser(user) {
-            console.log("Adding user:", user); // Debug log
-            const selectedUsers = document.getElementById("selectedUsers");
-            const searchInput = document.getElementById("searchUser");
-            const searchResults = document.getElementById("searchResults");
+        function addUser(user, resultsId) {
+            // Check which popup is open and determine the correct selected users list
+            const selectedUsers =
+                resultsId === "searchResultsCreate"
+                    ? document.getElementById("selectedUsersCreate") // Create Group list
+                    : document.getElementById("selectedUsersInvite"); // Invite New Users list
 
-            // Check if the user is already added
+            const searchResults = document.getElementById(resultsId);
+
+            console.log("User to Add:", user); // Debug log
+
+            // Ensure the user isn't already added to the selected list
             if ([...selectedUsers.children].some((item) => item.dataset.userId === user.user_id)) {
                 console.log("User already added.");
                 return;
             }
 
-            // Add the user to the list
+            // Create a new list item for the selected user
             const listItem = document.createElement("li");
             listItem.textContent = user.username;
             listItem.dataset.userId = user.user_id;
+            listItem.style.backgroundColor = "#d4fdd4";
+            listItem.style.borderRadius = "5px";
+            listItem.style.padding = "5px 10px";
+            listItem.style.margin = "5px";
 
-            // Optional: Add a remove button
+            // Add a remove button for the user
             const removeButton = document.createElement("button");
             removeButton.textContent = "Remove";
             removeButton.style.marginLeft = "10px";
             removeButton.onclick = () => {
-                console.log("Removing user:", user.username); // Debug log
                 selectedUsers.removeChild(listItem);
             };
 
             listItem.appendChild(removeButton);
             selectedUsers.appendChild(listItem);
 
-            // Clear the search input and results
-            searchInput.value = ""; // Clear search input
-            searchResults.innerHTML = ""; // Clear search results
-
-            console.log("User added successfully.");
+            // Clear the search results after adding the user
+            searchResults.innerHTML = "";
         }
+
 
         function addGroupToChatList(roomName) {
             const chatListContainer = document.querySelector(".leftSide");
