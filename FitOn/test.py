@@ -151,6 +151,7 @@ from .views import (
     heartrate_plot,
     create_room_id,
     create_group_chat,
+    group_chat,
 )
 from django.contrib.auth.hashers import check_password, make_password
 from channels.testing import WebsocketCommunicator
@@ -5610,3 +5611,47 @@ class ChatTests(TestCase):
         self.assertJSONEqual(
             response.content, {"code": "405", "message": "Method not allowed."}
         )
+
+    @patch("FitOn.views.get_user_by_username")
+    @patch("FitOn.views.get_users_without_specific_username")
+    def test_group_chat_view(
+        self, mock_get_users_without_username, mock_get_user_by_username
+    ):
+        # Mock user and group chat members
+        session_username = "mockuser"
+        mock_user = {"user_id": "mock_user_id", "username": session_username}
+        mock_users = [{"user_id": "user1", "username": "user1"}]
+        group_chat_member_data = [
+            GroupChatMember(name="group1", uid="mock_user_id", status="COMPLETED"),
+            GroupChatMember(name="group2", uid="mock_user_id", status="COMPLETED"),
+        ]
+
+        # Mock the return values of the functions
+        mock_get_user_by_username.return_value = mock_user
+        mock_get_users_without_username.return_value = mock_users
+
+        with patch("FitOn.models.GroupChatMember.objects.filter") as mock_filter:
+            mock_filter.return_value = group_chat_member_data
+
+            # Set up RequestFactory
+            factory = RequestFactory()
+            request = factory.get(reverse("group_chat"))
+
+            # Add session data manually
+            middleware = SessionMiddleware(lambda req: None)
+            middleware.process_request(request)
+            request.session["username"] = session_username
+            request.session.save()
+
+            # Call the group_chat view with the request
+            response = group_chat(request)
+
+            # Assertions
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "group1")
+            self.assertContains(response, "group2")
+
+            # Verify mock calls
+            mock_get_user_by_username.assert_called_once_with(session_username)
+            mock_get_users_without_username.assert_called_once_with(session_username)
+            mock_filter.assert_called_once_with(uid="mock_user_id", status="COMPLETED")
