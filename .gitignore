@@ -4,6 +4,7 @@ FitOn/__pycache__/
 
 # Ignore virtual environment
 venv/*
+.venv/*
 
 # Ignore credentials file
 credentials.json

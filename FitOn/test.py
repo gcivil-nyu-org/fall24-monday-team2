@@ -94,6 +94,8 @@ from .dynamodb import (
     get_sleep_user_goals,
     get_weight_user_goals,
     get_step_user_goals,
+    get_activity_user_goals,
+    get_custom_user_goals,
     # make_fitness_trainer,
     # remove_fitness_trainer,
     # get_user_by_username,
@@ -218,6 +220,10 @@ class UserCreationAndDeletionTests(TestCase):
         self.assertEqual(uid, self.user_data["user_id"], "User IDs do not match.")
         username = user_by_uid.get("username")
         self.assertEqual(username, self.user_data["username"])
+
+        uid = "abcdef"
+        user = get_user_by_uid(uid)
+        self.assertIsNone(user, "abcdef user is not none!")
 
     def test_get_user(self):
         # Step 1: Ensure the user exists by calling create_user
@@ -1003,7 +1009,6 @@ class ForumTests(TestCase):
         self.assertNotIn("Item", response, "Thread should be deleted from DynamoDB.")
 
     def test_fetch_all_threads(self):
-
         self.test_threads = [
             {
                 "ThreadID": "1",
@@ -1916,7 +1921,6 @@ class EmailBackendTests(TestCase):
 
 
 class SignUpFormTest(TestCase):
-
     def test_passwords_match(self):
         form_data = {
             "username": "testuser",
@@ -1950,7 +1954,6 @@ class SignUpFormTest(TestCase):
 
 
 class SetNewPasswordFormTest(TestCase):
-
     def test_passwords_match(self):
         form_data = {
             "new_password": "newstrongpassword123",
@@ -1970,7 +1973,6 @@ class SetNewPasswordFormTest(TestCase):
 
 
 class ProfileFormTest(TestCase):
-
     def test_valid_form_with_country_code_and_phone(self):
         form_data = {
             "name": "John Doe",
@@ -2048,7 +2050,6 @@ class ProfileFormTest(TestCase):
 
 
 class ValidateFileExtensionTest(TestCase):
-
     def test_valid_pdf_file(self):
         valid_file = SimpleUploadedFile("document.pdf", b"file_content")
         try:
@@ -2074,7 +2075,6 @@ class ValidateFileExtensionTest(TestCase):
 
 
 class HomepageViewTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
 
@@ -2100,7 +2100,6 @@ class HomepageViewTest(TestCase):
 
 
 class AddMessageTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
 
@@ -2129,7 +2128,6 @@ class AddMessageTest(TestCase):
 
 
 class PerformRedirectTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
 
@@ -2146,7 +2144,6 @@ class PerformRedirectTest(TestCase):
 
 
 class LoginViewTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
         # Create a user in DynamoDB for testing
@@ -2215,7 +2212,6 @@ class LoginViewTest(TestCase):
 
 
 class CustomLogoutViewTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
 
@@ -2256,7 +2252,6 @@ class CustomLogoutViewTest(TestCase):
 
 
 class SignUpViewTest(TestCase):
-
     def setUp(self):
         self.factory = RequestFactory()
         # User data for testing
@@ -2509,8 +2504,29 @@ class FitnessGoalsViewTest(TestCase):
             "goal_name": "",
             "goal_value": "80",
         }
+
+        data3 = {
+            "goal_type": "sleep",
+            "goal_name": "",
+            "goal_value": "8",
+        }
+
+        data4 = {
+            "goal_type": "activity",
+            "goal_name": "Jogging",
+            "goal_value": "13500",
+        }
+
+        data5 = {
+            "goal_type": "custom",
+            "goal_name": "Outdoor Walk",
+            "goal_value": "16000",
+        }
         response = self.client.post("/fitness-goals/", data)
         response = self.client.post("/fitness-goals/", data2)
+        response = self.client.post("/fitness-goals/", data3)
+        response = self.client.post("/fitness-goals/", data4)
+        response = self.client.post("/fitness-goals/", data5)
 
         # Assert redirect
         self.assertEqual(response.status_code, 302, "Expected redirect status code.")
@@ -2523,6 +2539,15 @@ class FitnessGoalsViewTest(TestCase):
 
         weight = get_weight_user_goals(self.user_id)
         self.assertEqual(weight, "80", f"Expected goal value '80', got {weight}.")
+
+        sleep = get_sleep_user_goals(self.user_id)
+        self.assertEqual(sleep, "8", f"Expected sleep goal value '8', got {sleep}.")
+
+        activity = get_activity_user_goals(self.user_id)
+        self.assertIsNotNone(activity, "Activity goal not found")
+
+        custom = get_custom_user_goals(self.user_id)
+        self.assertIsNotNone(custom, "Custom goal not found")
 
     def test_prevent_duplicate_goal_type(self):
         # Insert an initial goal

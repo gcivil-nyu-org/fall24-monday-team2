@@ -56,6 +56,8 @@ from .dynamodb import (
     get_step_user_goals,
     get_sleep_user_goals,
     get_weight_user_goals,
+    get_custom_user_goals,
+    get_activity_user_goals,
     get_user_by_uid,
 )
 from .rds import rds_main, fetch_user_data
@@ -914,8 +916,7 @@ def cancel_data_request(request):
         return JsonResponse({"error": "Invalid method"}, status=405)
 
 
-def view_user_data(request):
-    print("view_user_data is being called")
+def view_user_data(request, user_id):
     try:
         # Retrieve the data from the session
         user_data = request.session.get("user_data")
@@ -971,13 +972,14 @@ def serialize_data(data):
 async def async_view_user_data(request, user_id):
     try:
         # Fetch the user data asynchronously
-        user = await sync_to_async(get_user)(user_id)
+        user = get_user(user_id)
         user_email = user.get("email")
         user_data = await fetch_user_data(user_email)
         # Serialize user data
         serialized_data = serialize_data(user_data)
         # Store the data in the session
-        await sync_to_async(store_session_data)(request, serialized_data)
+        # await sync_to_async(store_session_data)(request, serialized_data)
+        store_session_data(request, serialized_data)
         # Send serialized user_data in JSON response
         return JsonResponse({"success": True, "user_data": serialized_data})
     except Exception as e:
@@ -1011,7 +1013,6 @@ def thread_detail_view(request, thread_id):
 
     if request.method == "POST":
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
-
             # Parse the AJAX request data
             data = json.loads(request.body.decode("utf-8"))
             action = data.get("action")
@@ -1189,13 +1190,11 @@ def new_thread_view(request):
 
 
 def delete_post_view(request):
-
     if (
         request.method == "POST"
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
     ):
         try:
-
             data = json.loads(request.body.decode("utf-8"))
             post_id = data.get("post_id")
             thread_id = data.get("thread_id")  # Make sure you're getting thread_id too
@@ -1220,7 +1219,6 @@ def delete_post_view(request):
 
 
 def forum_view(request):
-
     user_id = request.session.get("username")
     user = get_user_by_username(user_id)
     if not user:
@@ -1519,6 +1517,8 @@ def sleep_plot(data):
 
     # Pass the plot path to the template
     context = {"sleep_data_json": sleep_data}
+    print("----------")
+    print(sleep_data)
     return context
 
 
@@ -1623,7 +1623,6 @@ def pressure_plot(data):
 
 
 async def fetch_metric_data(service, metric, total_data, duration, frequency, email):
-
     end_time = dt.datetime.now() - dt.timedelta(minutes=1)
 
     if duration == "day":
@@ -1837,6 +1836,8 @@ async def fetch_all_metric_data(request, duration, frequency):
             )
 
         await asyncio.gather(*tasks)
+        print("----- Total Data -----")
+        print(total_data)
         total_data = await get_sleep_scores(request, total_data)
         total_data = await format_bod_fitness_data(total_data)
 
@@ -1874,12 +1875,16 @@ async def get_metric_data(request):
         steps = get_step_user_goals(user_id)
         weight = get_weight_user_goals(user_id)
         sleep = get_sleep_user_goals(user_id)
+        activity = get_activity_user_goals(user_id)
+        custom = get_custom_user_goals(user_id)
 
         context = {
             "data": total_data,
             "step_goal": steps,
             "weight_goal": weight,
             "sleep_goal": sleep,
+            "activity_goal": activity,
+            "custom_goal": custom,
         }
         # print("Inside get metric:", context)
         return await sync_to_async(render)(
@@ -1934,6 +1939,7 @@ def health_data_view(request):
     step_goal = get_step_user_goals(user_id)
     weight_goal = get_weight_user_goals(user_id)
     sleep_goal = get_sleep_user_goals(user_id)
+    custom_goal = get_custom_user_goals(user_id)
     return render(
         request,
         "display_metric_data.html",
@@ -1942,6 +1948,7 @@ def health_data_view(request):
             "step_goal": step_goal,
             "weight_goal": weight_goal,
             "sleep_goal": sleep_goal,
+            "custom_goal": custom_goal,
         },
     )
     # return render(
