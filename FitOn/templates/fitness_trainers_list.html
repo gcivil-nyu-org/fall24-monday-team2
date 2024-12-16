@@ -39,11 +39,10 @@
                             <td>
                                 <div class="button-container">
                                     <button class="deactivate-button action-button" data-username="{{ trainer.username }}" data-trainerid="{{ trainer.user_id }}" data-action="revoke">Revoke</button>
-                                    <button class="submit-button">Chat</button>
                                     {% if trainer.existing_plan %}
-                                        <a href="{% url 'view_custom_plan' trainer.user_id %}" class="submit-button">View Custom Plan</a>
+                                        <a href="{% url 'view_custom_plan' trainer.user_id %}" class="submit-button">View Plan</a>
                                     {% else %}
-                                        <button class="submit-button action-button" data-username="{{ trainer.username }}" data-trainerid="{{ trainer.user_id }}" data-action="request_plan">Request Custom Plan</button>
+                                        <button class="submit-button action-button" data-username="{{ trainer.username }}" data-trainerid="{{ trainer.user_id }}" data-action="request_plan">Request Plan</button>
                                     {% endif %}
                                 </div>
                             </td>

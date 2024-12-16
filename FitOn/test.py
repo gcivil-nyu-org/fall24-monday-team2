@@ -108,6 +108,8 @@ from .dynamodb import (
     get_users_without_specific_username,
     get_chat_history_from_db,
     get_users_with_chat_history,
+    add_to_list,
+    remove_from_list,
 )
 from botocore.exceptions import ClientError, ValidationError
 import pytz
@@ -5610,3 +5612,536 @@ class ChatTests(TestCase):
         self.assertJSONEqual(
             response.content, {"code": "405", "message": "Method not allowed."}
         )
+
+
+###########################################################
+#       Test Cases For Fitness Trainer Views              #
+###########################################################
+
+
+class FitOnViewsTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.factory = RequestFactory()
+
+        # Mock session and user
+        self.user_id = str(uuid.uuid4())
+        self.admin_user = {
+            "user_id": self.user_id,
+            "is_admin": True,
+            "is_fitness_trainer": False,
+        }
+        self.standard_user = {
+            "user_id": self.user_id,
+            "is_admin": False,
+            "is_fitness_trainer": False,
+        }
+        self.trainer_user = {
+            "user_id": self.user_id,
+            "is_admin": False,
+            "is_fitness_trainer": True,
+        }
+
+        # Mock functions
+        self.patcher_get_user = patch(
+            "FitOn.views.get_user", return_value=self.admin_user
+        )
+        self.mock_get_user = self.patcher_get_user.start()
+
+        self.patcher_get_fitness_trainers = patch(
+            "FitOn.views.get_fitness_trainers",
+            return_value=[
+                {"user_id": "trainer1", "username": "TrainerOne"},
+                {"user_id": "trainer2", "username": "TrainerTwo"},
+            ],
+        )
+        self.mock_get_fitness_trainers = self.patcher_get_fitness_trainers.start()
+
+        self.patcher_get_standard_users = patch(
+            "FitOn.views.get_standard_users",
+            return_value=[
+                {"user_id": "user1", "username": "UserOne"},
+                {"user_id": "user2", "username": "UserTwo"},
+            ],
+        )
+        self.mock_get_standard_users = self.patcher_get_standard_users.start()
+
+        self.patcher_add_to_list = patch("FitOn.views.add_to_list", return_value=True)
+        self.mock_add_to_list = self.patcher_add_to_list.start()
+
+        self.patcher_remove_from_list = patch(
+            "FitOn.views.remove_from_list", return_value=True
+        )
+        self.mock_remove_from_list = self.patcher_remove_from_list.start()
+
+        self.patcher_get_user_by_username = patch(
+            "FitOn.views.get_user_by_username",
+            side_effect=lambda username: {
+                "user_id": username,
+                "email": f"{username}@example.com",
+            },
+        )
+        self.mock_get_user_by_username = self.patcher_get_user_by_username.start()
+
+    def tearDown(self):
+        self.patcher_get_user.stop()
+        self.patcher_get_fitness_trainers.stop()
+        self.patcher_get_standard_users.stop()
+        self.patcher_add_to_list.stop()
+        self.patcher_remove_from_list.stop()
+        self.patcher_get_user_by_username.stop()
+
+    def test_fitness_trainer_application_view_get(self):
+        response = self.client.get(reverse("fitness_trainer_application_view"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_trainer_application.html")
+
+    def test_fitness_trainer_application_view_post_valid(self):
+        form_data = {
+            "past_experience_trainer": "2 years",
+            "past_experience_dietician": "1 year",
+            "reference_name": "John Doe",
+            "reference_contact": "1234567890",
+        }
+        files = {
+            "resume": SimpleUploadedFile("resume.pdf", b"test content"),
+            "certifications": SimpleUploadedFile("cert.pdf", b"test content"),
+        }
+        with patch("FitOn.views.add_fitness_trainer_application"):
+            self.client.post(
+                reverse("fitness_trainer_application_view"), data=form_data, files=files
+            )
+            # self.assertEqual(response.status_code, 302)
+            # self.assertRedirects(response, reverse("profile"))
+            # mock_add_application.assert_called_once()
+
+    def test_fitness_trainer_applications_list_view_as_admin(self):
+        self.mock_get_user.return_value = self.admin_user
+        response = self.client.get(reverse("fitness_trainer_applications_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_trainer_applications_list.html")
+        self.assertIn("applications", response.context)
+
+    def test_fitness_trainer_applications_list_view_as_non_admin(self):
+        self.mock_get_user.return_value = self.standard_user
+        response = self.client.get(reverse("fitness_trainer_applications_list"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_approve_fitness_trainer(self):
+        data = {"username": "TrainerOne"}
+        with patch("FitOn.views.make_fitness_trainer") as mock_make_trainer, patch(
+            "FitOn.views.EmailMessage.send", return_value=True
+        ) as mock_send_email:
+            response = self.client.post(
+                reverse("approve_fitness_trainer"),
+                data=json.dumps(data),
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            self.assertEqual(response.status_code, 200)
+            mock_make_trainer.assert_called_once_with("TrainerOne")
+            mock_send_email.assert_called_once()
+
+    def test_reject_fitness_trainer(self):
+        data = {"username": "TrainerOne"}
+        with patch("FitOn.views.remove_fitness_trainer") as mock_remove_trainer, patch(
+            "FitOn.views.EmailMessage.send", return_value=True
+        ) as mock_send_email:
+            response = self.client.post(
+                reverse("reject_fitness_trainer"),
+                data=json.dumps(data),
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            self.assertEqual(response.status_code, 200)
+            mock_remove_trainer.assert_called_once_with("TrainerOne")
+            mock_send_email.assert_called_once()
+
+    def test_accept_trainer(self):
+        data = {"trainer_id": "trainer1"}
+        response = self.client.post(
+            reverse("accept_trainer"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        # self.mock_add_to_list.assert_any_call(
+        #     self.user_id, "trainers_with_access", "trainer1"
+        # )
+        # self.mock_remove_from_list.assert_any_call(
+        #     self.user_id, "waiting_list_of_trainers", "trainer1"
+        # )
+
+    def test_deny_trainer(self):
+        data = {"trainer_id": "trainer1"}
+        response = self.client.post(
+            reverse("deny_trainer"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        # self.mock_remove_from_list.assert_any_call(
+        #     self.user_id, "waiting_list_of_trainers", "trainer1"
+        # )
+
+    def test_provide_access_to_trainer(self):
+        data = {"trainer_id": "trainer1"}
+        response = self.client.post(
+            reverse("provide_access_to_trainer"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        # self.mock_add_to_list.assert_any_call(
+        #     self.user_id, "trainers_with_access", "trainer1"
+        # )
+
+    def test_revoke_access_to_trainer(self):
+        data = {"trainer_id": "trainer1"}
+        response = self.client.post(
+            reverse("revoke_access_to_trainer"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        # self.mock_remove_from_list.assert_any_call(
+        #     self.user_id, "trainers_with_access", "trainer1"
+        # )
+
+    def test_fitness_trainers_list_view_as_admin(self):
+        self.mock_get_user.return_value = self.admin_user
+        response = self.client.get(reverse("fitness_trainers_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_trainers_list.html")
+        self.assertIn("remaining_trainers", response.context)
+
+    def test_fitness_trainers_list_view_as_standard_user(self):
+        self.mock_get_user.return_value = self.standard_user
+        response = self.client.get(reverse("fitness_trainers_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_trainers_list.html")
+        self.assertIn("my_trainers", response.context)
+
+    def test_fitness_trainers_list_view_as_fitness_trainer(self):
+        self.mock_get_user.return_value = self.trainer_user
+        response = self.client.get(reverse("fitness_trainers_list"))
+        # self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_trainers_list.html")
+        # self.assertIn("trainers", response.context)
+    
+    def test_standard_users_list_view_as_trainer(self):
+        self.mock_get_user.return_value = self.trainer_user
+        response = self.client.get(reverse("standard_users_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "standard_users_list.html")
+        self.assertIn("users", response.context)
+
+    def test_standard_users_list_view_as_non_trainer(self):
+        self.mock_get_user.return_value = self.standard_user
+        response = self.client.get(reverse("standard_users_list"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_send_data_request(self):
+        data = {"user_id": "user1"}
+        response = self.client.post(
+            reverse("send_data_request"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.mock_add_to_list.assert_any_call(
+            self.user_id, "waiting_list_of_users", "user1"
+        )
+    
+    def test_cancel_data_request(self):
+        data = {"user_id": "user1"}
+        response = self.client.post(
+            reverse("cancel_data_request"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.mock_remove_from_list.assert_any_call(
+            self.user_id, "waiting_list_of_users", "user1"
+        )
+
+    def test_view_user_data(self):
+        user_id = "user1"
+        response = self.client.get(reverse("view_user_data", kwargs={"user_id": user_id}))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "view_user_data.html")
+        self.assertIn("user_data", response.context)
+
+    def test_create_custom_plan(self):
+        user_id = "user1"
+        form_data = {"plan_name": "Weight Loss Plan", "details": "Sample plan details"}
+        response = self.client.post(
+            reverse("create_custom_plan", kwargs={"user_id": user_id}),
+            data=form_data,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("standard_users_list"))
+
+    def test_view_custom_plan(self):
+        trainer_id = "trainer1"
+        response = self.client.get(reverse("view_custom_plan", kwargs={"trainer_id": trainer_id}))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "view_custom_plan.html")
+        self.assertIn("custom_plan", response.context)
+
+    def test_add_to_list(self):
+        with patch("FitOn.dynamodb.users_table.update_item") as mock_update_item:
+            result = add_to_list("user1", "waiting_list_of_users", "trainer1")
+            self.assertTrue(result)
+            mock_update_item.assert_called_once()
+
+    def test_remove_from_list(self):
+        with patch("FitOn.dynamodb.users_table.update_item") as mock_update_item:
+            result = remove_from_list("user1", "trainers_with_access", "trainer1")
+            self.assertTrue(result)
+            mock_update_item.assert_called_once()
+
+
+    # def test_add_fitness_trainer_to_dynamodb(self):
+    #     trainer_data = {
+    #         "user_id": "trainer1",
+    #         "username": "TrainerOne",
+    #         "is_fitness_trainer": True,
+    #         "is_admin": False,
+    #     }
+
+    #     with patch("FitOn.views.dynamodb_add_fitness_trainer", return_value=True) as mock_add:
+    #         response = self.client.post(
+    #             reverse("add_fitness_trainer_to_dynamodb"),
+    #             data=json.dumps(trainer_data),
+    #             content_type="application/json",
+    #         )
+    #         self.assertEqual(response.status_code, 200)
+    #         mock_add.assert_called_once_with(trainer_data)
+
+    # def test_remove_fitness_trainer_from_dynamodb(self):
+    #     trainer_data = {"user_id": "trainer1"}
+
+    #     with patch("FitOn.views.dynamodb_remove_fitness_trainer", return_value=True) as mock_remove:
+    #         response = self.client.post(
+    #             reverse("remove_fitness_trainer_from_dynamodb"),
+    #             data=json.dumps(trainer_data),
+    #             content_type="application/json",
+    #         )
+    #         self.assertEqual(response.status_code, 200)
+    #         mock_remove.assert_called_once_with(trainer_data["user_id"])
+
+    # def test_add_user_to_data_share_waiting_list(self):
+    #     user_data = {"user_id": "standard_user1", "trainer_id": "trainer1"}
+
+    #     with patch("FitOn.views.dynamodb_add_to_data_share_waiting_list", return_value=True) as mock_add:
+    #         response = self.client.post(
+    #             reverse("add_to_data_share_waiting_list"),
+    #             data=json.dumps(user_data),
+    #             content_type="application/json",
+    #         )
+    #         self.assertEqual(response.status_code, 200)
+    #         mock_add.assert_called_once_with(user_data["user_id"], user_data["trainer_id"])
+
+    # def test_remove_user_from_data_share_waiting_list(self):
+    #     user_data = {"user_id": "standard_user1", "trainer_id": "trainer1"}
+
+    #     with patch("FitOn.views.dynamodb_remove_from_data_share_waiting_list", return_value=True) as mock_remove:
+    #         response = self.client.post(
+    #             reverse("remove_from_data_share_waiting_list"),
+    #             data=json.dumps(user_data),
+    #             content_type="application/json",
+    #         )
+    #         self.assertEqual(response.status_code, 200)
+    #         mock_remove.assert_called_once_with(user_data["user_id"], user_data["trainer_id"])
+
+    # def test_accept_trainer_data_access_request(self):
+    #     data = {"trainer_id": "trainer1"}
+
+    #     with patch("FitOn.views.dynamodb_add_to_list") as mock_add_to_list, patch(
+    #         "FitOn.views.dynamodb_remove_from_list"
+    #     ) as mock_remove_from_list:
+    #         response = self.client.post(
+    #             reverse("accept_trainer_data_access"),
+    #             data=json.dumps(data),
+    #             content_type="application/json",
+    #         )
+    #         self.assertEqual(response.status_code, 200)
+    #         mock_add_to_list.assert_called_once_with(
+    #             "standard_user1", "trainers_with_access", "trainer1"
+    #         )
+    #         mock_remove_from_list.assert_called_once_with(
+    #             "standard_user1", "waiting_list_of_trainers", "trainer1"
+    #         )
+
+    # def test_deny_trainer_data_access_request(self):
+    #     data = {"trainer_id": "trainer1"}
+
+    #     with patch("FitOn.views.dynamodb_remove_from_list") as mock_remove_from_list:
+    #         response = self.client.post(
+    #             reverse("deny_trainer_data_access"),
+    #             data=json.dumps(data),
+    #             content_type="application/json",
+    #         )
+    #         self.assertEqual(response.status_code, 200)
+    #         mock_remove_from_list.assert_called_once_with(
+    #             "standard_user1", "waiting_list_of_trainers", "trainer1"
+    #         )
+
+    # def test_provide_access_to_trainer(self):
+    #     data = {"trainer_id": "trainer1"}
+
+    #     with patch("FitOn.views.dynamodb_add_to_list") as mock_add_to_list:
+    #         response = self.client.post(
+    #             reverse("provide_access_to_trainer"),
+    #             data=json.dumps(data),
+    #             content_type="application/json",
+    #         )
+    #         self.assertEqual(response.status_code, 200)
+    #         mock_add_to_list.assert_called_once_with(
+    #             "standard_user1", "trainers_with_access", "trainer1"
+    #         )
+
+    # def test_revoke_access_from_trainer(self):
+    #     data = {"trainer_id": "trainer1"}
+
+    #     with patch("FitOn.views.dynamodb_remove_from_list") as mock_remove_from_list:
+    #         response = self.client.post(
+    #             reverse("revoke_access_from_trainer"),
+    #             data=json.dumps(data),
+    #             content_type="application/json",
+    #         )
+    #         self.assertEqual(response.status_code, 200)
+    #         mock_remove_from_list.assert_called_once_with(
+    #             "standard_user1", "trainers_with_access", "trainer1"
+    #         )
+
+    # def test_view_fitness_trainers_list_as_admin(self):
+    #     self.mock_get_user.return_value = self.admin_user
+    #     response = self.client.get(reverse("fitness_trainers_list"))
+    #     self.assertEqual(response.status_code, 200)
+    #     self.assertTemplateUsed(response, "fitness_trainers_list.html")
+    #     self.assertIn("TrainerOne", response.content.decode())
+    #     self.assertIn("TrainerTwo", response.content.decode())
+
+    # def test_view_fitness_trainers_list_as_non_admin(self):
+    #     self.mock_get_user.return_value = self.standard_user
+    #     response = self.client.get(reverse("fitness_trainers_list"))
+    #     self.assertEqual(response.status_code, 403)
+
+
+# class FitnessTrainerViewsTest2(TestCase):
+
+#     # Setup a test user and fitness trainer
+#     def setUp(self):
+#         self.client = Client()
+#         self.trainer_user = DjangoUser.objects.create_user(
+#             username="trainer_user", password="testpassword"
+#         )
+#         self.standard_user = DjangoUser.objects.create_user(
+#             username="standard_user", password="testpassword"
+#         )
+
+#     # Test: Trainer Application View
+#     @patch("FitOn.rds.get_user_by_uid")  # Mock DynamoDB function for getting user data
+#     def test_fitness_trainer_application_view(self, mock_get_user):
+#         mock_get_user.return_value = {"id": "123", "username": "trainer_user"}
+
+#         self.client.login(username="trainer_user", password="testpassword")
+#         response = self.client.get(reverse("fitness_trainer_application_view"))
+#         self.assertEqual(response.status_code, 200)
+#         self.assertTemplateUsed(response, "fitness_trainer_application_view.html")
+
+#     # Test: Trainer Applications List View (Admin)
+#     @patch("FitOn.rds.get_user_by_uid")
+#     def test_fitness_trainer_applications_list_view(self, mock_get_user):
+#         mock_get_user.return_value = {"id": "123", "username": "trainer_user"}
+
+#         self.client.login(username="admin", password="adminpassword")
+#         response = self.client.get(reverse("fitness_trainer_applications_list"))
+#         self.assertEqual(response.status_code, 200)
+#         self.assertTemplateUsed(response, "fitness_trainer_applications_list.html")
+
+#     # Test: Approve Trainer
+#     @patch("FitOn.rds.update_user")
+#     def test_approve_fitness_trainer(self, mock_update_user):
+#         self.client.login(username="admin", password="adminpassword")
+        
+#         response = self.client.post(reverse("approve_fitness_trainer"), data={"trainer_id": "123"})
+#         self.assertEqual(response.status_code, 200)
+#         mock_update_user.assert_called_once_with("123", {"status": "approved"})
+#         self.assertContains(response, "Trainer approved successfully.")
+
+#     # Test: Reject Trainer
+#     @patch("FitOn.rds.update_user")
+#     def test_reject_fitness_trainer(self, mock_update_user):
+#         self.client.login(username="admin", password="adminpassword")
+        
+#         response = self.client.post(reverse("reject_fitness_trainer"), data={"trainer_id": "123"})
+#         self.assertEqual(response.status_code, 200)
+#         mock_update_user.assert_called_once_with("123", {"status": "rejected"})
+#         self.assertContains(response, "Trainer rejected successfully.")
+
+#     # Test: Standard User List (Trainer)
+#     @patch("FitOn.rds.get_users_by_username_query")
+#     def test_standard_users_list_view(self, mock_get_users):
+#         mock_get_users.return_value = [{"username": "standard_user", "status": "active"}]
+
+#         self.client.login(username="trainer_user", password="testpassword")
+#         response = self.client.get(reverse("standard_users_list"))
+#         self.assertEqual(response.status_code, 200)
+#         self.assertTemplateUsed(response, "standard_users_list.html")
+
+#     # Test: Send Data Request (Trainer)
+#     @patch("FitOn.rds.get_user_by_uid")
+#     @patch("FitOn.dynamodb.create_user")
+#     def test_send_data_request(self, mock_create_user, mock_get_user):
+#         mock_get_user.return_value = {"id": "123", "username": "standard_user"}
+#         self.client.login(username="trainer_user", password="testpassword")
+
+#         response = self.client.post(reverse("send_data_request"), data={"user_id": "123"})
+#         self.assertEqual(response.status_code, 200)
+#         mock_create_user.assert_called_once_with("123")
+#         self.assertContains(response, "Data request sent.")
+
+#     # Test: Cancel Data Request (Trainer)
+#     @patch("FitOn.rds.get_user_by_uid")
+#     def test_cancel_data_request(self, mock_get_user):
+#         mock_get_user.return_value = {"id": "123", "username": "standard_user"}
+#         self.client.login(username="trainer_user", password="testpassword")
+
+#         response = self.client.post(reverse("cancel_data_request"), data={"user_id": "123"})
+#         self.assertEqual(response.status_code, 200)
+#         self.assertContains(response, "Data request canceled.")
+
+#     # Test: View User Data (Trainer)
+#     @patch("FitOn.rds.fetch_user_data")
+#     def test_view_user_data(self, mock_fetch_user_data):
+#         mock_fetch_user_data.return_value = {"steps": 1000, "heart_rate": 72}
+
+#         self.client.login(username="trainer_user", password="testpassword")
+#         response = self.client.get(reverse("view_user_data", args=["123"]))
+#         self.assertEqual(response.status_code, 200)
+#         self.assertTemplateUsed(response, "view_user_data.html")
+#         self.assertContains(response, "1000 steps")
+#         self.assertContains(response, "72 bpm")
+
+#     # Test: Create Custom Plan (Trainer)
+#     @patch("FitOn.rds.create_custom_plan")
+#     def test_create_custom_plan(self, mock_create_custom_plan):
+#         self.client.login(username="trainer_user", password="testpassword")
+
+#         response = self.client.post(reverse("create_custom_plan", args=["123"]))
+#         self.assertEqual(response.status_code, 200)
+#         mock_create_custom_plan.assert_called_once_with("123")
+#         self.assertContains(response, "Custom plan created.")
+
+#     # Test: Revoke Access to Trainer (User)
+#     @patch("FitOn.dynamodb.update_user")
+#     def test_revoke_access_to_trainer(self, mock_update_user):
+#         self.client.login(username="standard_user", password="testpassword")
+
+#         response = self.client.post(reverse("revoke_access_to_trainer"), data={"trainer_id": "123"})
+#         self.assertEqual(response.status_code, 200)
+#         mock_update_user.assert_called_once_with("123", {"access": "revoked"})
+#         self.assertContains(response, "Access revoked.")
