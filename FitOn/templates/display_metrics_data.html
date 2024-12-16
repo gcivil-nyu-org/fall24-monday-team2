@@ -66,7 +66,6 @@
     }
 </style>
 <body>
-    <!-- <div class="metrics-container container-fluid my-4"> -->
     <link rel="stylesheet" href="{% static 'css/display_metric_data.css' %}">
 
     {% if data %}
@@ -88,8 +87,6 @@
                     <option value="resting_heart_rate">Resting Heart Rate</option>
                     <option value="sleep">Sleep</option>
                     <option value="activity">Exercises</option>
-                    <option value="glucose">Blood Glucose</option>
-                    <option value="pressure">Blood Pressure</option>
                 </select>
                 <br>
                 <label for="time">Time:</label>
@@ -102,6 +99,68 @@
             </form>
         </div>
     </div>
+
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <h2 class="text-center">Goals</h2>
+                <table class="table table-bordered table-striped text-center">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Goal Type</th>
+                            <th>Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if sleep_goal %}
+                        <tr>
+                            <td>Sleep</td>
+                            <td>{{ sleep_goal }}</td>
+                        </tr>
+                        {% endif %}
+    
+                        {% if weight_goal %}
+                        <tr>
+                            <td>Weight</td>
+                            <td>{{ weight_goal }}</td>
+                        </tr>
+                        {% endif %}
+    
+                        {% if step_goal %}
+                        <tr>
+                            <td>Steps</td>
+                            <td>{{ step_goal }}</td>
+                        </tr>
+                        {% endif %}
+
+                        {% if activity_goal %}
+                        {% for goal in activity_goal %}
+                        <tr>
+                            <td>{{ goal.Name }}</td>
+                            <td>{{ goal.Value }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% endif %}
+
+                        {% if custom_goal %}
+                        {% for goal in custom_goal %}
+                        <tr>
+                            <td>{{ goal.Name }}</td>
+                            <td>{{ goal.Value }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+                <div class="text-center mt-4">
+                    <button type="button" class="submit-button btn btn-primary" onclick="redirectToFitnessGoals()">
+                        Edit Goals
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
 
     <!-- Filter Section -->
     <div class="metrics-filters container my-4">
@@ -159,8 +218,8 @@
             </div>
             <div class="col-md-6">
                 <h2>Top Activities</h2>
-                <table border="1">
-                    <thead>
+                <table class="table table-bordered">
+                    <thead class="table-dark">
                         <tr>
                             <th>Exercise</th>
                             <th>Duration (in minutes)</th>
@@ -179,7 +238,7 @@
         </div>
     </div>
     <script>
-        let total_data = {{ data | safe }} ;
+        let total_data = {{ data | safe }};
         console.log(total_data);
 
         const stepGoal = {{ step_goal }};
@@ -189,8 +248,12 @@
         console.log("Step Goal:", stepGoal);
         console.log("Weight Goal:", weightGoal);
         console.log("Sleep Goal:", sleepGoal);
+
+        function redirectToFitnessGoals() {
+            window.location.href = "{% url 'fitness_goals' %}"
+        }
     </script>
     {% endif %}
-<script src="{% static 'js/display_metric_data.js' %}"></script>
+    <script src="{% static 'js/display_metric_data.js' %}"></script>
 </body>
 {% endblock %}

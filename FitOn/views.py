@@ -56,6 +56,8 @@ from .dynamodb import (
     get_step_user_goals,
     get_sleep_user_goals,
     get_weight_user_goals,
+    get_custom_user_goals,
+    get_activity_user_goals,
     get_user_by_uid,
 )
 from .rds import rds_main, fetch_user_data
@@ -1515,6 +1517,8 @@ def sleep_plot(data):
 
     # Pass the plot path to the template
     context = {"sleep_data_json": sleep_data}
+    print("----------")
+    print(sleep_data)
     return context
 
 
@@ -1832,6 +1836,8 @@ async def fetch_all_metric_data(request, duration, frequency):
             )
 
         await asyncio.gather(*tasks)
+        print("----- Total Data -----")
+        print(total_data)
         total_data = await get_sleep_scores(request, total_data)
         total_data = await format_bod_fitness_data(total_data)
 
@@ -1869,12 +1875,16 @@ async def get_metric_data(request):
         steps = get_step_user_goals(user_id)
         weight = get_weight_user_goals(user_id)
         sleep = get_sleep_user_goals(user_id)
+        activity = get_activity_user_goals(user_id)
+        custom = get_custom_user_goals(user_id)
 
         context = {
             "data": total_data,
             "step_goal": steps,
             "weight_goal": weight,
             "sleep_goal": sleep,
+            "activity_goal": activity,
+            "custom_goal": custom,
         }
         # print("Inside get metric:", context)
         return await sync_to_async(render)(
@@ -1929,6 +1939,7 @@ def health_data_view(request):
     step_goal = get_step_user_goals(user_id)
     weight_goal = get_weight_user_goals(user_id)
     sleep_goal = get_sleep_user_goals(user_id)
+    custom_goal = get_custom_user_goals(user_id)
     return render(
         request,
         "display_metric_data.html",
@@ -1937,6 +1948,7 @@ def health_data_view(request):
             "step_goal": step_goal,
             "weight_goal": weight_goal,
             "sleep_goal": sleep_goal,
+            "custom_goal": custom_goal,
         },
     )
     # return render(
