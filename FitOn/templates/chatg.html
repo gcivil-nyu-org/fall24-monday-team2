@@ -41,9 +41,13 @@
                         <li><a href="{% url 'fitness_trainers_list' %}">Fitness Trainers</a></li>
                         <li><a href="{% url 'fitness_trainer_applications_list' %}">Review Applications</a></li>
                         <li><a href="{% url 'punishments' %}">Manage Punishments</a></li>
+                    {% elif is_fitness_trainer %}                        
+                        <li><a href="{% url 'standard_users_list' %}">Users</a></li>
+                    {% else %}
+                        <li><a href="{% url 'fitness_trainers_list' %}">Fitness Trainers</a></li>
                     {% endif %}
                     <li><a href="{% url 'forum' %}">Forums</a></li>
-                    <li><a href="{% url 'homepage' %}">Workouts</a></li>
+                    <li><a href="{% url 'list_exercises' %}">Workouts</a></li>
                     <li><a href="{% url 'get_metric_data' %}">Metrics</a></li>
                     <li><a href="{% url 'profile' %}">Profile</a></li>
                     <li><a href="{% url 'chat' %}">Chat</a></li>
