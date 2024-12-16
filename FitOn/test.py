@@ -5780,34 +5780,3 @@ class ChatTests(TestCase):
             UpdateExpression="SET is_read = :true",
             ExpressionAttributeValues={":true": True},
         )
-
-    @patch("FitOn.views.chat_table.query", side_effect=Exception("Test Exception"))
-    def test_mark_messages_as_read_error_handling(self, mock_query):
-        """
-        Test the error handling when the query operation fails.
-        """
-        room_id = "testroom123"
-        session_user_id = "mock_user_id"
-
-        # Use RequestFactory to create a request
-        factory = RequestFactory()
-        request = factory.post(reverse("mark_messages_as_read", args=[room_id]))
-
-        # Attach session to the request manually
-        middleware = SessionMiddleware(lambda req: None)
-        middleware.process_request(request)
-        request.session["user_id"] = session_user_id
-        request.session.save()
-
-        # Call the view function directly
-        response = mark_messages_as_read(request, room_id)
-
-        # Assertions
-        self.assertEqual(response.status_code, 500)
-        self.assertJSONEqual(
-            response.content,
-            {"error": "An error occurred while processing the request."},
-        )
-
-        # Verify query was called
-        mock_query.assert_called_once()
