@@ -171,67 +171,49 @@ body {
     font-size: 1.5em;
     margin-left: 22px;
 }
-.search_chat
-{
-    position: relative;
+.search_chat {
+    position: relative; /* Ensure the search bar's position is not affected by its container */
+    z-index: 2; /* Place the search bar above the rest of the content */
     width: 100%;
-    height: 50px;
-    background: #f6f6f6;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 0 15px;
+    background-color: #f6f6f6; /* Match container background */
+    padding: 10px 15px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow for visibility */
 }
-.search_chat div
-{
+.search_chat div {
+    position: relative; /* Allows the popup to position itself relative to this container */
     width: 100%;
 }
 .search_chat div input {
     width: 100%;
     outline: none;
-    border: 1px solid #ccc; /* Add a subtle rim/outline */
+    border: 1px solid #ccc;
     background: #fff;
     height: 38px;
     border-radius: 30px;
     font-size: 14px;
-    padding: 0 15px; /* Adjust padding: reduce left and right spacing */
-    padding-left: 20px; /* Align placeholder text more to the left */
-    line-height: 38px; /* Ensure vertical alignment */
+    padding: 0 15px;
     box-shadow: 0px 1px 3px rgba(0, 0, 0, 0.1);
-}
-.search_chat div input::placeholder {
-    color: #bbb;
-    font-size: 14px; /* Ensure consistent font size */
-    line-height: 38px; /* Ensure placeholder remains vertically aligned */
-    text-align: left; /* Explicitly align placeholder text to the left */
-}
-.search_chat div img
-{
-    position: absolute;
-    left: 30px;
-    top: 14px;
-    font-size: 1.5em;
+    z-index: 2; /* Keep the input field above other elements */
 }
 .search-popup {
     position: absolute;
-    top: calc(100% + 5px); /* Position below the input box */
+    top: calc(100% + 5px); /* Place the dropdown right below the search bar */
     left: 0;
     width: 100%;
-    max-height: 300px; /* Limit height to avoid overflow */
-    overflow-y: auto; /* Add scroll if needed */
-    background: lightblue;
+    max-height: 300px; /* Limit height for overflow */
+    overflow-y: auto; /* Enable scrolling for long lists */
+    background: white; /* Match the dropdown background */
     border: 1px solid #ccc;
     border-radius: 5px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    z-index: 1000;
-    display: none; /* Default hidden */
+    z-index: 3; /* Ensure the dropdown is above the username list */
 }
 .search-popup .search-result {
     padding: 10px;
     cursor: pointer;
     font-size: 14px;
-    color: #333; /* Text color */
-    transition: background 0.3s; /* Smooth hover effect */
+    color: #333;
+    transition: background 0.3s;
 }
 .search-popup .search-result:hover {
     background: #b2ebf2; /* Slightly darker blue on hover */
@@ -604,12 +586,13 @@ body {
     width: 100%;
     max-height: 300px; /* Limit height for scroll */
     overflow-y: auto;
-    background: white;
+    background: white; /* Ensure it matches your design */
     border: 1px solid #ccc;
     border-radius: 5px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     display: none; /* Hidden by default */
 }
+
 .search-popup .search-result {
     padding: 10px;
     cursor: pointer;
@@ -617,6 +600,7 @@ body {
     color: #333;
     transition: background 0.3s;
 }
+
 .search-popup .search-result:hover {
     background: #f0f0f0; /* Highlight on hover */
 }
