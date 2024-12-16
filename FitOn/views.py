@@ -516,7 +516,7 @@ def authorize_google_fit(request):
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
         flow.redirect_uri = request.build_absolute_uri(
             reverse("callback_google_fit")
-        ).replace("http://", "https://")
+        )  # .replace("http://", "https://")
         # print("Redirected URI: ", flow.redirect_uri)
         authorization_url, state = flow.authorization_url(
             access_type="offline", include_granted_scopes="true"
@@ -1515,6 +1515,8 @@ def sleep_plot(data):
 
     # Pass the plot path to the template
     context = {"sleep_data_json": sleep_data}
+    print("----------")
+    print(sleep_data)
     return context
 
 
@@ -1832,6 +1834,8 @@ async def fetch_all_metric_data(request, duration, frequency):
             )
 
         await asyncio.gather(*tasks)
+        print("----- Total Data -----")
+        print(total_data)
         total_data = await get_sleep_scores(request, total_data)
         total_data = await format_bod_fitness_data(total_data)
 
