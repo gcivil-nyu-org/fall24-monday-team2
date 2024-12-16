@@ -24,7 +24,7 @@ from django.contrib import admin
 from django.urls import path
 
 
-app_name = "chat"
+app_name = "FitOn"
 
 urlpatterns = [
     path("callback/", views.callback_google_fit, name="callback_google_fit"),
@@ -140,19 +140,21 @@ urlpatterns = [
     path("delete_thread/", views.delete_thread, name="delete_thread"),
     path("reports/", views.reports_view, name="reports"),
     path("chat/", views.private_chat, name="chat"),
-    path("chatg/", views.group_chat),
-    path("chat/history/<str:room_id>/", views.get_chat_history),
-    path("chat/group/create/", views.create_group_chat),
-    path("chat/group/invite/", views.invite_to_group),
-    path("chat/group/join/", views.join_group_chat),
-    path("chat/group/leave/", views.leave_group_chat),
-    path("chat/group/check/", views.get_pending_invitations),
-    path("chat/search_users/", views.search_users, name="search_users"),
+    path("chatg/", views.group_chat, name="group_chat"),
     path(
-        "pending_invitations/",
-        views.get_pending_invitations,
-        name="pending_invitations",
+        "chat/history/<str:room_id>/", views.get_chat_history, name="get_chat_history"
     ),
+    path("chat/group/create/", views.create_group_chat, name="create_group_chat"),
+    path("chat/group/invite/", views.invite_to_group, name="invite_to_group"),
+    path("chat/group/join/", views.join_group_chat, name="join_group_chat"),
+    path("chat/group/leave/", views.leave_group_chat, name="leave_group_chat"),
+    # path("chat/group/check/", views.get_pending_invitations),
+    path("chat/search_users/", views.search_users, name="search_users"),
+    # path(
+    #     "pending_invitations/",
+    #     views.get_pending_invitations,
+    #     name="pending_invitations",
+    # ),
     path("warn_action/", views.warn_action, name="warn_action"),
     path("dismiss_warning/", views.dismiss_warning, name="dismiss_warning"),
     path(
@@ -163,4 +165,10 @@ urlpatterns = [
     path("fitness-goals/", views.fitness_goals_view, name="fitness_goals"),
     path("fitness-goals/edit/", views.edit_goal, name="edit_goal"),
     path("fitness-goals/delete/", views.delete_goal, name="delete_goal"),
+    path("chat/group/add_users/", views.add_users_to_group, name="add_users_to_group"),
+    path(
+        "chat/mark_messages_as_read/<str:room_id>/",
+        views.mark_messages_as_read,
+        name="mark_messages_as_read",
+    ),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

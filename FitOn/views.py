@@ -2601,57 +2601,6 @@ def list_exercises(request):
 # Chat Functions
 # -------------------------------
 
-# def private_chat(request):
-#     username = request.session.get("username")
-#     user = get_user_by_username(username)
-
-#     users_with_chat_history = []
-
-#     # Get all users except the logged-in user
-#     users = get_users_without_specific_username(username)
-
-#     for u in users:
-#         room_id = create_room_id(user["user_id"], u["user_id"])
-#         chat_history = get_chat_history_from_db(room_id)
-
-#         if chat_history and chat_history.get("Items"):
-#             unread_count = 0
-
-#             # Count unread messages
-#             for msg in chat_history["Items"]:
-#                 if (
-#                     msg.get("receiver") == user["user_id"]
-#                     and not msg.get("is_read", False)
-#                 ):
-#                     unread_count += 1
-
-#             # Sort by the latest message timestamp
-#             latest_message = max(
-#                 chat_history["Items"], key=lambda x: x["timestamp"]
-#             )
-#             u["last_activity"] = latest_message["timestamp"]
-#             u["unread_count"] = unread_count  # Add unread message count
-#             users_with_chat_history.append(u)
-
-#     # Sort users with chat history by the latest activity timestamp
-#     users_with_chat_history = sorted(
-#         users_with_chat_history, key=lambda x: x["last_activity"], reverse=True
-#     )
-
-#     # Handle search query if provided
-#     search_query = request.GET.get("search", "").lower()
-#     if search_query:
-#         users_with_chat_history = [
-#             u for u in users_with_chat_history if search_query in u["username"].lower()
-#         ]
-
-#     # Prepare the context for the template
-#     dic = {
-#         "data": users_with_chat_history,  # Only users with chat history
-#         "mine": user,
-#     }
-#     return render(request, "chat.html", dic)
-
 
 def private_chat(request):
     username = request.session.get("username")
@@ -2700,31 +2649,10 @@ def private_chat(request):
     return render(request, "chat.html", dic)
 
 
-# change and t &
 def create_room_id(uid_a, uid_b):
     """Helper function to create consistent room IDs."""
     ids = sorted([uid_a, uid_b])
     return f"{ids[0]}and{ids[1]}"
-
-
-# def get_chat_history(request, room_id):
-#     # Fetch chat history
-#     response = get_chat_history_from_db(room_id)
-#     items = response.get("Items", [])
-
-#     # Update each unread message to mark it as read
-#     for item in items:
-#         if item.get("receiver") == request.session.get("user_id") and not item.get("is_read", False):
-#             chat_table.update_item(
-#                 Key={
-#                     "room_name": room_id,
-#                     "timestamp": item["timestamp"],  # Ensure you include the sort key
-#                 },
-#                 UpdateExpression="SET is_read = :true",
-#                 ExpressionAttributeValues={":true": True},
-#             )
-
-#     return JsonResponse({"messages": items})
 
 
 def get_chat_history(request, room_id):
@@ -2740,6 +2668,7 @@ def get_chat_history(request, room_id):
 
 def group_chat(request):
     username = request.session.get("username")
+    print(f"[DEBUG] Username in group_chat view: {username}")
     user = get_user_by_username(username)
     allUser = get_users_without_specific_username(username)
 
@@ -2778,41 +2707,18 @@ def create_group_chat(request):
     (roomId.save)()
 
     for i in allUser:
-        try:
-            roomId = (GroupChatMember.objects.create)(
-                name=str(roomName),
-                uid=i,
-                status=GroupChatMember.AgreementStatus.COMPLETED,
-            )
-            (roomId.save)()
-        except Exception as e:
-            print(f"Error creating GroupWebSocket for {i}: {e}")
-            return JsonResponse({"code": "500", "message": "Database error"})
+        # try:
+        roomId = (GroupChatMember.objects.create)(
+            name=str(roomName),
+            uid=i,
+            status=GroupChatMember.AgreementStatus.COMPLETED,
+        )
+        (roomId.save)()
+        # except Exception as e:
+        #     print(f"Error creating GroupWebSocket for {i}: {e}")
+        #     return JsonResponse({"code": "500", "message": "Database error"})
     dic = {"code": "200", "message": "ok"}
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
-
-
-# def create_group_chat(request):
-#     if request.method == "POST":
-#         payload = json.loads(request.body.decode())
-#         room_name = payload.get("roomName")
-#         selected_users = payload.get("selectedUsers")
-
-#         if GroupChatMember.objects.filter(name=room_name).exists():
-#             return JsonResponse({"code": "400", "message": "Group already exists!"})
-
-#         # Create group chat members
-#         for username in selected_users:
-#             user = get_user_by_username(username)
-#             if user:
-#                 GroupChatMember.objects.create(
-#                     name=room_name,
-#                     uid=user["user_id"],
-#                     status=GroupChatMember.AgreementStatus.COMPLETED
-#                 )
-
-#         return JsonResponse({"code": "200", "message": "ok"})
-#     return JsonResponse({"code": "400", "message": "Invalid request"})
 
 
 def invite_to_group(request):
@@ -2821,17 +2727,17 @@ def invite_to_group(request):
     roomName = payload.get("roomName")
 
     for i in allUser:
-        try:
-            roomId = (GroupChatMember.objects.create)(
-                name=str(roomName),
-                uid=i,
-                status=GroupChatMember.AgreementStatus.IN_PROGRESS,
-            )
-            (roomId.save)()
+        # try:
+        roomId = (GroupChatMember.objects.create)(
+            name=str(roomName),
+            uid=i,
+            status=GroupChatMember.AgreementStatus.IN_PROGRESS,
+        )
+        (roomId.save)()
 
-        except Exception as e:
-            print(f"Error creating GroupWebSocket for {i}: {e}")
-            return JsonResponse({"code": "500", "message": "Database error"})
+        # except Exception as e:
+        #     print(f"Error creating GroupWebSocket for {i}: {e}")
+        #     return JsonResponse({"code": "500", "message": "Database error"})
     dic = {"code": "200", "message": "ok"}
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
@@ -2859,31 +2765,31 @@ def leave_group_chat(request):
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
 
-def get_pending_invitations(request):
-    username = request.session.get("username")
+# def get_pending_invitations(request):
+#     username = request.session.get("username")
 
-    # Retrieve the user ID using the `get_user_by_username` function
-    user_id = get_user_by_username(username)["user_id"]
+#     # Retrieve the user ID using the `get_user_by_username` function
+#     user_id = get_user_by_username(username)["user_id"]
 
-    # Fetch pending invitations for the user from the database
-    pending_invitations = GroupChatMember.objects.filter(
-        uid=user_id, status=GroupChatMember.AgreementStatus.IN_PROGRESS
-    )
+#     # Fetch pending invitations for the user from the database
+#     pending_invitations = GroupChatMember.objects.filter(
+#         uid=user_id, status=GroupChatMember.AgreementStatus.IN_PROGRESS
+#     )
 
-    # Convert GroupChatMember objects to a list of dictionaries
-    invitation_data = []
-    for invitation in pending_invitations:
-        invitation_data.append(
-            {
-                "name": invitation.name,
-                "uid": invitation.uid,
-                "status": invitation.status,
-            }
-        )
+#     # Convert GroupChatMember objects to a list of dictionaries
+#     invitation_data = []
+#     for invitation in pending_invitations:
+#         invitation_data.append(
+#             {
+#                 "name": invitation.name,
+#                 "uid": invitation.uid,
+#                 "status": invitation.status,
+#             }
+#         )
 
-    # Return the serialized data as JSON response
-    dic = {"code": "200", "message": "ok", "data": invitation_data}
-    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+#     # Return the serialized data as JSON response
+#     dic = {"code": "200", "message": "ok", "data": invitation_data}
+#     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
 
 def search_users(request):
@@ -2904,24 +2810,57 @@ def search_users(request):
         )
 
 
+# def mark_messages_as_read(request, room_id):
+#     user_id = request.session.get("user_id")
+
+#     # Fetch unread messages
+#     unread_messages = chat_table.query(
+#         KeyConditionExpression=Key("room_name").eq(room_id),
+#         FilterExpression=Attr("sender").ne(user_id) & Attr("is_read").eq(False),
+#     )
+
+#     # Mark each message as read
+#     for msg in unread_messages.get("Items", []):
+#         chat_table.update_item(
+#             Key={
+#                 "room_name": room_id,
+#                 "timestamp": msg["timestamp"],
+#             },
+#             UpdateExpression="SET is_read = :true",
+#             ExpressionAttributeValues={":true": True},
+#         )
+
+
 def mark_messages_as_read(request, room_id):
-    user_id = request.session.get("user_id")
+    try:
+        user_id = request.session.get("user_id")
+        if not user_id:
+            return JsonResponse({"error": "User not authenticated"}, status=401)
 
-    # Fetch unread messages
-    unread_messages = chat_table.query(
-        KeyConditionExpression=Key("room_name").eq(room_id),
-        FilterExpression=Attr("sender").ne(user_id) & Attr("is_read").eq(False),
-    )
+        # Fetch unread messages
+        unread_messages = chat_table.query(
+            KeyConditionExpression=Key("room_name").eq(room_id),
+            FilterExpression=Attr("sender").ne(user_id) & Attr("is_read").eq(False),
+        )
 
-    # Mark each message as read
-    for msg in unread_messages.get("Items", []):
-        chat_table.update_item(
-            Key={
-                "room_name": room_id,
-                "timestamp": msg["timestamp"],
-            },
-            UpdateExpression="SET is_read = :true",
-            ExpressionAttributeValues={":true": True},
+        # Mark each message as read
+        for msg in unread_messages.get("Items", []):
+            chat_table.update_item(
+                Key={
+                    "room_name": room_id,
+                    "timestamp": msg["timestamp"],
+                },
+                UpdateExpression="SET is_read = :true",
+                ExpressionAttributeValues={":true": True},
+            )
+
+        # Return success response
+        return JsonResponse({"code": "200", "message": "Messages marked as read"})
+
+    except Exception as e:
+        print(f"Error in mark_messages_as_read: {e}")
+        return JsonResponse(
+            {"error": "An error occurred while processing the request."}, status=500
         )
 
 
@@ -2930,25 +2869,25 @@ def get_group_members(request, group_name):
     member_data = []
 
     for member in group_members:
-        try:
-            # Fetch the User instance from DynamoDB using get_user_by_uid
-            user = get_user_by_uid(member.uid)  # Call the DynamoDB helper function
-            if user:
-                member_data.append(
-                    {
-                        "username": user[
-                            "username"
-                        ],  # Replace with the correct key from DynamoDB response
-                        "id": user[
-                            "user_id"
-                        ],  # Replace with the correct key for the unique identifier
-                    }
-                )
-            else:
-                print(f"User with UID {member.uid} not found in DynamoDB.")
-        except Exception as e:
-            print(f"Error fetching user with UID {member.uid}: {e}")
-            continue
+        # try:
+        # Fetch the User instance from DynamoDB using get_user_by_uid
+        user = get_user_by_uid(member.uid)  # Call the DynamoDB helper function
+        if user:
+            member_data.append(
+                {
+                    "username": user[
+                        "username"
+                    ],  # Replace with the correct key from DynamoDB response
+                    "id": user[
+                        "user_id"
+                    ],  # Replace with the correct key for the unique identifier
+                }
+            )
+        # else:
+        #     print(f"User with UID {member.uid} not found in DynamoDB.")
+        # except Exception as e:
+        #     print(f"Error fetching user with UID {member.uid}: {e}")
+        #     continue
 
     return JsonResponse({"members": member_data}, status=200)
 
@@ -2956,29 +2895,29 @@ def get_group_members(request, group_name):
 @csrf_exempt
 def add_users_to_group(request):
     if request.method == "POST":
-        try:
-            data = json.loads(request.body)
-            room_name = data.get("roomName")
-            user_ids = data.get("allUser", [])
+        # try:
+        data = json.loads(request.body)
+        room_name = data.get("roomName")
+        user_ids = data.get("allUser", [])
 
-            if not room_name or not user_ids:
-                return JsonResponse(
-                    {"code": "400", "message": "Room name and users are required."}
-                )
-
-            # Add users to the group chat
-            for user_id in user_ids:
-                GroupChatMember.objects.get_or_create(
-                    name=room_name,
-                    uid=user_id,
-                    defaults={"status": GroupChatMember.AgreementStatus.COMPLETED},
-                )
-
-            return JsonResponse({"code": "200", "message": "Users added successfully."})
-        except Exception as e:
+        if not room_name or not user_ids:
             return JsonResponse(
-                {"code": "500", "message": f"Error adding users: {str(e)}"}
+                {"code": "400", "message": "Room name and users are required."}
             )
+
+        # Add users to the group chat
+        for user_id in user_ids:
+            GroupChatMember.objects.get_or_create(
+                name=room_name,
+                uid=user_id,
+                defaults={"status": GroupChatMember.AgreementStatus.COMPLETED},
+            )
+
+        return JsonResponse({"code": "200", "message": "Users added successfully."})
+        # except Exception as e:
+        #     return JsonResponse(
+        #         {"code": "500", "message": f"Error adding users: {str(e)}"}
+        #     )
     return JsonResponse({"code": "405", "message": "Method not allowed."})
 
 
