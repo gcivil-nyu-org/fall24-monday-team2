@@ -152,6 +152,7 @@ from .views import (
     create_room_id,
     create_group_chat,
     group_chat,
+    mark_messages_as_read,
 )
 from django.contrib.auth.hashers import check_password, make_password
 from channels.testing import WebsocketCommunicator
@@ -5655,3 +5656,86 @@ class ChatTests(TestCase):
             mock_get_user_by_username.assert_called_once_with(session_username)
             mock_get_users_without_username.assert_called_once_with(session_username)
             mock_filter.assert_called_once_with(uid="mock_user_id", status="COMPLETED")
+
+    @patch("FitOn.views.chat_table.query")
+    @patch("FitOn.views.chat_table.update_item")
+    def test_mark_messages_as_read_success(self, mock_update_item, mock_query):
+        """
+        Test the successful marking of unread messages as read.
+        """
+        room_id = "testroom123"
+        session_user_id = "mock_user_id"
+
+        # Mock unread messages returned from query
+        mock_query.return_value = {
+            "Items": [
+                {"timestamp": 123456789, "sender": "friend_user_id", "is_read": False},
+                {"timestamp": 123456790, "sender": "friend_user_id", "is_read": False},
+            ]
+        }
+
+        # Use RequestFactory to create a request object
+        factory = RequestFactory()
+        request = factory.post(reverse("mark_messages_as_read", args=[room_id]))
+
+        # Attach session to the request manually
+        middleware = SessionMiddleware(lambda req: None)
+        middleware.process_request(request)
+        request.session["user_id"] = session_user_id
+        request.session.save()
+
+        # Call the view function directly
+        response = mark_messages_as_read(request, room_id)
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content, {"code": "200", "message": "Messages marked as read"}
+        )
+
+        # Verify query and update_item were called
+        mock_query.assert_called_once()
+        self.assertEqual(mock_update_item.call_count, 2)
+
+        # Verify the update_item arguments
+        mock_update_item.assert_any_call(
+            Key={"room_name": room_id, "timestamp": 123456789},
+            UpdateExpression="SET is_read = :true",
+            ExpressionAttributeValues={":true": True},
+        )
+        mock_update_item.assert_any_call(
+            Key={"room_name": room_id, "timestamp": 123456790},
+            UpdateExpression="SET is_read = :true",
+            ExpressionAttributeValues={":true": True},
+        )
+
+    @patch("FitOn.views.chat_table.query", side_effect=Exception("Test Exception"))
+    def test_mark_messages_as_read_error_handling(self, mock_query):
+        """
+        Test the error handling when the query operation fails.
+        """
+        room_id = "testroom123"
+        session_user_id = "mock_user_id"
+
+        # Use RequestFactory to create a request
+        factory = RequestFactory()
+        request = factory.post(reverse("mark_messages_as_read", args=[room_id]))
+
+        # Attach session to the request manually
+        middleware = SessionMiddleware(lambda req: None)
+        middleware.process_request(request)
+        request.session["user_id"] = session_user_id
+        request.session.save()
+
+        # Call the view function directly
+        response = mark_messages_as_read(request, room_id)
+
+        # Assertions
+        self.assertEqual(response.status_code, 500)
+        self.assertJSONEqual(
+            response.content,
+            {"error": "An error occurred while processing the request."},
+        )
+
+        # Verify query was called
+        mock_query.assert_called_once()
