@@ -140,15 +140,15 @@ WSGI_APPLICATION = "FitOn.wsgi.application"
 ASGI_APPLICATION = "FitOn.asgi.application"
 
 # Websocket protocol
-if DEBUG:
-    WEBSOCKET_PROTOCOL = "ws://"
-else:
-    WEBSOCKET_PROTOCOL = ["wss://", "ws://"]
+# if DEBUG:
+#     WEBSOCKET_PROTOCOL = "ws://"
+# else:
+#     WEBSOCKET_PROTOCOL = ["wss://", "ws://"]
 
 # Force HTTPS in production
-if not DEBUG:
-    # SECURE_SSL_REDIRECT = True
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+# if not DEBUG:
+#     # SECURE_SSL_REDIRECT = True
+#     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 CHANNEL_LAYERS = {
     "default": {
