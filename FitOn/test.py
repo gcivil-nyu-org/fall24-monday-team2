@@ -149,6 +149,8 @@ from .views import (
     fetch_metric_data,
     get_sleep_scores,
     heartrate_plot,
+    deactivate_account,
+    confirm_deactivation,
     create_room_id,
     create_group_chat,
 )
@@ -656,6 +658,76 @@ class DismissWarningTest(TestCase):
 
     def tearDown(self):
         # Clean up the test user
+        delete_user_by_username(self.user_data["username"])
+
+
+class DeactivateAccountTest(TestCase):
+    def setUp(self):
+        # Mock user data
+        self.user_data = {
+            "user_id": "test_user_123",
+            "username": "test_user123",
+            "email": "test_user@example.com",
+            "name": "Test User",
+            "date_of_birth": "1990-01-01",
+            "gender": "O",
+            "height": "183",
+            "weight": "83",
+            "password": "hashed_password",
+        }
+
+        # Create the user in the database
+        create_user(**self.user_data)
+
+        self.factory = RequestFactory()
+
+    def add_session_to_request(self, request):
+        """Helper function to attach session middleware to the request."""
+        middleware = SessionMiddleware(lambda x: x)
+        middleware.process_request(request)
+        request.session.save()
+
+    def test_deactivate_account_get(self):
+        """Test that deactivate_account view renders the confirmation page."""
+        request = self.factory.get("/deactivate/")
+        self.add_session_to_request(request)
+
+        response = deactivate_account(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Deactivate Your Account")
+        self.assertContains(
+            response, "Are you sure you want to deactivate your account?"
+        )
+
+    @patch("FitOn.views.delete_user_by_username", return_value=True)
+    def test_confirm_deactivation_success(self, mock_delete_user):
+        """Test successful account deactivation."""
+        request = self.factory.post("/deactivate/confirm/")
+        self.add_session_to_request(request)
+        request.session["username"] = self.user_data["username"]
+
+        # Call the confirm_deactivation view
+        response = confirm_deactivation(request)
+
+        # Assertions
+        self.assertEqual(response.status_code, 302)  # Redirect after success
+        self.assertEqual(response.url, reverse("homepage"))  # Redirects to homepage
+        self.assertNotIn("username", request.session)  # Session flushed
+        mock_delete_user.assert_called_once_with(self.user_data["username"])
+
+    def test_confirm_deactivation_no_session_user(self):
+        """Test deactivation attempt with no username in session."""
+        request = self.factory.post("/deactivate/confirm/")
+        self.add_session_to_request(request)
+
+        response = confirm_deactivation(request)
+
+        self.assertEqual(response.status_code, 302)  # Redirect to login page
+        self.assertEqual(response.url, reverse("login"))
+
+    def tearDown(self):
+        """Clean up the test user."""
         delete_user_by_username(self.user_data["username"])
 
 
