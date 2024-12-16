@@ -3,7 +3,8 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 # from django.core.serializers import serialize
 from .models import Exercise, MuscleGroup, User
-from django.http import JsonResponse
+
+# from django.http import JsonResponse
 
 from .dynamodb import (
     add_fitness_trainer_application,
@@ -518,8 +519,9 @@ def authorize_google_fit(request):
         # else:
         # print(settings.GOOGLEFIT_CLIENT_CONFIG)
         flow = Flow.from_client_config(settings.GOOGLEFIT_CLIENT_CONFIG, SCOPES)
-        flow.redirect_uri = request.build_absolute_uri(reverse("callback_google_fit"))
-        # .replace("http://", "https://")
+        flow.redirect_uri = request.build_absolute_uri(
+            reverse("callback_google_fit")
+        ).replace("http://", "https://")
         # print("Redirected URI: ", flow.redirect_uri)
         authorization_url, state = flow.authorization_url(
             access_type="offline", include_granted_scopes="true"
@@ -967,9 +969,9 @@ def view_user_data(request, user_id):
     except Exception as e:
         return render(
             request,
-            "view_user_data.html",
+            "error.html",
             {
-                "error": str(e),
+                "error_message": str(e),
             },
         )
 
@@ -978,7 +980,6 @@ def store_session_data(request, user_data):
     # Store data in the session
     request.session["user_data"] = user_data
     request.session.modified = True  # Ensure the session is marked as modified
-    print(request.session.get("user_data"))
     return
 
 
@@ -1008,7 +1009,6 @@ async def async_view_user_data(request, user_id):
         # Serialize user data
         serialized_data = serialize_data(user_data)
         # Store the data in the session
-        # await sync_to_async(store_session_data)(request, serialized_data)
         store_session_data(request, serialized_data)
         # Send serialized user_data in JSON response
         return JsonResponse({"success": True, "user_data": serialized_data})
@@ -1066,8 +1066,10 @@ def view_custom_plan(request, trainer_id):
         if not custom_plan:
             return render(
                 request,
-                "error.html",
-                {"message": "No custom plan found for this trainer "},
+                "view_custom_plan.html",
+                {
+                    "message": "No custom plan found for this trainer ",
+                },
             )
 
         exercise_ids = custom_plan.get("exercise_ids", [])
@@ -1088,8 +1090,10 @@ def view_custom_plan(request, trainer_id):
     except Exception as e:
         return render(
             request,
-            "error.html",
-            {"message": f"An unexpected error occurred: {str(e)}"},
+            "view_custom_plan.html",
+            {
+                "error": str(e),
+            },
         )
 
     return render(
