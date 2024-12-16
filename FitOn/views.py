@@ -2972,36 +2972,35 @@ def search_users(request):
 
 
 def mark_messages_as_read(request, room_id):
-    try:
-        user_id = request.session.get("user_id")
-        if not user_id:
-            return JsonResponse({"error": "User not authenticated"}, status=401)
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return JsonResponse({"error": "User not authenticated"}, status=401)
 
-        # Fetch unread messages
-        unread_messages = chat_table.query(
-            KeyConditionExpression=Key("room_name").eq(room_id),
-            FilterExpression=Attr("sender").ne(user_id) & Attr("is_read").eq(False),
+    # Fetch unread messages
+    unread_messages = chat_table.query(
+        KeyConditionExpression=Key("room_name").eq(room_id),
+        FilterExpression=Attr("sender").ne(user_id) & Attr("is_read").eq(False),
+    )
+
+    # Mark each message as read
+    for msg in unread_messages.get("Items", []):
+        chat_table.update_item(
+            Key={
+                "room_name": room_id,
+                "timestamp": msg["timestamp"],
+            },
+            UpdateExpression="SET is_read = :true",
+            ExpressionAttributeValues={":true": True},
         )
 
-        # Mark each message as read
-        for msg in unread_messages.get("Items", []):
-            chat_table.update_item(
-                Key={
-                    "room_name": room_id,
-                    "timestamp": msg["timestamp"],
-                },
-                UpdateExpression="SET is_read = :true",
-                ExpressionAttributeValues={":true": True},
-            )
+    # Return success response
+    return JsonResponse({"code": "200", "message": "Messages marked as read"})
 
-        # Return success response
-        return JsonResponse({"code": "200", "message": "Messages marked as read"})
-
-    except Exception as e:
-        print(f"Error in mark_messages_as_read: {e}")
-        return JsonResponse(
-            {"error": "An error occurred while processing the request."}, status=500
-        )
+    # except Exception as e:
+    #     print(f"Error in mark_messages_as_read: {e}")
+    #     return JsonResponse(
+    #         {"error": "An error occurred while processing the request."}, status=500
+    #     )
 
 
 def get_group_members(request, group_name):
