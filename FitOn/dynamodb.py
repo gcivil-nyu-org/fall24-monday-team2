@@ -1479,3 +1479,25 @@ def get_sleep_user_goals(user_id):
     existing_goals = response.get("Items", [])
     value = existing_goals[0]["Value"] if existing_goals else None
     return value
+
+
+def get_custom_user_goals(user_id):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+    response = user_goals_table.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("custom"),
+    )
+    existing_goals = response.get("Items", [])
+    return existing_goals if existing_goals else None
+
+
+def get_activity_user_goals(user_id):
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+    response = user_goals_table.query(
+        KeyConditionExpression=Key("user_id").eq(user_id),
+        FilterExpression=Attr("Type").eq("activity"),
+    )
+    existing_goals = response.get("Items", [])
+    return existing_goals if existing_goals else None
