@@ -163,4 +163,19 @@ urlpatterns = [
     path("fitness-goals/", views.fitness_goals_view, name="fitness_goals"),
     path("fitness-goals/edit/", views.edit_goal, name="edit_goal"),
     path("fitness-goals/delete/", views.delete_goal, name="delete_goal"),
+    path(
+        "trainer/create_custom_plan/<str:user_id>/",
+        views.create_custom_plan,
+        name="create_custom_plan",
+    ),
+    path(
+        "user/view_custom_plan/<str:trainer_id>/",
+        views.view_custom_plan,
+        name="view_custom_plan",
+    ),
+    path(
+        "user/request_custom_plan/",
+        views.request_custom_plan,
+        name="request_custom_plan",
+    ),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

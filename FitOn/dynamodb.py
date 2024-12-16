@@ -30,6 +30,7 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
+custom_plans_table = dynamodb.Table("CustomPlans")
 
 chat_table = dynamodb.Table("chat_table")
 
@@ -671,6 +672,21 @@ def remove_from_list(user_id, field, value):
         ConditionExpression=f"contains({field}, :val)",
         ExpressionAttributeValues={":val": value},
     )
+
+
+def store_custom_plan(user_id, trainer_id, exercise_ids):
+    try:
+        custom_plans_table.put_item(
+            Item={
+                "user_id": user_id,
+                "trainer_id": trainer_id,
+                "exercise_ids": exercise_ids,
+                "created_at": str(datetime.now()),
+            }
+        )
+        return {"success": True, "message": "Custom plan created successfully."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 
 # -------------------------------

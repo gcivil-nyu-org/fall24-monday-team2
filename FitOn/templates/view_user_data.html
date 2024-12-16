@@ -7,6 +7,20 @@
 
 {% if user_data %}
     <div class="table-container">
+        <div class="row my-5">
+            <div class="col-md-12 text-center">
+                {% if existing_plan %}
+                    <button class="btn submit-button" data-toggle="modal" data-target="#customPlanModal">
+                        Modify Custom Plan
+                    </button>
+                {% else %}
+                    <button class="btn submit-button" data-toggle="modal" data-target="#customPlanModal">
+                        Create Custom Plan
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Health Metrics Chart Section -->
         <div class="row my-5">
             <div class="col-md-6">
@@ -50,13 +64,54 @@
             </div>
         </div>
     </div>
+
+    <!-- Modal for Custom Plan Creation -->
+    <div class="modal fade" id="customPlanModal" tabindex="-1" role="dialog" aria-labelledby="customPlanModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="customPlanModalLabel">{% if existing_plan %}Modify{% else %}Create{% endif %} Custom Plan</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="customPlanForm">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label for="exerciseSelection">Select 3 Exercises</label>
+                            <select id="exerciseSelection" name="exercise_ids" class="form-control" multiple size="10" required>
+                                {% for exercise in exercises %}
+                                    <option value="{{ exercise.id }}" 
+                                        {% if exercise.id|stringformat:"s" in existing_plan.exercise_ids %} selected {% endif %}>
+                                        {{exercise.name }} - {{ exercise.category }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+                    <div class="alert alert-danger" id="formError" style="display: none;">
+                        You must select exactly 3 exercises
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-success" id="submitCustomPlan">Submit Plan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 {% else %}
     <div class="no-data-container">
         <h2>No health data available for this user.</h2>
     </div>
 {% endif %}
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Include Bootstrap JS (Make sure this is after jQuery) -->
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         const userData = {{ user_data | safe }};
@@ -216,6 +271,42 @@
                         borderWidth: 1
                     }]
                 },
+            });
+        }
+    });
+    
+    document.getElementById('submitCustomPlan').addEventListener('click', function() {
+        var selectedExercises = Array.from(document.getElementById('exerciseSelection').selectedOptions).map(option => option.value);
+
+        if (selectedExercises.length !== 3) {
+            document.getElementById('formError').style.display = 'block';
+        } else {
+            document.getElementById('formError').style.display = 'none';
+
+            // Send data via AJAX
+            fetch("{% url 'create_custom_plan' user_id=user_data.user_id %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    exercise_ids: selectedExercises
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Close modal and show success message
+                    $('#customPlanModal').modal('hide');
+                    alert('Custom plan created successfully!');
+                } else {
+                    alert('Error creating custom plan.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error creating custom plan.');
             });
         }
     });
