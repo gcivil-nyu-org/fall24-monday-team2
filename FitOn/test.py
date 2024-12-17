@@ -6323,60 +6323,96 @@ class DynamoDBTests2(TestCase):
 
     def setUp(self):
         # Use an existing DynamoDB table
-        self.dynamodb = boto3.resource('dynamodb', region_name='us-west-2')
-        self.users_table = self.dynamodb.Table('Users')
+        self.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+        self.users_table = self.dynamodb.Table("Users")
 
         # Insert test data into the 'Users' table if not already inserted
-        self.users_table.put_item(Item={'user_id': '1', 'is_fitness_trainer': False, 'is_admin': False, 'gender': 'M', 'date_of_birth': '2000-01-01'})
-        self.users_table.put_item(Item={'user_id': '2', 'is_fitness_trainer': True, 'is_admin': False, 'gender': 'F', 'date_of_birth': '1995-01-01'})
-        self.users_table.put_item(Item={'user_id': '3', 'is_fitness_trainer': False, 'is_admin': False, 'gender': 'PNTS', 'date_of_birth': '1990-01-01'})
+        self.users_table.put_item(
+            Item={
+                "user_id": "1",
+                "is_fitness_trainer": False,
+                "is_admin": False,
+                "gender": "M",
+                "date_of_birth": "2000-01-01",
+            }
+        )
+        self.users_table.put_item(
+            Item={
+                "user_id": "2",
+                "is_fitness_trainer": True,
+                "is_admin": False,
+                "gender": "F",
+                "date_of_birth": "1995-01-01",
+            }
+        )
+        self.users_table.put_item(
+            Item={
+                "user_id": "3",
+                "is_fitness_trainer": False,
+                "is_admin": False,
+                "gender": "PNTS",
+                "date_of_birth": "1990-01-01",
+            }
+        )
 
     def test_get_standard_users(self):
         # Test retrieving standard users
         standard_users = get_standard_users()  # Your function that gets standard users
 
         # Assert that gender and age were updated correctly
-        self.assertEqual(standard_users[0]['gender'], 'Male')  # Assuming 'M' maps to 'Male'
-        self.assertEqual(standard_users[1]['gender'], 'Other')  # Assuming 'PNTS' maps to 'Unknown'
-        self.assertEqual(standard_users[0]['age'], 'Elderly')  # Based on birth date '2000-01-01'
-        self.assertEqual(standard_users[1]['age'], 'Young Adult')  # Based on birth date '1990-01-01'
+        self.assertEqual(
+            standard_users[0]["gender"], "Male"
+        )  # Assuming 'M' maps to 'Male'
+        self.assertEqual(
+            standard_users[1]["gender"], "Other"
+        )  # Assuming 'PNTS' maps to 'Unknown'
+        self.assertEqual(
+            standard_users[0]["age"], "Elderly"
+        )  # Based on birth date '2000-01-01'
+        self.assertEqual(
+            standard_users[1]["age"], "Young Adult"
+        )  # Based on birth date '1990-01-01'
 
     def test_send_data_request_to_user(self):
         # Test sending data request to a user
-        result = send_data_request_to_user('2', '1')  # Your function for sending data requests
+        result = send_data_request_to_user(
+            "2", "1"
+        )  # Your function for sending data requests
 
         # Assert that the result is True, indicating the data request was sent
         self.assertTrue(result)
 
         # Retrieve the updated user data to check if the list is updated
-        standard_user = self.users_table.get_item(Key={'user_id': '1'})['Item']
-        fitness_trainer = self.users_table.get_item(Key={'user_id': '2'})['Item']
+        standard_user = self.users_table.get_item(Key={"user_id": "1"})["Item"]
+        fitness_trainer = self.users_table.get_item(Key={"user_id": "2"})["Item"]
 
         # Assert that the standard user's waiting list now includes the trainer's ID
-        self.assertIn('2', standard_user['waiting_list_of_trainers'])
+        self.assertIn("2", standard_user["waiting_list_of_trainers"])
 
         # Assert that the fitness trainer's waiting list now includes the standard user's ID
-        self.assertIn('1', fitness_trainer['waiting_list_of_users'])
+        self.assertIn("1", fitness_trainer["waiting_list_of_users"])
 
     def test_cancel_data_request_to_user(self):
         # First, send a data request to the user
-        send_data_request_to_user('2', '1')
+        send_data_request_to_user("2", "1")
 
         # Now test canceling the data request
-        result = cancel_data_request_to_user('2', '1')  # Your function for canceling data requests
+        result = cancel_data_request_to_user(
+            "2", "1"
+        )  # Your function for canceling data requests
 
         # Assert that the result is True, indicating the data request was canceled
         self.assertTrue(result)
 
         # Retrieve the updated user data to check if the lists were updated
-        standard_user = self.users_table.get_item(Key={'user_id': '1'})['Item']
-        fitness_trainer = self.users_table.get_item(Key={'user_id': '2'})['Item']
+        standard_user = self.users_table.get_item(Key={"user_id": "1"})["Item"]
+        fitness_trainer = self.users_table.get_item(Key={"user_id": "2"})["Item"]
 
         # Assert that the standard user's waiting list no longer includes the trainer's ID
-        self.assertNotIn('2', standard_user['waiting_list_of_trainers'])
+        self.assertNotIn("2", standard_user["waiting_list_of_trainers"])
 
         # Assert that the fitness trainer's waiting list no longer includes the standard user's ID
-        self.assertNotIn('1', fitness_trainer['waiting_list_of_users'])
+        self.assertNotIn("1", fitness_trainer["waiting_list_of_users"])
 
     def tearDown(self):
         # No need to delete the Users table; leave it as is
