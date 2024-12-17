@@ -27,7 +27,6 @@
                             <td>
                                 <div class="button-container" style="margin-top: 0px;">
                                     <button class="submit-button view-data-button" data-userId="{{ user.user_id }}">View Data</button>
-                                    <button class="submit-button">Chat</button>
                                 </div>
                             </td>
                         </tr>
@@ -139,14 +138,20 @@
                         }
                     })
                     .then(response => {
-                        console.log(response); 
                         if (response.ok) {
+                            return response.json()
+                        }
+                        else {
+                            console.error("Error:", response.status);
+                        }
+                    })
+                    .then(data => {
+                        if (data.user_data) {
                             const renderUrl = "{% url 'view_user_data' user_id='__user_id__' %}".replace('__user_id__', userId);
                             window.location.href = renderUrl;
-                            showNotificationAndReload("An unexpected error occurred. Please try again later.");
+                            // showNotificationAndReload("An unexpected error occurred. Please try again later.");
                         } else {
                             console.error("My Data Error:", data.error);
-                            console.log(data)
                             showNotificationAndReload("An unexpected error occurred. Please try again later.");
                             return;
                         }
@@ -176,7 +181,6 @@
                         body: JSON.stringify({ user_id: userId })
                     })
                     .then(response => {
-                        console.log(response); 
                         if (response.ok) {
                             showNotificationAndReload(`Request ${event.target.classList.contains("request-button") ? 'sent' : 'cancelled'} successfully!`);
                         } else {

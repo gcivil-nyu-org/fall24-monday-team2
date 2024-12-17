@@ -3,7 +3,8 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 # from django.core.serializers import serialize
 from .models import Exercise, MuscleGroup, User
-from django.http import JsonResponse
+
+# from django.http import JsonResponse
 
 from .dynamodb import (
     add_fitness_trainer_application,
@@ -52,6 +53,15 @@ from .dynamodb import (
     mark_user_as_warned_thread,
     mark_user_as_warned_comment,
     set_user_warned_to_false,
+    get_users_by_username_query,
+    get_step_user_goals,
+    get_sleep_user_goals,
+    get_weight_user_goals,
+    get_custom_user_goals,
+    get_activity_user_goals,
+    get_user_by_uid,
+    store_custom_plan,
+    custom_plans_table,
 )
 from .rds import rds_main, fetch_user_data
 
@@ -114,6 +124,7 @@ from googleapiclient.discovery import build
 import asyncio
 from collections import defaultdict
 from boto3.dynamodb.conditions import Key, Attr
+from django.views.decorators.csrf import csrf_exempt
 
 # Define metric data types
 dataTypes = {
@@ -829,9 +840,26 @@ def fitness_trainers_list_view(request):
         for trainer in trainers
         if trainer["user_id"] in waiting_list_of_trainers
     ]
-    my_trainers = [
-        trainer for trainer in trainers if trainer["user_id"] in trainers_with_access
-    ]
+    my_trainers = []
+    for trainer in trainers:
+        if trainer["user_id"] in trainers_with_access:
+            # Check if the user has an existing custom workout plan with this trainer
+            response = custom_plans_table.scan(
+                FilterExpression="user_id = :user_id AND trainer_id = :trainer_id",
+                ExpressionAttributeValues={
+                    ":user_id": user_id,
+                    ":trainer_id": trainer["user_id"],
+                },
+            )
+            existing_plan = None
+            if response["Items"]:
+                existing_plan = response["Items"][
+                    0
+                ]  # Assuming the first item is the existing plan
+            # Add the trainer along with the existing plan information
+            trainer["existing_plan"] = existing_plan
+            my_trainers.append(trainer)
+
     remaining_trainers = [
         trainer
         for trainer in trainers
@@ -908,30 +936,42 @@ def cancel_data_request(request):
         return JsonResponse({"error": "Invalid method"}, status=405)
 
 
-def view_user_data(request):
-    print("view_user_data is being called")
+def view_user_data(request, user_id):
     try:
-        # Retrieve the data from the session
         user_data = request.session.get("user_data")
-        print("User data in session:", user_data)
         if not user_data:
-            # Handle missing session data
             raise ValueError("User data is not available in the session.")
-        # Render the HTML template with the session data
+        if "user_id" not in user_data:
+            user_data["user_id"] = user_id
+
+        exercises = Exercise.objects.all()
+
+        response = custom_plans_table.scan(
+            FilterExpression="user_id = :user_id AND trainer_id = :trainer_id",
+            ExpressionAttributeValues={
+                ":user_id": user_id,
+                ":trainer_id": request.session.get("user_id"),
+            },
+        )
+        existing_plan = None
+        if response["Items"]:
+            existing_plan = response["Items"][0]
+
         return render(
             request,
             "view_user_data.html",
             {
                 "user_data": user_data,
+                "exercises": exercises,
+                "existing_plan": existing_plan,
             },
         )
     except Exception as e:
-        # Handle errors
         return render(
             request,
-            "view_user_data.html",
+            "error.html",
             {
-                "error": str(e),
+                "error_message": str(e),
             },
         )
 
@@ -940,7 +980,6 @@ def store_session_data(request, user_data):
     # Store data in the session
     request.session["user_data"] = user_data
     request.session.modified = True  # Ensure the session is marked as modified
-    print(request.session.get("user_data"))
     return
 
 
@@ -961,21 +1000,134 @@ def serialize_data(data):
     return str(data)
 
 
-# Updated code for async_view_user_data
 async def async_view_user_data(request, user_id):
     try:
         # Fetch the user data asynchronously
-        user = await sync_to_async(get_user)(user_id)
+        user = get_user(user_id)
         user_email = user.get("email")
         user_data = await fetch_user_data(user_email)
         # Serialize user data
         serialized_data = serialize_data(user_data)
         # Store the data in the session
-        await sync_to_async(store_session_data)(request, serialized_data)
+        store_session_data(request, serialized_data)
         # Send serialized user_data in JSON response
         return JsonResponse({"success": True, "user_data": serialized_data})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+def create_custom_plan(request, user_id):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            exercise_ids = data.get("exercise_ids", [])
+
+            if len(exercise_ids) != 3:
+                return JsonResponse(
+                    {"success": False, "error": "You must select exactly 3 exercises."},
+                    status=400,
+                )
+
+            # Store the custom plan using the function from dynamodb.py
+            result = store_custom_plan(
+                user_id, request.session.get("user_id"), exercise_ids
+            )
+
+            if result["success"]:
+                return JsonResponse({"success": True, "message": result["message"]})
+            else:
+                return JsonResponse(
+                    {"success": False, "error": result["message"]}, status=500
+                )
+
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+    return JsonResponse(
+        {"success": False, "error": "Invalid request method."}, status=405
+    )
+
+
+def view_custom_plan(request, trainer_id):
+    user_id = request.session.get("user_id")
+
+    try:
+        response = custom_plans_table.scan(
+            FilterExpression="user_id = :user_id AND trainer_id = :trainer_id",
+            ExpressionAttributeValues={
+                ":user_id": user_id,
+                ":trainer_id": trainer_id,
+            },
+        )
+
+        custom_plan = None
+        if response["Items"]:
+            custom_plan = response["Items"][0]
+        if not custom_plan:
+            return render(
+                request,
+                "view_custom_plan.html",
+                {
+                    "message": "No custom plan found for this trainer ",
+                },
+            )
+
+        exercise_ids = custom_plan.get("exercise_ids", [])
+        exercises = Exercise.objects.all()
+
+        filtered_exercises = exercises.filter(
+            id__in=[int(exercise_id) for exercise_id in exercise_ids]
+        )
+        filtered_exercises_image_urls = []
+        for exercise in filtered_exercises:
+            name = re.sub(r"[^a-zA-Z0-9-(),']", "_", exercise.name)
+            url = {
+                "url_0": f"https://fiton-static-files.s3.us-west-2.amazonaws.com/exercise_images/{name}_0.jpg",
+                "url_1": f"https://fiton-static-files.s3.us-west-2.amazonaws.com/exercise_images/{name}_1.jpg",
+            }
+            filtered_exercises_image_urls.append(url)
+
+    except Exception as e:
+        return render(
+            request,
+            "view_custom_plan.html",
+            {
+                "error": str(e),
+            },
+        )
+
+    return render(
+        request,
+        "view_custom_plan.html",
+        {
+            "custom_plan": custom_plan,
+            "custom_plan_exercises": zip(
+                filtered_exercises, filtered_exercises_image_urls
+            ),
+        },
+    )
+
+
+def request_custom_plan(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        trainer_id = data.get("trainer_id")
+        trainer = get_user(trainer_id)
+
+        subject = "User Requested Custom Workout Plan"
+        message = "User Requested Custom Workout Plan"
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = trainer.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "text"
+        email_message.send()
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request method."})
 
 
 # -------------------------------
@@ -1005,7 +1157,6 @@ def thread_detail_view(request, thread_id):
 
     if request.method == "POST":
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
-
             # Parse the AJAX request data
             data = json.loads(request.body.decode("utf-8"))
             action = data.get("action")
@@ -1179,17 +1330,15 @@ def new_thread_view(request):
             )
 
     # If the request method is GET, simply show the form
-    return render(request, "new_thread.html")
+    return render(request, "new_thread.html", {"user": user})
 
 
 def delete_post_view(request):
-
     if (
         request.method == "POST"
         and request.headers.get("x-requested-with") == "XMLHttpRequest"
     ):
         try:
-
             data = json.loads(request.body.decode("utf-8"))
             post_id = data.get("post_id")
             thread_id = data.get("thread_id")  # Make sure you're getting thread_id too
@@ -1214,7 +1363,6 @@ def delete_post_view(request):
 
 
 def forum_view(request):
-
     user_id = request.session.get("username")
     user = get_user_by_username(user_id)
     if not user:
@@ -1513,6 +1661,8 @@ def sleep_plot(data):
 
     # Pass the plot path to the template
     context = {"sleep_data_json": sleep_data}
+    print("----------")
+    print(sleep_data)
     return context
 
 
@@ -1617,7 +1767,6 @@ def pressure_plot(data):
 
 
 async def fetch_metric_data(service, metric, total_data, duration, frequency, email):
-
     end_time = dt.datetime.now() - dt.timedelta(minutes=1)
 
     if duration == "day":
@@ -1831,6 +1980,8 @@ async def fetch_all_metric_data(request, duration, frequency):
             )
 
         await asyncio.gather(*tasks)
+        print("----- Total Data -----")
+        print(total_data)
         total_data = await get_sleep_scores(request, total_data)
         total_data = await format_bod_fitness_data(total_data)
 
@@ -1864,7 +2015,21 @@ async def get_metric_data(request):
         total_data = await fetch_all_metric_data(request, duration, frequency)
         rds_response = await rds_main(user_email, total_data)
         print("RDS Response: \n", rds_response)
-        context = {"data": total_data}
+
+        steps = get_step_user_goals(user_id)
+        weight = get_weight_user_goals(user_id)
+        sleep = get_sleep_user_goals(user_id)
+        activity = get_activity_user_goals(user_id)
+        custom = get_custom_user_goals(user_id)
+
+        context = {
+            "data": total_data,
+            "step_goal": steps,
+            "weight_goal": weight,
+            "sleep_goal": sleep,
+            "activity_goal": activity,
+            "custom_goal": custom,
+        }
         # print("Inside get metric:", context)
         return await sync_to_async(render)(
             request, "display_metrics_data.html", context
@@ -1915,7 +2080,31 @@ def health_data_view(request):
     for metric in metrics_data:
         metrics_data[metric].sort(key=lambda x: x["time"], reverse=True)
 
-    return render(request, "display_metrics_data.html", {"metrics_data": metrics_data})
+    step_goal = get_step_user_goals(user_id)
+    weight_goal = get_weight_user_goals(user_id)
+    sleep_goal = get_sleep_user_goals(user_id)
+    custom_goal = get_custom_user_goals(user_id)
+    return render(
+        request,
+        "display_metric_data.html",
+        {
+            "metrics_data": metrics_data,
+            "step_goal": step_goal,
+            "weight_goal": weight_goal,
+            "sleep_goal": sleep_goal,
+            "custom_goal": custom_goal,
+        },
+    )
+    # return render(
+    #     request,
+    #     "forums.html",
+    #     {
+    #         "user": user,
+    #         "threads": threads,
+    #         "users": users,
+    #         "is_banned": is_banned,
+    #     },
+    # )
 
 
 def add_reply(request):
@@ -2556,57 +2745,6 @@ def list_exercises(request):
 # Chat Functions
 # -------------------------------
 
-# def private_chat(request):
-#     username = request.session.get("username")
-#     user = get_user_by_username(username)
-
-#     users_with_chat_history = []
-
-#     # Get all users except the logged-in user
-#     users = get_users_without_specific_username(username)
-
-#     for u in users:
-#         room_id = create_room_id(user["user_id"], u["user_id"])
-#         chat_history = get_chat_history_from_db(room_id)
-
-#         if chat_history and chat_history.get("Items"):
-#             unread_count = 0
-
-#             # Count unread messages
-#             for msg in chat_history["Items"]:
-#                 if (
-#                     msg.get("receiver") == user["user_id"]
-#                     and not msg.get("is_read", False)
-#                 ):
-#                     unread_count += 1
-
-#             # Sort by the latest message timestamp
-#             latest_message = max(
-#                 chat_history["Items"], key=lambda x: x["timestamp"]
-#             )
-#             u["last_activity"] = latest_message["timestamp"]
-#             u["unread_count"] = unread_count  # Add unread message count
-#             users_with_chat_history.append(u)
-
-#     # Sort users with chat history by the latest activity timestamp
-#     users_with_chat_history = sorted(
-#         users_with_chat_history, key=lambda x: x["last_activity"], reverse=True
-#     )
-
-#     # Handle search query if provided
-#     search_query = request.GET.get("search", "").lower()
-#     if search_query:
-#         users_with_chat_history = [
-#             u for u in users_with_chat_history if search_query in u["username"].lower()
-#         ]
-
-#     # Prepare the context for the template
-#     dic = {
-#         "data": users_with_chat_history,  # Only users with chat history
-#         "mine": user,
-#     }
-#     return render(request, "chat.html", dic)
-
 
 def private_chat(request):
     username = request.session.get("username")
@@ -2655,31 +2793,10 @@ def private_chat(request):
     return render(request, "chat.html", dic)
 
 
-# change and t &
 def create_room_id(uid_a, uid_b):
     """Helper function to create consistent room IDs."""
     ids = sorted([uid_a, uid_b])
     return f"{ids[0]}and{ids[1]}"
-
-
-# def get_chat_history(request, room_id):
-#     # Fetch chat history
-#     response = get_chat_history_from_db(room_id)
-#     items = response.get("Items", [])
-
-#     # Update each unread message to mark it as read
-#     for item in items:
-#         if item.get("receiver") == request.session.get("user_id") and not item.get("is_read", False):
-#             chat_table.update_item(
-#                 Key={
-#                     "room_name": room_id,
-#                     "timestamp": item["timestamp"],  # Ensure you include the sort key
-#                 },
-#                 UpdateExpression="SET is_read = :true",
-#                 ExpressionAttributeValues={":true": True},
-#             )
-
-#     return JsonResponse({"messages": items})
 
 
 def get_chat_history(request, room_id):
@@ -2695,6 +2812,7 @@ def get_chat_history(request, room_id):
 
 def group_chat(request):
     username = request.session.get("username")
+    print(f"[DEBUG] Username in group_chat view: {username}")
     user = get_user_by_username(username)
     allUser = get_users_without_specific_username(username)
 
@@ -2733,16 +2851,16 @@ def create_group_chat(request):
     (roomId.save)()
 
     for i in allUser:
-        try:
-            roomId = (GroupChatMember.objects.create)(
-                name=str(roomName),
-                uid=i,
-                status=GroupChatMember.AgreementStatus.COMPLETED,
-            )
-            (roomId.save)()
-        except Exception as e:
-            print(f"Error creating GroupWebSocket for {i}: {e}")
-            return JsonResponse({"code": "500", "message": "Database error"})
+        # try:
+        roomId = (GroupChatMember.objects.create)(
+            name=str(roomName),
+            uid=i,
+            status=GroupChatMember.AgreementStatus.COMPLETED,
+        )
+        (roomId.save)()
+        # except Exception as e:
+        #     print(f"Error creating GroupWebSocket for {i}: {e}")
+        #     return JsonResponse({"code": "500", "message": "Database error"})
     dic = {"code": "200", "message": "ok"}
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
@@ -2753,17 +2871,17 @@ def invite_to_group(request):
     roomName = payload.get("roomName")
 
     for i in allUser:
-        try:
-            roomId = (GroupChatMember.objects.create)(
-                name=str(roomName),
-                uid=i,
-                status=GroupChatMember.AgreementStatus.IN_PROGRESS,
-            )
-            (roomId.save)()
+        # try:
+        roomId = (GroupChatMember.objects.create)(
+            name=str(roomName),
+            uid=i,
+            status=GroupChatMember.AgreementStatus.IN_PROGRESS,
+        )
+        (roomId.save)()
 
-        except Exception as e:
-            print(f"Error creating GroupWebSocket for {i}: {e}")
-            return JsonResponse({"code": "500", "message": "Database error"})
+        # except Exception as e:
+        #     print(f"Error creating GroupWebSocket for {i}: {e}")
+        #     return JsonResponse({"code": "500", "message": "Database error"})
     dic = {"code": "200", "message": "ok"}
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
@@ -2791,55 +2909,44 @@ def leave_group_chat(request):
     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
 
-def get_pending_invitations(request):
-    username = request.session.get("username")
+# def get_pending_invitations(request):
+#     username = request.session.get("username")
 
-    # Retrieve the user ID using the `get_user_by_username` function
-    user_id = get_user_by_username(username)["user_id"]
+#     # Retrieve the user ID using the `get_user_by_username` function
+#     user_id = get_user_by_username(username)["user_id"]
 
-    # Fetch pending invitations for the user from the database
-    pending_invitations = GroupChatMember.objects.filter(
-        uid=user_id, status=GroupChatMember.AgreementStatus.IN_PROGRESS
-    )
+#     # Fetch pending invitations for the user from the database
+#     pending_invitations = GroupChatMember.objects.filter(
+#         uid=user_id, status=GroupChatMember.AgreementStatus.IN_PROGRESS
+#     )
 
-    # Convert GroupChatMember objects to a list of dictionaries
-    invitation_data = []
-    for invitation in pending_invitations:
-        invitation_data.append(
-            {
-                "name": invitation.name,
-                "uid": invitation.uid,
-                "status": invitation.status,
-            }
-        )
+#     # Convert GroupChatMember objects to a list of dictionaries
+#     invitation_data = []
+#     for invitation in pending_invitations:
+#         invitation_data.append(
+#             {
+#                 "name": invitation.name,
+#                 "uid": invitation.uid,
+#                 "status": invitation.status,
+#             }
+#         )
 
-    # Return the serialized data as JSON response
-    dic = {"code": "200", "message": "ok", "data": invitation_data}
-    return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
+#     # Return the serialized data as JSON response
+#     dic = {"code": "200", "message": "ok", "data": invitation_data}
+#     return JsonResponse(dic, json_dumps_params={"ensure_ascii": False})
 
 
 def search_users(request):
-    query = request.GET.get(
-        "query", ""
-    ).lower()  # Convert to lowercase for case-insensitive search
-    username = request.session.get("username")
-
+    query = request.GET.get("query", "").lower()
+    print(f"Search query: {query}")  # Debug log for the query
     try:
-        all_users = get_users_without_specific_username(
-            username
-        )  # Exclude current user
-        matching_users = [
-            {
-                "username": user["username"],
-                "user_id": user["user_id"],
-            }
-            for user in all_users
-            if query in user["username"].lower()
+        matching_users = get_users_by_username_query(query)
+        print(f"Matching users: {matching_users}")  # Debug log for results
+        result = [
+            {"username": user["username"], "user_id": user["user_id"]}
+            for user in matching_users
         ]
-        # print(f"Search query: {query}")
-        # print(f"Matching users: {matching_users}")
-        # print(f"Matching users after filtering: {matching_users}")
-        return JsonResponse(matching_users, safe=False)
+        return JsonResponse(result, safe=False)
     except Exception as e:
         print(f"Error in search_users function: {e}")
         return JsonResponse(
@@ -2847,8 +2954,31 @@ def search_users(request):
         )
 
 
+# def mark_messages_as_read(request, room_id):
+#     user_id = request.session.get("user_id")
+
+#     # Fetch unread messages
+#     unread_messages = chat_table.query(
+#         KeyConditionExpression=Key("room_name").eq(room_id),
+#         FilterExpression=Attr("sender").ne(user_id) & Attr("is_read").eq(False),
+#     )
+
+#     # Mark each message as read
+#     for msg in unread_messages.get("Items", []):
+#         chat_table.update_item(
+#             Key={
+#                 "room_name": room_id,
+#                 "timestamp": msg["timestamp"],
+#             },
+#             UpdateExpression="SET is_read = :true",
+#             ExpressionAttributeValues={":true": True},
+#         )
+
+
 def mark_messages_as_read(request, room_id):
     user_id = request.session.get("user_id")
+    if not user_id:
+        return JsonResponse({"error": "User not authenticated"}, status=401)
 
     # Fetch unread messages
     unread_messages = chat_table.query(
@@ -2866,3 +2996,194 @@ def mark_messages_as_read(request, room_id):
             UpdateExpression="SET is_read = :true",
             ExpressionAttributeValues={":true": True},
         )
+
+    # Return success response
+    return JsonResponse({"code": "200", "message": "Messages marked as read"})
+
+    # except Exception as e:
+    #     print(f"Error in mark_messages_as_read: {e}")
+    #     return JsonResponse(
+    #         {"error": "An error occurred while processing the request."}, status=500
+    #     )
+
+
+def get_group_members(request, group_name):
+    group_members = GroupChatMember.objects.filter(name=group_name)
+    member_data = []
+
+    for member in group_members:
+        # try:
+        # Fetch the User instance from DynamoDB using get_user_by_uid
+        user = get_user_by_uid(member.uid)  # Call the DynamoDB helper function
+        if user:
+            member_data.append(
+                {
+                    "username": user[
+                        "username"
+                    ],  # Replace with the correct key from DynamoDB response
+                    "id": user[
+                        "user_id"
+                    ],  # Replace with the correct key for the unique identifier
+                }
+            )
+        # else:
+        #     print(f"User with UID {member.uid} not found in DynamoDB.")
+        # except Exception as e:
+        #     print(f"Error fetching user with UID {member.uid}: {e}")
+        #     continue
+
+    return JsonResponse({"members": member_data}, status=200)
+
+
+@csrf_exempt
+def add_users_to_group(request):
+    if request.method == "POST":
+        # try:
+        data = json.loads(request.body)
+        room_name = data.get("roomName")
+        user_ids = data.get("allUser", [])
+
+        if not room_name or not user_ids:
+            return JsonResponse(
+                {"code": "400", "message": "Room name and users are required."}
+            )
+
+        # Add users to the group chat
+        for user_id in user_ids:
+            GroupChatMember.objects.get_or_create(
+                name=room_name,
+                uid=user_id,
+                defaults={"status": GroupChatMember.AgreementStatus.COMPLETED},
+            )
+
+        return JsonResponse({"code": "200", "message": "Users added successfully."})
+        # except Exception as e:
+        #     return JsonResponse(
+        #         {"code": "500", "message": f"Error adding users: {str(e)}"}
+        #     )
+    return JsonResponse({"code": "405", "message": "Method not allowed."})
+
+
+# Fitness Goals View
+def fitness_goals_view(request):
+    user_id = request.session.get("user_id")
+
+    user = get_user(user_id)
+
+    if not user:
+        messages.error(request, "User not found.")
+        return redirect("login")
+
+    dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+    user_goals_table = dynamodb.Table("UserGoals")
+
+    if request.method == "POST":
+        # Retrieve form data
+        goal_type = request.POST.get("goal_type")  # e.g., "weight", "steps", etc.
+        custom_name = request.POST.get("goal_name", "")  # Only for custom goals
+        goal_value = request.POST.get(
+            "goal_value"
+        )  # Goal value, e.g., 150 lbs, 10,000 steps
+
+        restricted_types = ["weight", "steps", "sleep"]
+        if goal_type in restricted_types:
+            try:
+                response = user_goals_table.query(
+                    KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(
+                        user_id
+                    )
+                )
+                existing_goals = response.get("Items", [])
+                if any(goal["Type"] == goal_type for goal in existing_goals):
+                    messages.error(
+                        request,
+                        f"You already have a {goal_type} goal. Please edit it instead.",
+                    )
+                    return redirect(
+                        "fitness_goals"
+                    )  # Redirect back to the fitness goals page
+            except Exception as e:
+                messages.error(request, f"Failed to check existing goals: {e}")
+                return redirect("fitness_goals")
+
+        # Create a new GoalID and get the user_id
+        goal_id = str(uuid.uuid4())
+
+        # Prepare the item for DynamoDB
+        item = {
+            "GoalID": goal_id,
+            "user_id": user_id,
+            "Type": goal_type,
+            "Name": custom_name if goal_type in ["custom", "activity"] else None,
+            "Value": goal_value,
+        }
+
+        # Add the goal to DynamoDB
+        try:
+            user_goals_table.put_item(Item=item)
+        except Exception as e:
+            messages.error(request, f"Failed to add goal: {e}")
+
+        return redirect("fitness_goals")  # Redirect back to the fitness goals page
+
+    try:
+        response = user_goals_table.query(
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("user_id").eq(user_id)
+        )
+        goals = response.get("Items", [])
+    except Exception as e:
+        goals = []
+        messages.error(request, f"Failed to fetch goals: {e}")
+
+    return render(request, "fitness_goals.html", {"user": user, "goals": goals})
+
+
+def edit_goal(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            goal_id = data.get("goal_id")
+            goal_value = data.get("goal_value")
+            goal_name = data.get("goal_name", None)
+
+            dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+            user_goals_table = dynamodb.Table("UserGoals")
+
+            user_id = request.session.get("user_id")
+
+            # Update the goal in DynamoDB
+            user_goals_table.update_item(
+                Key={
+                    "GoalID": goal_id,
+                    "user_id": user_id,
+                },
+                UpdateExpression="SET #val = :val, #name = :name",
+                ExpressionAttributeNames={"#val": "Value", "#name": "Name"},
+                ExpressionAttributeValues={":val": goal_value, ":name": goal_name},
+            )
+            return JsonResponse({"message": "Goal updated successfully!"}, status=200)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    return JsonResponse({"error": "Invalid request"}, status=400)
+
+
+def delete_goal(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            goal_id = data.get("goal_id")
+            user_id = request.session.get("user_id")
+
+            if not goal_id or not user_id:
+                return JsonResponse({"error": "Invalid request."}, status=400)
+
+            dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+            user_goals_table = dynamodb.Table("UserGoals")
+            # Delete the goal from DynamoDB
+            user_goals_table.delete_item(Key={"GoalID": goal_id, "user_id": user_id})
+            return JsonResponse({"message": "Goal deleted successfully."}, status=200)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return JsonResponse({"error": "Invalid request method."}, status=400)

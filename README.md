@@ -1,6 +1,6 @@
 # fall24-monday-team2
 
-Buid Status:  [![Build Status](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2.svg?token=ghd6pxZi8eiJyeoYpQzW&branch=steven)](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2)
+Buid Status:  [![Build Status](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2.svg?token=ghd6pxZi8eiJyeoYpQzW&branch=main)](https://app.travis-ci.com/gcivil-nyu-org/fall24-monday-team2)
 
 Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/fall24-monday-team2/badge.svg?branch=main)](https://coveralls.io/github/gcivil-nyu-org/fall24-monday-team2?branch=main)
 
@@ -13,6 +13,3 @@ Coverage:  [![Coverage Status](https://coveralls.io/repos/github/gcivil-nyu-org/
 
 ## Wiki:
 https://github.com/gcivil-nyu-org/fall24-monday-team2/wiki
-
-## TODO:
-- Delete threads by user and other user oriented information before deleting the user

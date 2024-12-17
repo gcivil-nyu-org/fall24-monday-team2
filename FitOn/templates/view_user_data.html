@@ -7,148 +7,308 @@
 
 {% if user_data %}
     <div class="table-container">
+        <div class="row my-5">
+            <div class="col-md-12 text-center">
+                {% if existing_plan %}
+                    <button class="btn submit-button" data-toggle="modal" data-target="#customPlanModal">
+                        Modify Custom Plan
+                    </button>
+                {% else %}
+                    <button class="btn submit-button" data-toggle="modal" data-target="#customPlanModal">
+                        Create Custom Plan
+                    </button>
+                {% endif %}
+            </div>
+        </div>
+
         <!-- Health Metrics Chart Section -->
         <div class="row my-5">
             <div class="col-md-6">
-                <h3>Steps Count</h3>
+                <h3>Steps Count (Daily)</h3>
                 <canvas id="stepsChart"></canvas>
-            </div>
-            <div class="col-md-6">
-                <h3>Heart Rate</h3>
-                <canvas id="heartRateChart"></canvas>
+                <p id="stepsEmpty" style="display:none;">No steps data available.</p>
             </div>
         </div>
 
         <div class="row my-5">
             <div class="col-md-6">
-                <h3>Sleep Data</h3>
-                <canvas id="sleepChart"></canvas>
+                <h3>Heart Rate (Hourly)</h3>
+                <canvas id="heartRateChart"></canvas>
+                <p id="heartRateEmpty" style="display:none;">No heart rate data available.</p>
             </div>
+            <div class="col-md-6">
+                <h3>Resting Heart Rate (Hourly)</h3>
+                <canvas id="restingHeartRateChart"></canvas>
+                <p id="restingHeartRateEmpty" style="display:none;">No resting heart rate data available.</p>
+            </div>
+        </div>
+
+        <div class="row my-5">
             <div class="col-md-6">
                 <h3>Blood Oxygen Levels</h3>
                 <canvas id="oxygenChart"></canvas>
+                <p id="oxygenEmpty" style="display:none;">No oxygen data available.</p>
+            </div>
+            <div class="col-md-6">
+                <h3>Blood Pressure</h3>
+                <canvas id="pressureChart"></canvas>
+                <p id="pressureEmpty" style="display:none;">No pressure data available.</p>
             </div>
         </div>
 
         <div class="row my-5">
             <div class="col-md-6">
-                <h3>Body Fitness</h3>
-                <canvas id="bodyFitnessChart"></canvas>
-            </div>
-            <div class="col-md-6">
-                <h3>Top Activities</h3>
-                <table border="1">
-                    <thead>
-                        <tr>
-                            <th>Exercise</th>
-                            <th>Duration (minutes)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for activity in user_data.activities %}
-                            <tr>
-                                <td>{{ activity.name }}</td>
-                                <td>{{ activity.duration }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                <h3>Glucose Levels</h3>
+                <canvas id="glucoseChart"></canvas>
+                <p id="glucoseEmpty" style="display:none;">No glucose data available.</p>
             </div>
         </div>
     </div>
+
+    <!-- Modal for Custom Plan Creation -->
+    <div class="modal fade" id="customPlanModal" tabindex="-1" role="dialog" aria-labelledby="customPlanModalLabel" aria-hidden="true">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="customPlanModalLabel">{% if existing_plan %}Modify{% else %}Create{% endif %} Custom Plan</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <form id="customPlanForm">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label for="exerciseSelection">Select 3 Exercises</label>
+                            <select id="exerciseSelection" name="exercise_ids" class="form-control" multiple size="10" required>
+                                {% for exercise in exercises %}
+                                    <option value="{{ exercise.id }}" 
+                                        {% if exercise.id|stringformat:"s" in existing_plan.exercise_ids %} selected {% endif %}>
+                                        {{exercise.name }} - {{ exercise.category }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </form>
+                    <div class="alert alert-danger" id="formError" style="display: none;">
+                        You must select exactly 3 exercises
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-success" id="submitCustomPlan">Submit Plan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 {% else %}
     <div class="no-data-container">
         <h2>No health data available for this user.</h2>
     </div>
 {% endif %}
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Include jQuery -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- Include Bootstrap JS (Make sure this is after jQuery) -->
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         const userData = {{ user_data | safe }};
         console.log("Loaded User Data: ", userData);
 
-        // Example Chart.js Configurations
-        const stepsCtx = document.getElementById('stepsChart').getContext('2d');
-        const heartRateCtx = document.getElementById('heartRateChart').getContext('2d');
-        const sleepCtx = document.getElementById('sleepChart').getContext('2d');
-        const oxygenCtx = document.getElementById('oxygenChart').getContext('2d');
-        const bodyFitnessCtx = document.getElementById('bodyFitnessChart').getContext('2d');
+        // Helper function to group data by day
+        function groupDataByDay(data) {
+            const groupedData = {};
+            data.forEach(entry => {
+                const date = entry.start_time.split('T')[0];
+                if (!groupedData[date]) groupedData[date] = 0;
+                groupedData[date] += entry.count;
+            });
+            return groupedData;
+        }
 
-        // Steps Chart
-        new Chart(stepsCtx, {
-            type: 'line',
-            data: {
-                labels: userData.steps.labels,
-                datasets: [{
-                    label: 'Steps',
-                    data: userData.steps.data,
-                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                    borderColor: 'rgba(75, 192, 192, 1)',
-                    borderWidth: 1
-                }]
-            },
-        });
+        // Helper function to group data by hour
+        function groupDataByHour(data) {
+            return data.map(entry => ({
+                time: entry.start_time.split('T')[1].slice(0, 5), // Extract HH:MM
+                value: entry.value || entry.count, // Heart rate or resting heart rate
+            }));
+        }
 
-        // Heart Rate Chart
-        new Chart(heartRateCtx, {
-            type: 'line',
-            data: {
-                labels: userData.heart_rate.labels,
-                datasets: [{
-                    label: 'Heart Rate',
-                    data: userData.heart_rate.data,
-                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                    borderColor: 'rgba(255, 99, 132, 1)',
-                    borderWidth: 1
-                }]
-            },
-        });
+        // Steps Data (Daily)
+        const stepsData = userData.steps || [];
+        const stepsByDay = groupDataByDay(stepsData);
+        const stepsLabels = Object.keys(stepsByDay);
+        const stepsCounts = Object.values(stepsByDay);
 
-        // Sleep Chart
-        new Chart(sleepCtx, {
-            type: 'bar',
-            data: {
-                labels: userData.sleep.labels,
-                datasets: [{
-                    label: 'Sleep Hours',
-                    data: userData.sleep.data,
-                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                }]
-            },
-        });
+        if (stepsLabels.length === 0) {
+            document.getElementById("stepsEmpty").style.display = "block";
+        } else {
+            const stepsCtx = document.getElementById('stepsChart').getContext('2d');
+            new Chart(stepsCtx, {
+                type: 'bar',
+                data: {
+                    labels: stepsLabels,
+                    datasets: [{
+                        label: 'Steps Count',
+                        data: stepsCounts,
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+            });
+        }
 
-        // Blood Oxygen Chart
-        new Chart(oxygenCtx, {
-            type: 'line',
-            data: {
-                labels: userData.blood_oxygen.labels,
-                datasets: [{
-                    label: 'Blood Oxygen (%)',
-                    data: userData.blood_oxygen.data,
-                    backgroundColor: 'rgba(153, 102, 255, 0.2)',
-                    borderColor: 'rgba(153, 102, 255, 1)',
-                    borderWidth: 1
-                }]
-            },
-        });
+        // Heart Rate Data (Hourly)
+        const heartRateData = userData.heart_rate || [];
+        const heartRateByHour = groupDataByHour(heartRateData);
+        const heartRateLabels = heartRateByHour.map(entry => entry.time);
+        const heartRateCounts = heartRateByHour.map(entry => entry.value);
 
-        // Body Fitness Chart
-        new Chart(bodyFitnessCtx, {
-            type: 'radar',
-            data: {
-                labels: userData.body_fitness.labels,
-                datasets: [{
-                    label: 'Fitness Metrics',
-                    data: userData.body_fitness.data,
-                    backgroundColor: 'rgba(255, 206, 86, 0.2)',
-                    borderColor: 'rgba(255, 206, 86, 1)',
-                    borderWidth: 1
-                }]
-            },
-        });
+        if (heartRateLabels.length === 0) {
+            document.getElementById("heartRateEmpty").style.display = "block";
+        } else {
+            const heartRateCtx = document.getElementById('heartRateChart').getContext('2d');
+            new Chart(heartRateCtx, {
+                type: 'line',
+                data: {
+                    labels: heartRateLabels,
+                    datasets: [{
+                        label: 'Heart Rate (bpm)',
+                        data: heartRateCounts,
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }]
+                },
+            });
+        }
+
+        // Resting Heart Rate Data (Hourly)
+        const restingHeartRateData = userData.resting_heart_rate || [];
+        const restingHeartRateByHour = groupDataByHour(restingHeartRateData);
+        const restingHeartRateLabels = restingHeartRateByHour.map(entry => entry.time);
+        const restingHeartRateCounts = restingHeartRateByHour.map(entry => entry.value);
+
+        if (restingHeartRateLabels.length === 0) {
+            document.getElementById("restingHeartRateEmpty").style.display = "block";
+        } else {
+            const restingHeartRateCtx = document.getElementById('restingHeartRateChart').getContext('2d');
+            new Chart(restingHeartRateCtx, {
+                type: 'line',
+                data: {
+                    labels: restingHeartRateLabels,
+                    datasets: [{
+                        label: 'Resting Heart Rate (bpm)',
+                        data: restingHeartRateCounts,
+                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+            });
+        }
+
+        // Blood Oxygen Data
+        const oxygenData = userData.oxygen || [];
+        if (oxygenData.length === 0) {
+            document.getElementById("oxygenEmpty").style.display = "block";
+        } else {
+            const oxygenCtx = document.getElementById('oxygenChart').getContext('2d');
+            new Chart(oxygenCtx, {
+                type: 'line',
+                data: {
+                    labels: oxygenData.map(entry => entry.start_time.split('T')[0]),
+                    datasets: [{
+                        label: 'Blood Oxygen (%)',
+                        data: oxygenData.map(entry => entry.value),
+                        backgroundColor: 'rgba(153, 102, 255, 0.2)',
+                        borderColor: 'rgba(153, 102, 255, 1)',
+                        borderWidth: 1
+                    }]
+                },
+            });
+        }
+
+        // Blood Pressure Data
+        const pressureData = userData.pressure || [];
+        if (pressureData.length === 0) {
+            document.getElementById("pressureEmpty").style.display = "block";
+        } else {
+            const pressureCtx = document.getElementById('pressureChart').getContext('2d');
+            new Chart(pressureCtx, {
+                type: 'line',
+                data: {
+                    labels: pressureData.map(entry => entry.start_time.split('T')[0]),
+                    datasets: [{
+                        label: 'Blood Pressure (mmHg)',
+                        data: pressureData.map(entry => entry.value),
+                        backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                        borderColor: 'rgba(255, 159, 64, 1)',
+                        borderWidth: 1
+                    }]
+                },
+            });
+        }
+
+        // Glucose Data
+        const glucoseData = userData.glucose || [];
+        if (glucoseData.length === 0) {
+            document.getElementById("glucoseEmpty").style.display = "block";
+        } else {
+            const glucoseCtx = document.getElementById('glucoseChart').getContext('2d');
+            new Chart(glucoseCtx, {
+                type: 'line',
+                data: {
+                    labels: glucoseData.map(entry => entry.start_time.split('T')[0]),
+                    datasets: [{
+                        label: 'Glucose Levels (mg/dL)',
+                        data: glucoseData.map(entry => entry.value),
+                        backgroundColor: 'rgba(255, 206, 86, 0.2)',
+                        borderColor: 'rgba(255, 206, 86, 1)',
+                        borderWidth: 1
+                    }]
+                },
+            });
+        }
+    });
+    
+    document.getElementById('submitCustomPlan').addEventListener('click', function() {
+        var selectedExercises = Array.from(document.getElementById('exerciseSelection').selectedOptions).map(option => option.value);
+
+        if (selectedExercises.length !== 3) {
+            document.getElementById('formError').style.display = 'block';
+        } else {
+            document.getElementById('formError').style.display = 'none';
+
+            // Send data via AJAX
+            fetch("{% url 'create_custom_plan' user_id=user_data.user_id %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    exercise_ids: selectedExercises
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Close modal and show success message
+                    $('#customPlanModal').modal('hide');
+                    alert('Custom plan created successfully!');
+                } else {
+                    alert('Error creating custom plan.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error creating custom plan.');
+            });
+        }
     });
 </script>
 {% endblock %}
