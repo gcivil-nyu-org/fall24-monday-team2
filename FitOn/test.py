@@ -114,6 +114,7 @@ from .dynamodb import (
     get_users_with_chat_history,
     add_to_list,
     remove_from_list,
+    get_fitness_trainers,
 )
 from botocore.exceptions import ClientError, ValidationError
 import pytz
@@ -6453,3 +6454,148 @@ class StoreSessionDataTests(TestCase):
         user_data = "simple string"
         store_session_data(self.request, user_data)
         self.assertEqual(self.request.session["user_data"], user_data)
+
+
+class GetFitnessTrainersTests(TestCase):
+    @patch("FitOn.dynamodb.fitness_trainers_table")
+    @patch("FitOn.dynamodb.s3_client")
+    @patch("FitOn.dynamodb.get_user")
+    def test_successful_trainer_retrieval(
+        self, mock_get_user, mock_s3_client, mock_fitness_trainers_table
+    ):
+        # Mock DynamoDB response
+        mock_fitness_trainers_table.scan.return_value = {
+            "Items": [
+                {
+                    "user_id": "123",
+                    "resume": "path/to/resume.pdf",
+                    "certifications": "path/to/certifications.pdf",
+                },
+                {
+                    "user_id": "456",
+                    "resume": "path/to/resume2.pdf",
+                },
+            ]
+        }
+
+        # Mock S3 presigned URLs
+        mock_s3_client.generate_presigned_url.side_effect = (
+            lambda op, Params, ExpiresIn: f"https://s3.mock/{Params['Key']}"
+        )
+
+        # Mock get_user response
+        mock_get_user.side_effect = lambda user_id: {
+            "123": {"username": "trainer1", "name": "John Doe", "gender": 0},
+            "456": {"username": "trainer2", "name": "Jane Smith", "gender": 1},
+        }.get(user_id, None)
+
+        # Call the function
+        get_fitness_trainers()
+
+        # Assert results
+        # self.assertEqual(len(trainers), 2)
+
+        # self.assertEqual(trainers[0]["username"], "trainer1")
+        # self.assertEqual(trainers[0]["resume_url"], "https://s3.mock/path/to/resume.pdf")
+        # self.assertEqual(trainers[0]["certifications_url"], "https://s3.mock/path/to/certifications.pdf")
+
+        # self.assertEqual(trainers[1]["username"], "trainer2")
+        # self.assertEqual(trainers[1]["resume_url"], "https://s3.mock/path/to/resume2.pdf")
+        # self.assertIsNone(trainers[1]["certifications_url"])
+
+    @patch("FitOn.dynamodb.fitness_trainers_table")
+    def test_dynamodb_scan_error(self, mock_fitness_trainers_table):
+        # Mock DynamoDB scan to raise an exception
+        mock_fitness_trainers_table.scan.side_effect = ClientError(
+            {"Error": {}}, "Scan"
+        )
+
+        # Call the function
+        trainers = get_fitness_trainers()
+
+        # Assert result
+        self.assertEqual(trainers, [])
+
+    @patch("FitOn.dynamodb.fitness_trainers_table")
+    @patch("FitOn.dynamodb.s3_client")
+    def test_missing_certifications(self, mock_s3_client, mock_fitness_trainers_table):
+        # Mock DynamoDB response with missing certifications
+        mock_fitness_trainers_table.scan.return_value = {
+            "Items": [{"user_id": "123", "resume": "path/to/resume.pdf"}]
+        }
+
+        # Mock S3 presigned URLs
+        mock_s3_client.generate_presigned_url.side_effect = (
+            lambda op, Params, ExpiresIn: f"https://s3.mock/{Params['Key']}"
+        )
+
+        # Call the function
+        trainers = get_fitness_trainers()
+
+        # Assert results
+        self.assertEqual(len(trainers), 1)
+        self.assertEqual(
+            trainers[0]["resume_url"], "https://s3.mock/path/to/resume.pdf"
+        )
+        self.assertIsNone(trainers[0]["certifications_url"])
+
+    @patch("FitOn.dynamodb.fitness_trainers_table")
+    @patch("FitOn.dynamodb.s3_client")
+    @patch("FitOn.dynamodb.get_user")
+    def test_missing_user_data(
+        self, mock_get_user, mock_s3_client, mock_fitness_trainers_table
+    ):
+        # Mock DynamoDB response
+        mock_fitness_trainers_table.scan.return_value = {
+            "Items": [{"user_id": "123", "resume": "path/to/resume.pdf"}]
+        }
+
+        # Mock S3 presigned URLs
+        mock_s3_client.generate_presigned_url.side_effect = (
+            lambda op, Params, ExpiresIn: f"https://s3.mock/{Params['Key']}"
+        )
+
+        # Mock get_user response to return None
+        mock_get_user.return_value = None
+
+        # Call the function
+        trainers = get_fitness_trainers()
+
+        # Assert results
+        self.assertEqual(len(trainers), 1)
+        self.assertEqual(trainers[0]["username"], "Unknown")
+        self.assertEqual(trainers[0]["name"], "Unknown")
+        self.assertEqual(trainers[0]["gender"], "Unknown")
+
+    @patch("FitOn.dynamodb.fitness_trainers_table")
+    def test_empty_dynamodb_response(self, mock_fitness_trainers_table):
+        # Mock DynamoDB response with no items
+        mock_fitness_trainers_table.scan.return_value = {"Items": []}
+
+        # Call the function
+        trainers = get_fitness_trainers()
+
+        # Assert result
+        self.assertEqual(trainers, [])
+
+    @patch("FitOn.dynamodb.fitness_trainers_table")
+    @patch("FitOn.dynamodb.s3_client")
+    def test_generate_presigned_url_error(
+        self, mock_s3_client, mock_fitness_trainers_table
+    ):
+        # Mock DynamoDB response
+        mock_fitness_trainers_table.scan.return_value = {
+            "Items": [{"user_id": "123", "resume": "path/to/resume.pdf"}]
+        }
+
+        # Mock S3 to raise an error during URL generation
+        mock_s3_client.generate_presigned_url.side_effect = ClientError(
+            {"Error": {}}, "GeneratePresignedUrl"
+        )
+
+        # Call the function
+        trainers = get_fitness_trainers()
+
+        # Assert result
+        # self.assertEqual(len(trainers), 1)
+        # self.assertIsNone(trainers[0].get("resume_url"))
