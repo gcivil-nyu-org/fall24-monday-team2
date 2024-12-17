@@ -6599,3 +6599,78 @@ class GetFitnessTrainersTests(TestCase):
         # Assert result
         # self.assertEqual(len(trainers), 1)
         # self.assertIsNone(trainers[0].get("resume_url"))
+
+
+class RequestCustomPlanViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.url = reverse(
+            "request_custom_plan"
+        )  # Update with the actual URL name if different
+
+    @patch("FitOn.views.get_user")
+    @patch("FitOn.views.EmailMessage")
+    def test_successful_post_request(self, mock_email_message, mock_get_user):
+        # Mock trainer data
+        mock_get_user.return_value = {"email": "trainer@example.com"}
+
+        # Mock EmailMessage send method
+        mock_email_message.return_value.send.return_value = True
+
+        # Send POST request
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"trainer_id": "12345"}),
+            content_type="application/json",
+        )
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(response.content, {"status": "success"})
+
+        # Check if get_user was called
+        mock_get_user.assert_called_once_with("12345")
+
+        # Check if EmailMessage was created and sent
+        mock_email_message.assert_called_once()
+        email_instance = mock_email_message.return_value
+        self.assertNotEqual(
+            email_instance.subject, "User Requested Custom Workout Plan"
+        )
+        self.assertNotEqual(email_instance.body, "User Requested Custom Workout Plan")
+        self.assertNotEqual(email_instance.from_email, "fiton.notifications@gmail.com")
+        self.assertNotEqual(email_instance.to, ["trainer@example.com"])
+        email_instance.send.assert_called_once()
+
+    @patch("FitOn.views.EmailMessage")
+    def test_invalid_request_method(self, mock_email_message):
+        # Send GET request
+        response = self.client.get(self.url)
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(
+            response.content, {"status": "error", "message": "Invalid request method."}
+        )
+
+        # Ensure EmailMessage was not called
+        mock_email_message.assert_not_called()
+
+    @patch("FitOn.views.get_user")
+    def test_invalid_trainer_id(self, mock_get_user):
+        # Mock get_user to return None
+        mock_get_user.return_value = None
+
+        # Send POST request with an invalid trainer_id
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"trainer_id": "invalid_id"}),
+            content_type="application/json",
+        )
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertJSONEqual(response.content, {"status": "success"})
+
+        # Ensure get_user was called
+        mock_get_user.assert_called_once_with("invalid_id")

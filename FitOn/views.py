@@ -1110,23 +1110,46 @@ def view_custom_plan(request, trainer_id):
 
 def request_custom_plan(request):
     if request.method == "POST":
-        data = json.loads(request.body)
-        trainer_id = data.get("trainer_id")
-        trainer = get_user(trainer_id)
+        try:
+            data = json.loads(request.body)
+            trainer_id = data.get("trainer_id")
+            if not trainer_id:
+                return JsonResponse(
+                    {"status": "error", "message": "Trainer ID is required."}
+                )
 
-        subject = "User Requested Custom Workout Plan"
-        message = "User Requested Custom Workout Plan"
-        senderEmail = "fiton.notifications@gmail.com"
-        userEmail = trainer.get("email")
-        email_message = EmailMessage(
-            subject,
-            message,
-            senderEmail,
-            [userEmail],
-        )
-        email_message.content_subtype = "text"
-        email_message.send()
-        return JsonResponse({"status": "success"})
+            trainer = get_user(trainer_id)
+            if not trainer:
+                return JsonResponse(
+                    {"status": "error", "message": "Trainer not found."}
+                )
+
+            userEmail = trainer.get("email")
+            if not userEmail:
+                return JsonResponse(
+                    {"status": "error", "message": "Trainer email is missing."}
+                )
+
+            subject = "User Requested Custom Workout Plan"
+            message = "User Requested Custom Workout Plan"
+            senderEmail = "fiton.notifications@gmail.com"
+
+            email_message = EmailMessage(
+                subject,
+                message,
+                senderEmail,
+                [userEmail],
+            )
+            email_message.content_subtype = "text"
+            email_message.send()
+
+            return JsonResponse({"status": "success"})
+
+        except Exception:
+            return JsonResponse(
+                {"status": "error", "message": "An unexpected error occurred."}
+            )
+
     return JsonResponse({"status": "error", "message": "Invalid request method."})
 
 
