@@ -29,6 +29,7 @@ password_reset_table = dynamodb.Table("PasswordResetRequests")
 
 applications_table = dynamodb.Table("FitnessTrainerApplications")
 fitness_trainers_table = dynamodb.Table("FitnessTrainers")
+custom_plans_table = dynamodb.Table("CustomPlans")
 
 chat_table = dynamodb.Table("chat_table")
 
@@ -645,24 +646,48 @@ def add_to_list(user_id, field, value):
 
 
 def remove_from_list(user_id, field, value):
-    # Fetch the current user data to get the list
-    user = get_user(user_id)
-    if not user or field not in user:
-        raise ValueError(f"Field {field} does not exist in user {user_id}")
-
-    # Find the index of the value in the list
     try:
-        index = user[field].index(value)
-    except ValueError:
-        raise ValueError(f"Value {value} not found in field {field} for user {user_id}")
+        # Fetch the current user data to get the list
+        user = get_user(user_id)
+        if not user or field not in user:
+            raise ValueError(f"Field {field} does not exist in user {user_id}")
 
-    # Remove the value using its index
-    users_table.update_item(
-        Key={"user_id": user_id},
-        UpdateExpression=f"REMOVE {field}[{index}]",
-        ConditionExpression=f"contains({field}, :val)",
-        ExpressionAttributeValues={":val": value},
-    )
+        # Find the index of the value in the list
+        try:
+            index = user[field].index(value)
+        except ValueError:
+            raise ValueError(
+                f"Value {value} not found in field {field} for user {user_id}"
+            )
+
+        # Remove the value using its index
+        users_table.update_item(
+            Key={"user_id": user_id},
+            UpdateExpression=f"REMOVE {field}[{index}]",
+            ConditionExpression=f"contains({field}, :val)",
+            ExpressionAttributeValues={":val": value},
+        )
+        print(f"Successfully removed {value} from {field} for user {user_id}")
+
+    except Exception as e:
+        print(
+            f"An error occurred while removing {value} from {field} for user {user_id}: {e}"
+        )
+
+
+def store_custom_plan(user_id, trainer_id, exercise_ids):
+    try:
+        custom_plans_table.put_item(
+            Item={
+                "user_id": user_id,
+                "trainer_id": trainer_id,
+                "exercise_ids": exercise_ids,
+                "created_at": str(datetime.now()),
+            }
+        )
+        return {"success": True, "message": "Custom plan created successfully."}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 
 # -------------------------------

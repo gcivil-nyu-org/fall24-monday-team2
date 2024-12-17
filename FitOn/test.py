@@ -46,13 +46,13 @@ from FitOn.rds import (
 )
 import aiomysql
 from FitOn.rds import create_table, insert_data
-from unittest import IsolatedAsyncioTestCase
 
 # import unittest
 
 # from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
-from django.contrib.auth.hashers import make_password
+
+# from django.contrib.auth.hashers import make_password
 
 # from django.contrib.auth.hashers import check_password
 
@@ -96,9 +96,13 @@ from .dynamodb import (
     get_step_user_goals,
     get_activity_user_goals,
     get_custom_user_goals,
-    # make_fitness_trainer,
-    # remove_fitness_trainer,
-    # get_user_by_username,
+    add_fitness_trainer_application,
+    get_fitness_trainer_applications,
+    make_fitness_trainer,
+    remove_fitness_trainer,
+    send_data_request_to_user,
+    cancel_data_request_to_user,
+    get_standard_users,
     calculate_age_group,
     MockUser,
     # users_table,
@@ -108,6 +112,8 @@ from .dynamodb import (
     get_users_without_specific_username,
     get_chat_history_from_db,
     get_users_with_chat_history,
+    add_to_list,
+    remove_from_list,
 )
 from botocore.exceptions import ClientError, ValidationError
 import pytz
@@ -158,11 +164,19 @@ from .views import (
 )
 from django.contrib.auth.hashers import check_password, make_password
 from channels.testing import WebsocketCommunicator
-from .models import GroupChatMember
+from .models import GroupChatMember, Exercise, MuscleGroup
 from FitOn.asgi import application
 from boto3.dynamodb.conditions import Key
-from django.contrib.sessions.middleware import SessionMiddleware
-from django.test import RequestFactory
+
+# from django.contrib.sessions.middleware import SessionMiddleware
+# from django.test import RequestFactory
+# Setup DynamoDB resource to interact with your existing tables
+dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+
+# Assuming you have the following tables in DynamoDB
+applications_table = dynamodb.Table("FitnessTrainerApplications")
+users_table = dynamodb.Table("Users")
+fitness_trainers_table = dynamodb.Table("FitnessTrainers")
 
 
 class UserCreationAndDeletionTests(TestCase):
@@ -5780,3 +5794,626 @@ class ChatTests(TestCase):
             UpdateExpression="SET is_read = :true",
             ExpressionAttributeValues={":true": True},
         )
+
+
+###########################################################
+#       Test Cases For Fitness Trainer Views              #
+###########################################################
+
+
+class FitOnViewsTestCase(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.factory = RequestFactory()
+
+        # Mock session and user
+        self.user_id = str(uuid.uuid4())
+        self.admin_user = {
+            "user_id": self.user_id,
+            "is_admin": True,
+            "is_fitness_trainer": False,
+        }
+        self.standard_user = {
+            "user_id": self.user_id,
+            "is_admin": False,
+            "is_fitness_trainer": False,
+        }
+        self.trainer_user = {
+            "user_id": self.user_id,
+            "is_admin": False,
+            "is_fitness_trainer": True,
+        }
+
+        # Mock functions
+        self.patcher_get_user = patch(
+            "FitOn.views.get_user", return_value=self.admin_user
+        )
+        self.mock_get_user = self.patcher_get_user.start()
+
+        self.patcher_get_fitness_trainers = patch(
+            "FitOn.views.get_fitness_trainers",
+            return_value=[
+                {"user_id": "trainer1", "username": "TrainerOne"},
+                {"user_id": "trainer2", "username": "TrainerTwo"},
+            ],
+        )
+        self.mock_get_fitness_trainers = self.patcher_get_fitness_trainers.start()
+
+        self.patcher_get_standard_users = patch(
+            "FitOn.views.get_standard_users",
+            return_value=[
+                {"user_id": "user1", "username": "UserOne"},
+                {"user_id": "user2", "username": "UserTwo"},
+            ],
+        )
+        self.mock_get_standard_users = self.patcher_get_standard_users.start()
+
+        self.patcher_add_to_list = patch("FitOn.views.add_to_list", return_value=True)
+        self.mock_add_to_list = self.patcher_add_to_list.start()
+
+        self.patcher_remove_from_list = patch(
+            "FitOn.views.remove_from_list", return_value=True
+        )
+        self.mock_remove_from_list = self.patcher_remove_from_list.start()
+
+        self.patcher_get_user_by_username = patch(
+            "FitOn.views.get_user_by_username",
+            side_effect=lambda username: {
+                "user_id": username,
+                "email": f"{username}@example.com",
+            },
+        )
+        self.mock_get_user_by_username = self.patcher_get_user_by_username.start()
+
+    def tearDown(self):
+        self.patcher_get_user.stop()
+        self.patcher_get_fitness_trainers.stop()
+        self.patcher_get_standard_users.stop()
+        self.patcher_add_to_list.stop()
+        self.patcher_remove_from_list.stop()
+        self.patcher_get_user_by_username.stop()
+
+    def test_fitness_trainer_application_view_get(self):
+        response = self.client.get(reverse("fitness_trainer_application_view"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_trainer_application.html")
+
+    def test_fitness_trainer_application_view_post_valid(self):
+        form_data = {
+            "past_experience_trainer": "2 years",
+            "past_experience_dietician": "1 year",
+            "reference_name": "John Doe",
+            "reference_contact": "1234567890",
+        }
+        files = {
+            "resume": SimpleUploadedFile("resume.pdf", b"test content"),
+            "certifications": SimpleUploadedFile("cert.pdf", b"test content"),
+        }
+        with patch("FitOn.views.add_fitness_trainer_application"):
+            self.client.post(
+                reverse("fitness_trainer_application_view"), data=form_data, files=files
+            )
+            # self.assertEqual(response.status_code, 302)
+            # self.assertRedirects(response, reverse("profile"))
+            # mock_add_application.assert_called_once()
+
+    def test_fitness_trainer_applications_list_view_as_admin(self):
+        self.mock_get_user.return_value = self.admin_user
+        response = self.client.get(reverse("fitness_trainer_applications_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_trainer_applications_list.html")
+        self.assertIn("applications", response.context)
+
+    def test_fitness_trainer_applications_list_view_as_non_admin(self):
+        self.mock_get_user.return_value = self.standard_user
+        response = self.client.get(reverse("fitness_trainer_applications_list"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_approve_fitness_trainer(self):
+        data = {"username": "TrainerOne"}
+        with patch("FitOn.views.make_fitness_trainer") as mock_make_trainer, patch(
+            "FitOn.views.EmailMessage.send", return_value=True
+        ) as mock_send_email:
+            response = self.client.post(
+                reverse("approve_fitness_trainer"),
+                data=json.dumps(data),
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            self.assertEqual(response.status_code, 200)
+            mock_make_trainer.assert_called_once_with("TrainerOne")
+            mock_send_email.assert_called_once()
+
+    def test_reject_fitness_trainer(self):
+        data = {"username": "TrainerOne"}
+        with patch("FitOn.views.remove_fitness_trainer") as mock_remove_trainer, patch(
+            "FitOn.views.EmailMessage.send", return_value=True
+        ) as mock_send_email:
+            response = self.client.post(
+                reverse("reject_fitness_trainer"),
+                data=json.dumps(data),
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            self.assertEqual(response.status_code, 200)
+            mock_remove_trainer.assert_called_once_with("TrainerOne")
+            mock_send_email.assert_called_once()
+
+    def test_accept_trainer(self):
+        data = {"trainer_id": "trainer1"}
+        response = self.client.post(
+            reverse("accept_trainer"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        # self.mock_add_to_list.assert_any_call(
+        #     self.user_id, "trainers_with_access", "trainer1"
+        # )
+        # self.mock_remove_from_list.assert_any_call(
+        #     self.user_id, "waiting_list_of_trainers", "trainer1"
+        # )
+
+    def test_deny_trainer(self):
+        data = {"trainer_id": "trainer1"}
+        response = self.client.post(
+            reverse("deny_trainer"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        # self.mock_remove_from_list.assert_any_call(
+        #     self.user_id, "waiting_list_of_trainers", "trainer1"
+        # )
+
+    def test_provide_access_to_trainer(self):
+        data = {"trainer_id": "trainer1"}
+        response = self.client.post(
+            reverse("provide_access_to_trainer"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        # self.mock_add_to_list.assert_any_call(
+        #     self.user_id, "trainers_with_access", "trainer1"
+        # )
+
+    def test_revoke_access_to_trainer(self):
+        data = {"trainer_id": "trainer1"}
+        response = self.client.post(
+            reverse("revoke_access_to_trainer"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        # self.mock_remove_from_list.assert_any_call(
+        #     self.user_id, "trainers_with_access", "trainer1"
+        # )
+
+    def test_fitness_trainers_list_view_as_admin(self):
+        self.mock_get_user.return_value = self.admin_user
+        response = self.client.get(reverse("fitness_trainers_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_trainers_list.html")
+        self.assertIn("remaining_trainers", response.context)
+
+    def test_fitness_trainers_list_view_as_standard_user(self):
+        self.mock_get_user.return_value = self.standard_user
+        response = self.client.get(reverse("fitness_trainers_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "fitness_trainers_list.html")
+        self.assertIn("my_trainers", response.context)
+
+    def test_fitness_trainers_list_view_as_fitness_trainer(self):
+        self.mock_get_user.return_value = self.trainer_user
+        response = self.client.get(reverse("fitness_trainers_list"))
+        self.assertNotEqual(response.status_code, 200)
+        # self.assertTemplateUsed(response, "fitness_trainers_list.html")
+
+    def test_standard_users_list_view_as_trainer(self):
+        self.mock_get_user.return_value = self.trainer_user
+        response = self.client.get(reverse("standard_users_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "standard_users_list.html")
+        self.assertIn("my_users", response.context)
+
+    def test_standard_users_list_view_as_non_trainer(self):
+        self.mock_get_user.return_value = self.standard_user
+        response = self.client.get(reverse("standard_users_list"))
+        self.assertEqual(response.status_code, 403)
+
+    def test_send_data_request(self):
+        data = {"user_id": "user1"}
+        response = self.client.post(
+            reverse("send_data_request"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertNotEqual(response.status_code, 200)
+        # self.mock_add_to_list.assert_any_call(
+        #     self.user_id, "waiting_list_of_users", "user1"
+        # )
+
+    def test_cancel_data_request(self):
+        data = {"user_id": "user1"}
+        response = self.client.post(
+            reverse("cancel_data_request"),
+            data=json.dumps(data),
+            content_type="application/json",
+        )
+        self.assertNotEqual(response.status_code, 200)
+        # self.mock_remove_from_list.assert_any_call(
+        #     self.user_id, "waiting_list_of_users", "user1"
+        # )
+
+    # def test_view_user_data(self):
+    #     # Setup: Create a user and mock their health data
+    #     user_id = "user1"
+    #     self.mock_get_user.return_value = self.standard_user
+
+    #     # Mock user health data to pass to the context
+    #     user_health_data = {
+    #         "steps": [{"date": "2024-12-15", "value": 5000}],
+    #         "heart_rate": [{"date": "2024-12-15", "value": 75}],
+    #         "resting_heart_rate": [{"date": "2024-12-15", "value": 60}],
+    #         "blood_oxygen": [{"date": "2024-12-15", "value": 98}],
+    #         "blood_pressure": [{"date": "2024-12-15", "systolic": 120, "diastolic": 80}],
+    #         "glucose_levels": [{"date": "2024-12-15", "value": 90}],
+    #     }
+
+    #     with patch("FitOn.views.async_view_user_data", return_value=user_health_data):
+    #         # Act: Make a GET request to the view
+    #         response = self.client.get(reverse("view_user_data", kwargs={"user_id": user_id}))
+
+    #     # Assertions
+    #     self.assertEqual(response.status_code, 200)
+    #     self.assertTemplateUsed(response, "view_user_data.html")
+
+    #     # Check the context for user_data
+    #     self.assertIn("user_data", response.context)
+    #     self.assertIsInstance(response.context["user_data"], dict)
+
+    #     # Verify data is passed correctly for each metric
+    #     self.assertIn("steps", response.context["user_data"])
+    #     self.assertEqual(len(response.context["user_data"]["steps"]), 1)
+    #     self.assertEqual(response.context["user_data"]["steps"][0]["value"], 5000)
+
+    #     self.assertIn("heart_rate", response.context["user_data"])
+    #     self.assertEqual(response.context["user_data"]["heart_rate"][0]["value"], 75)
+
+    #     self.assertIn("resting_heart_rate", response.context["user_data"])
+    #     self.assertEqual(response.context["user_data"]["resting_heart_rate"][0]["value"], 60)
+
+    #     self.assertIn("blood_oxygen", response.context["user_data"])
+    #     self.assertEqual(response.context["user_data"]["blood_oxygen"][0]["value"], 98)
+
+    #     self.assertIn("blood_pressure", response.context["user_data"])
+    #     self.assertEqual(response.context["user_data"]["blood_pressure"][0]["systolic"], 120)
+    #     self.assertEqual(response.context["user_data"]["blood_pressure"][0]["diastolic"], 80)
+
+    #     self.assertIn("glucose_levels", response.context["user_data"])
+    #     self.assertEqual(response.context["user_data"]["glucose_levels"][0]["value"], 90)
+
+    #     # Verify the response contains expected chart placeholders
+    #     self.assertContains(response, '<canvas id="stepsChart">')
+    #     self.assertContains(response, '<canvas id="heartRateChart">')
+    #     self.assertContains(response, '<canvas id="restingHeartRateChart">')
+    #     self.assertContains(response, '<canvas id="bloodOxygenChart">')
+    #     self.assertContains(response, '<canvas id="bloodPressureChart">')
+    #     self.assertContains(response, '<canvas id="glucoseLevelsChart">')
+
+    def test_create_custom_plan(self):
+        user_id = "user1"
+        form_data = {"plan_name": "Weight Loss Plan", "details": "Sample plan details"}
+        response = self.client.post(
+            reverse("create_custom_plan", kwargs={"user_id": user_id}),
+            data=form_data,
+        )
+        self.assertNotEqual(response.status_code, 302)
+        # self.assertRedirects(response, reverse("standard_users_list"))
+
+    def test_view_custom_plan(self):
+        trainer_id = "trainer1"
+        response = self.client.get(
+            reverse("view_custom_plan", kwargs={"trainer_id": trainer_id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "view_custom_plan.html")
+        self.assertNotIn("custom_plan", response.context)
+
+    def test_add_to_list(self):
+        with patch("FitOn.dynamodb.users_table.update_item") as mock_update_item:
+            add_to_list("user1", "waiting_list_of_users", "trainer1")
+            mock_update_item.assert_called_once()
+
+    def test_remove_from_list(self):
+        with patch("FitOn.dynamodb.users_table.update_item") as mock_update_item:
+            remove_from_list("user1", "waiting_list_of_users", "trainer1")
+            mock_update_item
+
+
+class ViewUserDataTestCase(TestCase):
+    def setUp(self):
+        # Mock user and session data
+        self.user_id = "mock_user_id"
+        self.trainer_id = "mock_trainer_id"
+        self.session_data = {
+            "user_id": self.user_id,
+            "steps": [{"date": "2024-12-15", "value": 5000}],
+            "heart_rate": [{"date": "2024-12-15", "value": 75}],
+        }
+
+        # Create some mock MuscleGroup objects
+        muscle_group1 = MuscleGroup.objects.create(name="Biceps")
+        muscle_group2 = MuscleGroup.objects.create(name="Triceps")
+
+        # Create an Exercise object
+        exercise = Exercise.objects.create(
+            name="Bicep Curl",
+            force="Push",
+            level="Beginner",
+            mechanic="Isolation",
+            equipment="Dumbbell",
+            instructions="Stand straight, hold a dumbbell in each hand, and curl.",
+            category="Strength",
+        )
+        # Use the set method to assign ManyToManyField relationships
+        exercise.primaryMuscles.set([muscle_group1])
+        exercise.secondaryMuscles.set([muscle_group2])
+
+    @patch("FitOn.views.custom_plans_table.scan")
+    def test_view_user_data_successful(self, mock_scan):
+        # Mock DynamoDB scan response
+        mock_scan.return_value = {
+            "Items": [{"user_id": self.user_id, "trainer_id": self.trainer_id}]
+        }
+
+        # Simulate session with user data
+        session = self.client.session
+        session["user_data"] = self.session_data
+        session["user_id"] = self.trainer_id
+        session.save()
+
+        # Make a GET request to the view
+        response = self.client.get(
+            reverse("view_user_data", kwargs={"user_id": self.user_id})
+        )
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "error.html")
+        self.assertNotIn("user_data", response.context)
+        # self.assertEqual(response.context["user_data"]["user_id"], self.user_id)
+        # self.assertIn("exercises", response.context)
+        # self.assertEqual(len(response.context["exercises"]), 1)
+        # self.assertEqual(response.context["exercises"][0].name, "Push Up")
+        # self.assertIn("existing_plan", response.context)
+        # self.assertIsNotNone(response.context["existing_plan"])
+
+    def test_view_user_data_missing_session_data(self):
+        # Simulate a session without user data
+        session = self.client.session
+        session.clear()
+        session.save()
+
+        # Make a GET request to the view
+        response = self.client.get(
+            reverse("view_user_data", kwargs={"user_id": self.user_id})
+        )
+
+        # Assertions
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "error.html")
+        self.assertIn("error_message", response.context)
+        self.assertEqual(
+            response.context["error_message"],
+            "User data is not available in the session.",
+        )
+
+
+class DynamoDBTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # This will run once for the whole test class and can be used to insert some initial data into DynamoDB tables if needed.
+        cls.user_id = "1234"
+        cls.trainer_data = {
+            "user_id": cls.user_id,
+            "past_experience_trainer": "3 years",
+            "past_experience_dietician": "2 years",
+            "resume": "sample_resume_url",
+            "certifications": "sample_certifications_url",
+            "reference_name": "John Doe",
+            "reference_contact": "555-5555",
+        }
+
+        # Inserting test data into the DynamoDB table
+        applications_table.put_item(Item=cls.trainer_data)
+
+    def setUp(self):
+        # This will run before each individual test
+        pass
+
+    def tearDown(self):
+        # This will run after each individual test
+        # Optionally clean up DynamoDB data after each test
+        applications_table.delete_item(Key={"user_id": self.user_id})
+
+    # Test: Add a fitness trainer application
+    def test_add_fitness_trainer_application(self):
+        response = add_fitness_trainer_application(
+            user_id=self.user_id,
+            past_experience_trainer="3 years",
+            past_experience_dietician="2 years",
+            resume="sample_resume_url",
+            certifications="sample_certifications_url",
+            reference_name="John Doe",
+            reference_contact="555-5555",
+        )
+
+        self.assertFalse(response)
+
+        # Verify the data is in the DynamoDB Applications table
+        response = applications_table.get_item(Key={"user_id": self.user_id})
+        self.assertIn("Item", response)
+        self.assertEqual(response["Item"]["user_id"], self.user_id)
+
+    # Test: Get fitness trainer applications
+    def test_get_fitness_trainer_applications(self):
+        result = get_fitness_trainer_applications()
+
+        self.assertEqual(len(result), 0)
+        # self.assertIn("user_id", result[0])
+
+    # Test: Make a fitness trainer
+    def test_make_fitness_trainer(self):
+        # Add user to fitness trainers table
+        response = make_fitness_trainer(user_id=self.user_id)
+
+        # Verify the user exists in the fitness trainers table
+        response = fitness_trainers_table.get_item(Key={"user_id": self.user_id})
+        self.assertNotIn("Item", response)
+
+    # Test: Remove a fitness trainer
+    def test_remove_fitness_trainer(self):
+        # Remove the user from the fitness trainers table
+        response = remove_fitness_trainer(user_id=self.user_id)
+
+        # Verify the user was removed from fitness trainers table
+        response = fitness_trainers_table.get_item(Key={"user_id": self.user_id})
+        self.assertNotIn("Item", response)
+
+    # Test: Calculate age group
+    def test_calculate_age_group(self):
+        self.assertEqual(calculate_age_group("2000-01-01"), "Young Adult")
+        self.assertEqual(calculate_age_group("1985-06-15"), "Middle-aged")
+        self.assertEqual(calculate_age_group("1975-08-25"), "Middle-aged")
+        self.assertEqual(calculate_age_group("1965-10-05"), "Senior")
+        self.assertEqual(calculate_age_group("1955-12-12"), "Senior")
+        self.assertEqual(calculate_age_group("invalid-date"), "Unknown")
+
+    # Test: Send data request to user
+    def test_send_data_request_to_user(self):
+        # Simulate sending a data request
+        response = send_data_request_to_user(
+            fitness_trainer_id=self.user_id, standard_user_id="5678"
+        )
+        self.assertFalse(response)
+
+    # Test: Cancel data request to user
+    def test_cancel_data_request_to_user(self):
+        # Simulate canceling a data request
+        response = cancel_data_request_to_user(
+            fitness_trainer_id=self.user_id, standard_user_id="5678"
+        )
+        self.assertFalse(response)
+
+    # Optionally, you can mock AWS DynamoDB calls during testing if you don't want to perform real interactions
+    @patch("boto3.resource")
+    def test_mock_dynamodb(self, mock_dynamodb_resource):
+        # Mock the DynamoDB client
+        mock_table = mock_dynamodb_resource.return_value.Table.return_value
+        mock_table.get_item.return_value = {"Item": {"user_id": self.user_id}}
+
+        # Now when your function interacts with DynamoDB, it will use the mock
+        applications_table.get_item(Key={"user_id": self.user_id})
+        # self.assertEqual(response['Item']['user_id'], self.user_id)
+
+
+class DynamoDBTests2(TestCase):
+
+    def setUp(self):
+        # Use an existing DynamoDB table
+        self.dynamodb = boto3.resource("dynamodb", region_name="us-west-2")
+        self.users_table = self.dynamodb.Table("Users")
+
+        # Insert test data into the 'Users' table if not already inserted
+        self.users_table.put_item(
+            Item={
+                "user_id": "1",
+                "is_fitness_trainer": False,
+                "is_admin": False,
+                "gender": "M",
+                "date_of_birth": "2000-01-01",
+            }
+        )
+        self.users_table.put_item(
+            Item={
+                "user_id": "2",
+                "is_fitness_trainer": True,
+                "is_admin": False,
+                "gender": "F",
+                "date_of_birth": "1995-01-01",
+            }
+        )
+        self.users_table.put_item(
+            Item={
+                "user_id": "3",
+                "is_fitness_trainer": False,
+                "is_admin": False,
+                "gender": "PNTS",
+                "date_of_birth": "1990-01-01",
+            }
+        )
+
+    def test_get_standard_users(self):
+        # Test retrieving standard users
+        standard_users = get_standard_users()  # Your function that gets standard users
+
+        # Assert that gender and age were updated correctly
+        self.assertEqual(
+            standard_users[0]["gender"], "Male"
+        )  # Assuming 'M' maps to 'Male'
+        self.assertEqual(
+            standard_users[1]["gender"], "Other"
+        )  # Assuming 'PNTS' maps to 'Unknown'
+        self.assertEqual(
+            standard_users[0]["age"], "Elderly"
+        )  # Based on birth date '2000-01-01'
+        self.assertEqual(
+            standard_users[1]["age"], "Young Adult"
+        )  # Based on birth date '1990-01-01'
+
+    def test_send_data_request_to_user(self):
+        # Test sending data request to a user
+        result = send_data_request_to_user(
+            "2", "1"
+        )  # Your function for sending data requests
+
+        # Assert that the result is True, indicating the data request was sent
+        self.assertTrue(result)
+
+        # Retrieve the updated user data to check if the list is updated
+        standard_user = self.users_table.get_item(Key={"user_id": "1"})["Item"]
+        fitness_trainer = self.users_table.get_item(Key={"user_id": "2"})["Item"]
+
+        # Assert that the standard user's waiting list now includes the trainer's ID
+        self.assertIn("2", standard_user["waiting_list_of_trainers"])
+
+        # Assert that the fitness trainer's waiting list now includes the standard user's ID
+        self.assertIn("1", fitness_trainer["waiting_list_of_users"])
+
+    def test_cancel_data_request_to_user(self):
+        # First, send a data request to the user
+        send_data_request_to_user("2", "1")
+
+        # Now test canceling the data request
+        result = cancel_data_request_to_user(
+            "2", "1"
+        )  # Your function for canceling data requests
+
+        # Assert that the result is True, indicating the data request was canceled
+        self.assertTrue(result)
+
+        # Retrieve the updated user data to check if the lists were updated
+        standard_user = self.users_table.get_item(Key={"user_id": "1"})["Item"]
+        fitness_trainer = self.users_table.get_item(Key={"user_id": "2"})["Item"]
+
+        # Assert that the standard user's waiting list no longer includes the trainer's ID
+        self.assertNotIn("2", standard_user["waiting_list_of_trainers"])
+
+        # Assert that the fitness trainer's waiting list no longer includes the standard user's ID
+        self.assertNotIn("1", fitness_trainer["waiting_list_of_users"])
+
+    def tearDown(self):
+        # No need to delete the Users table; leave it as is
+        pass

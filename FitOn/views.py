@@ -3,7 +3,8 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 # from django.core.serializers import serialize
 from .models import Exercise, MuscleGroup, User
-from django.http import JsonResponse
+
+# from django.http import JsonResponse
 
 from .dynamodb import (
     add_fitness_trainer_application,
@@ -59,6 +60,8 @@ from .dynamodb import (
     get_custom_user_goals,
     get_activity_user_goals,
     get_user_by_uid,
+    store_custom_plan,
+    custom_plans_table,
 )
 from .rds import rds_main, fetch_user_data
 
@@ -837,9 +840,26 @@ def fitness_trainers_list_view(request):
         for trainer in trainers
         if trainer["user_id"] in waiting_list_of_trainers
     ]
-    my_trainers = [
-        trainer for trainer in trainers if trainer["user_id"] in trainers_with_access
-    ]
+    my_trainers = []
+    for trainer in trainers:
+        if trainer["user_id"] in trainers_with_access:
+            # Check if the user has an existing custom workout plan with this trainer
+            response = custom_plans_table.scan(
+                FilterExpression="user_id = :user_id AND trainer_id = :trainer_id",
+                ExpressionAttributeValues={
+                    ":user_id": user_id,
+                    ":trainer_id": trainer["user_id"],
+                },
+            )
+            existing_plan = None
+            if response["Items"]:
+                existing_plan = response["Items"][
+                    0
+                ]  # Assuming the first item is the existing plan
+            # Add the trainer along with the existing plan information
+            trainer["existing_plan"] = existing_plan
+            my_trainers.append(trainer)
+
     remaining_trainers = [
         trainer
         for trainer in trainers
@@ -918,27 +938,40 @@ def cancel_data_request(request):
 
 def view_user_data(request, user_id):
     try:
-        # Retrieve the data from the session
         user_data = request.session.get("user_data")
-        print("User data in session:", user_data)
         if not user_data:
-            # Handle missing session data
             raise ValueError("User data is not available in the session.")
-        # Render the HTML template with the session data
+        if "user_id" not in user_data:
+            user_data["user_id"] = user_id
+
+        exercises = Exercise.objects.all()
+
+        response = custom_plans_table.scan(
+            FilterExpression="user_id = :user_id AND trainer_id = :trainer_id",
+            ExpressionAttributeValues={
+                ":user_id": user_id,
+                ":trainer_id": request.session.get("user_id"),
+            },
+        )
+        existing_plan = None
+        if response["Items"]:
+            existing_plan = response["Items"][0]
+
         return render(
             request,
             "view_user_data.html",
             {
                 "user_data": user_data,
+                "exercises": exercises,
+                "existing_plan": existing_plan,
             },
         )
     except Exception as e:
-        # Handle errors
         return render(
             request,
-            "view_user_data.html",
+            "error.html",
             {
-                "error": str(e),
+                "error_message": str(e),
             },
         )
 
@@ -947,7 +980,6 @@ def store_session_data(request, user_data):
     # Store data in the session
     request.session["user_data"] = user_data
     request.session.modified = True  # Ensure the session is marked as modified
-    print(request.session.get("user_data"))
     return
 
 
@@ -968,7 +1000,6 @@ def serialize_data(data):
     return str(data)
 
 
-# Updated code for async_view_user_data
 async def async_view_user_data(request, user_id):
     try:
         # Fetch the user data asynchronously
@@ -978,12 +1009,125 @@ async def async_view_user_data(request, user_id):
         # Serialize user data
         serialized_data = serialize_data(user_data)
         # Store the data in the session
-        # await sync_to_async(store_session_data)(request, serialized_data)
         store_session_data(request, serialized_data)
         # Send serialized user_data in JSON response
         return JsonResponse({"success": True, "user_data": serialized_data})
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
+
+
+def create_custom_plan(request, user_id):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            exercise_ids = data.get("exercise_ids", [])
+
+            if len(exercise_ids) != 3:
+                return JsonResponse(
+                    {"success": False, "error": "You must select exactly 3 exercises."},
+                    status=400,
+                )
+
+            # Store the custom plan using the function from dynamodb.py
+            result = store_custom_plan(
+                user_id, request.session.get("user_id"), exercise_ids
+            )
+
+            if result["success"]:
+                return JsonResponse({"success": True, "message": result["message"]})
+            else:
+                return JsonResponse(
+                    {"success": False, "error": result["message"]}, status=500
+                )
+
+        except Exception as e:
+            return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+    return JsonResponse(
+        {"success": False, "error": "Invalid request method."}, status=405
+    )
+
+
+def view_custom_plan(request, trainer_id):
+    user_id = request.session.get("user_id")
+
+    try:
+        response = custom_plans_table.scan(
+            FilterExpression="user_id = :user_id AND trainer_id = :trainer_id",
+            ExpressionAttributeValues={
+                ":user_id": user_id,
+                ":trainer_id": trainer_id,
+            },
+        )
+
+        custom_plan = None
+        if response["Items"]:
+            custom_plan = response["Items"][0]
+        if not custom_plan:
+            return render(
+                request,
+                "view_custom_plan.html",
+                {
+                    "message": "No custom plan found for this trainer ",
+                },
+            )
+
+        exercise_ids = custom_plan.get("exercise_ids", [])
+        exercises = Exercise.objects.all()
+
+        filtered_exercises = exercises.filter(
+            id__in=[int(exercise_id) for exercise_id in exercise_ids]
+        )
+        filtered_exercises_image_urls = []
+        for exercise in filtered_exercises:
+            name = re.sub(r"[^a-zA-Z0-9-(),']", "_", exercise.name)
+            url = {
+                "url_0": f"https://fiton-static-files.s3.us-west-2.amazonaws.com/exercise_images/{name}_0.jpg",
+                "url_1": f"https://fiton-static-files.s3.us-west-2.amazonaws.com/exercise_images/{name}_1.jpg",
+            }
+            filtered_exercises_image_urls.append(url)
+
+    except Exception as e:
+        return render(
+            request,
+            "view_custom_plan.html",
+            {
+                "error": str(e),
+            },
+        )
+
+    return render(
+        request,
+        "view_custom_plan.html",
+        {
+            "custom_plan": custom_plan,
+            "custom_plan_exercises": zip(
+                filtered_exercises, filtered_exercises_image_urls
+            ),
+        },
+    )
+
+
+def request_custom_plan(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        trainer_id = data.get("trainer_id")
+        trainer = get_user(trainer_id)
+
+        subject = "User Requested Custom Workout Plan"
+        message = "User Requested Custom Workout Plan"
+        senderEmail = "fiton.notifications@gmail.com"
+        userEmail = trainer.get("email")
+        email_message = EmailMessage(
+            subject,
+            message,
+            senderEmail,
+            [userEmail],
+        )
+        email_message.content_subtype = "text"
+        email_message.send()
+        return JsonResponse({"status": "success"})
+    return JsonResponse({"status": "error", "message": "Invalid request method."})
 
 
 # -------------------------------

@@ -38,8 +38,12 @@
                             </td>
                             <td>
                                 <div class="button-container">
-                                    <button class="deactivate-button action-button" data-trainerid="{{ trainer.user_id }}" data-action="revoke">Revoke</button>
-                                    <button class="submit-button">Chat</button>
+                                    <button class="deactivate-button action-button" data-username="{{ trainer.username }}" data-trainerid="{{ trainer.user_id }}" data-action="revoke">Revoke</button>
+                                    {% if trainer.existing_plan %}
+                                        <a href="{% url 'view_custom_plan' trainer.user_id %}" class="submit-button">View Plan</a>
+                                    {% else %}
+                                        <button class="submit-button action-button" data-username="{{ trainer.username }}" data-trainerid="{{ trainer.user_id }}" data-action="request_plan">Request Plan</button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -82,8 +86,8 @@
                             </td>
                             <td>
                                 <div class="button-container">
-                                    <button class="submit-button action-button" data-trainerid="{{ trainer.user_id }}" data-action="accept">Accept</button>
-                                    <button class="deactivate-button action-button" data-trainerid="{{ trainer.user_id }}" data-action="deny">Deny</button>
+                                    <button class="submit-button action-button" data-username="{{ trainer.username }}" data-trainerid="{{ trainer.user_id }}" data-action="accept">Accept</button>
+                                    <button class="deactivate-button action-button" data-username="{{ trainer.username }}" data-trainerid="{{ trainer.user_id }}" data-action="deny">Deny</button>
                                 </div>
                             </td>
                         </tr>
@@ -134,7 +138,7 @@
                                 {% if is_admin %}
                                     <button class="deactivate-button remove-trainer-button" data-username="{{ trainer.username }}">Remove</button>
                                 {% else %}
-                                    <button class="submit-button action-button" data-trainerid="{{ trainer.user_id }}" data-action="provide">Provide Access</button>
+                                    <button class="submit-button action-button" data-username="{{ trainer.username }}" data-trainerid="{{ trainer.user_id }}" data-action="provide">Provide Access</button>
                                 {% endif %}
                             </div>
                         </td>
@@ -173,6 +177,7 @@
                 button.addEventListener('click', function (event) {
                     event.preventDefault();
                     const trainerId = this.dataset.trainerid;
+                    const trainerUserName = this.dataset.username
                     const action = this.dataset.action;
                     const row = this.closest('tr');
 
@@ -181,19 +186,23 @@
                     switch (action) {
                         case 'accept':
                             endpoint = "/user/accept_trainer/";
-                            successMessage = `Trainer ${trainerId} accepted successfully`;
+                            successMessage = `Trainer ${trainerUserName} accepted successfully`;
                             break;
                         case 'deny':
                             endpoint = "/user/deny_trainer/";
-                            successMessage = `Trainer ${trainerId} denied successfully`;
+                            successMessage = `Trainer ${trainerUserName} denied successfully`;
                             break;
                         case 'provide':
                             endpoint = "/user/provide_access_to_trainer/";
-                            successMessage = `Access granted to Trainer: ${trainerId}`;
+                            successMessage = `Access granted to Trainer: ${trainerUserName}`;
+                            break;
+                        case 'request_plan':
+                            endpoint = "/user/request_custom_plan/";
+                            successMessage = `Custom Plan requested from Trainer: ${trainerUserName}`;
                             break;
                         case 'revoke':
                             endpoint = "/user/revoke_access_to_trainer/";
-                            successMessage = `Access revoked for Trainer: ${trainerId}`;
+                            successMessage = `Access revoked for Trainer: ${trainerUserName}`;
                             break;
                         default:
                             console.error('Invalid action:', action);

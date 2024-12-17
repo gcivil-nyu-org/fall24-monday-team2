@@ -97,6 +97,21 @@ urlpatterns = [
         views.view_user_data,
         name="view_user_data",
     ),
+    path(
+        "trainer/create_custom_plan/<str:user_id>/",
+        views.create_custom_plan,
+        name="create_custom_plan",
+    ),
+    path(
+        "user/view_custom_plan/<str:trainer_id>/",
+        views.view_custom_plan,
+        name="view_custom_plan",
+    ),
+    path(
+        "user/request_custom_plan/",
+        views.request_custom_plan,
+        name="request_custom_plan",
+    ),
     path("user/accept_trainer/", views.accept_trainer, name="accept_trainer"),
     path("user/deny_trainer/", views.deny_trainer, name="deny_trainer"),
     path(
@@ -108,6 +123,16 @@ urlpatterns = [
         "user/revoke_access_to_trainer/",
         views.revoke_access_to_trainer,
         name="revoke_access_to_trainer",
+    ),
+    path(
+        "approve_fitness_trainer/",
+        views.approve_fitness_trainer,
+        name="approve_fitness_trainer",
+    ),
+    path(
+        "reject_fitness_trainer/",
+        views.reject_fitness_trainer,
+        name="reject_fitness_trainer",
     ),
     path("forum/", views.forum_view, name="forum"),
     path("forum/new/", views.new_thread_view, name="new_thread"),
@@ -125,16 +150,6 @@ urlpatterns = [
     path("punishments/", views.punishments_view, name="punishments"),
     path("unban_user/", views.unban_user, name="unban_user"),
     path("unmute_user/", views.unmute_user, name="unmute_user"),
-    path(
-        "approve_fitness_trainer/",
-        views.approve_fitness_trainer,
-        name="approve_fitness_trainer",
-    ),
-    path(
-        "reject_fitness_trainer/",
-        views.reject_fitness_trainer,
-        name="reject_fitness_trainer",
-    ),
     path("add_reply/", views.add_reply, name="add_reply"),
     path("delete_reply/", views.delete_reply_view, name="delete_reply"),
     path("delete_thread/", views.delete_thread, name="delete_thread"),
