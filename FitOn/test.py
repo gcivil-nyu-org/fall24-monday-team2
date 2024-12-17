@@ -6594,7 +6594,7 @@ class GetFitnessTrainersTests(TestCase):
         )
 
         # Call the function
-        trainers = get_fitness_trainers()
+        get_fitness_trainers()
 
         # Assert result
         # self.assertEqual(len(trainers), 1)
