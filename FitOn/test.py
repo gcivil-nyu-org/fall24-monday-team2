@@ -161,6 +161,7 @@ from .views import (
     create_group_chat,
     group_chat,
     mark_messages_as_read,
+    store_session_data,
 )
 from django.contrib.auth.hashers import check_password, make_password
 from channels.testing import WebsocketCommunicator
@@ -6418,3 +6419,37 @@ class DynamoDBTests2(TestCase):
     def tearDown(self):
         # No need to delete the Users table; leave it as is
         pass
+
+
+class StoreSessionDataTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.request = self.factory.get("/")  # Mock a request object
+        self._apply_session_middleware(self.request)
+
+    def _apply_session_middleware(self, request):
+        """Apply session middleware to mock request."""
+        middleware = SessionMiddleware(lambda req: None)  # Pass a dummy callable
+        middleware.process_request(request)
+        request.session.save()
+
+    def test_store_basic_data(self):
+        user_data = {"name": "John", "age": 30}
+        store_session_data(self.request, user_data)
+        self.assertIn("user_data", self.request.session)
+        self.assertEqual(self.request.session["user_data"], user_data)
+
+    def test_session_marked_modified(self):
+        user_data = {"key": "value"}
+        store_session_data(self.request, user_data)
+        self.assertTrue(self.request.session.modified)
+
+    def test_store_list_data(self):
+        user_data = [1, 2, 3, {"key": "value"}]
+        store_session_data(self.request, user_data)
+        self.assertEqual(self.request.session["user_data"], user_data)
+
+    def test_store_string_data(self):
+        user_data = "simple string"
+        store_session_data(self.request, user_data)
+        self.assertEqual(self.request.session["user_data"], user_data)

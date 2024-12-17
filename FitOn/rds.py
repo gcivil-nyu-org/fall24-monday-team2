@@ -146,7 +146,7 @@ async def insert_into_steps_table(conn, email, start_time, end_time, count, tabl
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print(f"Inserted into {table_name} Table successfully.")
+        # print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -163,7 +163,7 @@ async def insert_into_heartRate_table(
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print(f"Inserted into {table_name} Table successfully.")
+        # print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -180,7 +180,7 @@ async def insert_into_restingHeartRate_table(
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print(f"Inserted into {table_name} Table successfully.")
+        # print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -197,7 +197,7 @@ async def insert_into_oxygen_table(
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print(f"Inserted into {table_name} Table successfully.")
+        # print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -214,7 +214,7 @@ async def insert_into_glucose_table(
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print(f"Inserted into {table_name} Table successfully.")
+        # print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -231,7 +231,7 @@ async def insert_into_pressure_table(
     """
     try:
         await insert_data(conn, insert_sql, (email, c_start_time, c_end_time, count))
-        print(f"Inserted into {table_name} Table successfully.")
+        # print(f"Inserted into {table_name} Table successfully.")
     except Exception as e:
         print(f"Error: {e}")
 
@@ -291,7 +291,7 @@ async def show_table(conn, table_name):
         async with conn.cursor() as cursor:
             await cursor.execute(f"SELECT * FROM {table_name}")
             rows = await cursor.fetchall()
-            print(f"Data in the {table_name} table:")
+            # print(f"Data in the {table_name} table:")
             for row in rows:
                 print(row)
     except Exception as e:
@@ -343,8 +343,8 @@ async def table_exists(cursor, table_name):
         await cursor.execute("SHOW TABLES LIKE %s", (table_name,))
         result = await cursor.fetchone()
         return result is not None
-    except Exception as e:
-        print(f"Error checking table existence for {table_name}: {e}")
+    except Exception:
+        # print(f"Error checking table existence for {table_name}: {e}")
         return False
 
 
@@ -378,11 +378,11 @@ async def fetch_user_data(email):
                         await cursor.execute(query, (email,))
                         records = await cursor.fetchall()
                         user_data[key] = records
-                    except Exception as e:
-                        print(f"Error fetching data for table '{key}': {e}")
+                    except Exception:
+                        # print(f"Error fetching data for table '{key}': {e}")
                         user_data[key] = []
                 else:
-                    print(f"Table '{table_name}' does not exist. Skipping...")
+                    # print(f"Table '{table_name}' does not exist. Skipping...")
                     user_data[key] = []  # Default to an empty list
 
     except Exception as e:
