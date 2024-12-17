@@ -101,7 +101,7 @@ def get_users_by_username_query(query):
 
     # Filter users based on case-insensitive match
     filtered_users = [
-        user for user in users if query.lower() in user["username"].lower()
+        user for user in users if query.lower() in user.get("username").lower()
     ]
 
     return filtered_users
@@ -364,22 +364,18 @@ def add_fitness_trainer_application(
 
         # Check response status
         if response["ResponseMetadata"]["HTTPStatusCode"] == 200:
-            print("Fitness trainer application submitted successfully.")
             return True
         else:
-            print(f"Failed to submit application: {response}")
             return False
 
     except (NoCredentialsError, PartialCredentialsError) as cred_err:
         print(f"Credentials error: {cred_err}")
         return False
 
-    except ClientError as client_err:
-        print(f"Client error: {client_err.response['Error']['Message']}")
+    except ClientError:
         return False
 
-    except Exception as e:
-        print(f"Unexpected error submitting application: {e}")
+    except Exception:
         return False
 
 
@@ -418,11 +414,9 @@ def get_fitness_trainer_applications():
 
         return applications
 
-    except ClientError as client_err:
-        print(f"Client error: {client_err.response['Error']['Message']}")
+    except ClientError:
         return []
-    except Exception as e:
-        print(f"Unexpected error retrieving applications: {e}")
+    except Exception:
         return []
 
 
@@ -463,11 +457,9 @@ def get_fitness_trainers():
 
         return trainers
 
-    except ClientError as client_err:
-        print(f"Client error: {client_err.response['Error']['Message']}")
+    except ClientError:
         return []
-    except Exception as e:
-        print(f"Unexpected error retrieving fitness trainers: {e}")
+    except Exception:
         return []
 
 
@@ -667,7 +659,7 @@ def remove_from_list(user_id, field, value):
             ConditionExpression=f"contains({field}, :val)",
             ExpressionAttributeValues={":val": value},
         )
-        print(f"Successfully removed {value} from {field} for user {user_id}")
+        # print(f"Successfully removed {value} from {field} for user {user_id}")
 
     except Exception as e:
         print(
@@ -1059,7 +1051,7 @@ def create_reply(thread_id, user_id, content):
         )
         return {"status": "success", "reply_id": reply_id}
     except Exception as e:
-        print(f"Error adding reply: {e}")
+        # print(f"Error adding reply: {e}")
         return {"status": "error", "message": str(e)}
 
 
@@ -1151,7 +1143,7 @@ def fetch_reported_threads_and_comments():
     try:
         response = threads_table.scan(FilterExpression=Attr("ReportedBy").exists())
         reported_threads = response.get("Items", [])
-        print(f"Fetched {len(reported_threads)} reported threads.")
+        # print(f"Fetched {len(reported_threads)} reported threads.")
     except ClientError as e:
         print(f"Error fetching reported threads: {e.response['Error']['Message']}")
 
@@ -1159,7 +1151,7 @@ def fetch_reported_threads_and_comments():
     try:
         response = posts_table.scan(FilterExpression=Attr("ReportedBy").exists())
         reported_comments = response.get("Items", [])
-        print(f"Fetched {len(reported_comments)} reported comments.")
+        # print(f"Fetched {len(reported_comments)} reported comments.")
     except ClientError as e:
         print(f"Error fetching reported comments: {e.response['Error']['Message']}")
 
@@ -1188,7 +1180,7 @@ def mark_thread_as_reported(thread_id):
             UpdateExpression="SET ReportedBy = :reported_by",
             ExpressionAttributeValues={":reported_by": reported_by},
         )
-        print(f"Thread {thread_id} reported.")
+        # print(f"Thread {thread_id} reported.")
     except Exception as e:
         print(f"Error reporting thread {thread_id}: {e}")
 
@@ -1201,7 +1193,7 @@ def mark_comment_as_reported(thread_id, post_id, reporting_user):
         # print(f"Comment fetched: {comment}")
 
         if not comment:
-            print(f"Comment {post_id} not found in thread {thread_id}")
+            # print(f"Comment {post_id} not found in thread {thread_id}")
             return
 
         # Initialize ReportedBy if it doesn't exist
@@ -1230,10 +1222,7 @@ def mark_user_as_warned_thread(thread_id, user_id):
     user = response.get("Item", {})
 
     if not user:
-        print(f"User with ID {user_id} not found in users_table.")
         raise ValueError(f"User with ID {user_id} not found.")
-
-    print(f"User fetched successfully: {user}")
 
     warning_reason = f"Warned for behavior in thread {thread_id}"
 
@@ -1245,7 +1234,6 @@ def mark_user_as_warned_thread(thread_id, user_id):
             ":reason": warning_reason,
         },
     )
-    print(f"User {user_id} has been warned for comment {thread_id}.")
     # except Exception as e:
     #     print(f"Error warning user {user_id} for comment {thread_id}: {e}")
     #     raise
@@ -1258,10 +1246,7 @@ def mark_user_as_warned_comment(post_id, user_id):
     user = response.get("Item", {})
 
     if not user:
-        print(f"User with ID {user_id} not found in users_table.")
         raise ValueError(f"User with ID {user_id} not found.")
-
-    print(f"User fetched successfully: {user}")
 
     warning_reason = f"Warned for behavior in comment {post_id}"
 
@@ -1273,7 +1258,6 @@ def mark_user_as_warned_comment(post_id, user_id):
             ":reason": warning_reason,
         },
     )
-    print(f"User {user_id} has been warned for comment {post_id}.")
     # except Exception as e:
     #     print(f"Error warning user {user_id} for comment {post_id}: {e}")
     #     raise
@@ -1291,7 +1275,7 @@ def set_user_warned_to_false(user_id):
 
     # try:
     # Update the is_warned attribute to False
-    response = users_table.update_item(
+    users_table.update_item(
         Key={
             "user_id": user_id
         },  # Replace this key with your partition key field name if different
@@ -1299,7 +1283,6 @@ def set_user_warned_to_false(user_id):
         ExpressionAttributeValues={":warned": False},
         ReturnValues="UPDATED_NEW",
     )
-    print(f"User {user_id} successfully updated: {response}")
     return {"status": "success", "message": f"User {user_id} warning dismissed."}
     # except ClientError as e:
     #     print(f"Error updating user {user_id}: {e.response['Error']['Message']}")
@@ -1377,7 +1360,6 @@ def get_users_without_specific_username(exclude_username):
         ProjectionExpression="user_id, username",  # Fetch only required fields
     )
     users = response.get("Items", [])
-    print(f"Users fetched for search: {users}")
     return users
     # except Exception as e:
     #     print(
@@ -1423,9 +1405,6 @@ def get_users_with_chat_history(user_id):
     )
 
     chat_history = response.get("Items", [])
-
-    # Debug: Check the raw chat history
-    print(f"Chat history raw response: {chat_history}")
 
     # Extract unique user IDs and their chat information
     users_with_activity = {}
